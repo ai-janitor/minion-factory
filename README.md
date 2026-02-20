@@ -5,20 +5,10 @@ Unified multi-agent coordination framework. RPG raid party metaphor over SQLite.
 ## Install
 
 ```bash
-# Remove old packages if present
-uv tool uninstall minion-comms 2>/dev/null
-pipx uninstall minion-comms 2>/dev/null
-pipx uninstall minion-swarm 2>/dev/null
-pipx uninstall minion-tasks 2>/dev/null
-
-# Install minion-factory (replaces all of the above)
-uv tool install git+https://github.com/ai-janitor/minion-factory.git
-
-# Copy contract docs + protocol files to ~/.minion_work/docs/
-minion install-docs
+curl -sSL https://raw.githubusercontent.com/ai-janitor/minion-factory/main/scripts/install.sh | bash
 ```
 
-Installs the `minion` CLI globally. `install-docs` copies shared daemon contracts (boot sequence, rules, inbox templates, config defaults, state schema, compaction markers) so both Python and TS daemons read from the same source of truth.
+Removes old packages (minion-comms, minion-swarm, minion-tasks), installs `minion` CLI via uv/pipx/pip cascade, and deploys shared daemon contracts to `~/.minion_work/docs/`.
 
 ## Quick Start
 
