@@ -1,9 +1,62 @@
-"""Daemon transport — tmux pane with tail -f log, minion-swarm manages process."""
+"""Daemon transport — tmux pane with tail -f, in-process daemon management."""
 
 from __future__ import annotations
 
+import json
 import os
+import signal
 import subprocess
+import sys
+
+
+def init_swarm(config_path: str, project_dir: str) -> None:
+    """Create runtime directories for a swarm config (replaces minion-swarm init)."""
+    from minion.daemon.config import load_config
+    cfg = load_config(config_path)
+    cfg.ensure_runtime_dirs()
+
+
+def start_agent_daemon(config_path: str, agent_name: str) -> None:
+    """Fork a daemon process for one agent (replaces minion-swarm start)."""
+    from minion.daemon.config import load_config
+    cfg = load_config(config_path)
+    log_file = cfg.logs_dir / f"{agent_name}.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_fp = open(log_file, "a")
+
+    env = {**os.environ, "MINION_DB_PATH": str(cfg.comms_db)}
+    if cfg.docs_dir:
+        env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
+
+    subprocess.Popen(
+        [sys.executable, "-m", "minion.daemon", "--config", config_path, "--agent", agent_name],
+        stdin=subprocess.DEVNULL,
+        stdout=log_fp,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        env=env,
+    )
+    log_fp.close()
+
+
+def stop_swarm(config_path: str) -> None:
+    """Stop all daemon agents for a config by reading PID from state files."""
+    from minion.daemon.config import load_config
+    try:
+        cfg = load_config(config_path)
+    except (FileNotFoundError, ValueError):
+        return
+    state_dir = cfg.state_dir
+    if not state_dir.is_dir():
+        return
+    for state_file in state_dir.glob("*.json"):
+        try:
+            state = json.loads(state_file.read_text())
+            pid = state.get("pid")
+            if pid and isinstance(pid, int):
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, json.JSONDecodeError, ProcessLookupError):
+            pass
 
 
 def spawn_pane(
@@ -61,7 +114,7 @@ def _find_ts_daemon_dir() -> str:
 def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python") -> None:
     """Start daemon watcher for an agent.
 
-    runtime='python' uses minion-swarm (original).
+    runtime='python' uses in-process AgentDaemon.
     runtime='ts' uses the TypeScript SDK daemon.
     """
     if runtime == "ts":
@@ -82,7 +135,4 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         )
         log_fp.close()
     else:
-        subprocess.run(
-            ["minion-swarm", "start", agent, "--config", crew_config],
-            cwd=project_dir, capture_output=True,
-        )
+        start_agent_daemon(crew_config, agent)

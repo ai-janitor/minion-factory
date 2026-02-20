@@ -35,7 +35,8 @@ def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
     if crew:
         config_path = os.path.expanduser(f"~/.minion-swarm/{crew}.yaml")
         if os.path.isfile(config_path):
-            subprocess.run(["minion-swarm", "stop", "--config", config_path], capture_output=True)
+            from minion.crew.daemon import stop_swarm
+            stop_swarm(config_path)
         close_terminal_by_title(f"workers:crew-{crew}")
         close_terminal_by_title(f"lead:")
         subprocess.run(["tmux", "kill-session", "-t", f"crew-{crew}"], capture_output=True)

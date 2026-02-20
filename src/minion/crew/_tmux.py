@@ -114,15 +114,12 @@ def kill_tmux_pane_by_title(agent_name: str) -> None:
 
 def kill_all_crews() -> None:
     """Stop all minion-swarm configs and kill all crew- tmux sessions."""
+    from minion.crew.daemon import stop_swarm
     config_dir = os.path.expanduser("~/.minion-swarm")
     if os.path.isdir(config_dir):
         for fname in os.listdir(config_dir):
             if fname.endswith(".yaml"):
-                subprocess.run(
-                    ["minion-swarm", "stop", "--config",
-                     os.path.join(config_dir, fname)],
-                    capture_output=True,
-                )
+                stop_swarm(os.path.join(config_dir, fname))
 
     result = subprocess.run(
         ["tmux", "list-sessions", "-F", "#{session_name}"],

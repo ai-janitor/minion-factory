@@ -100,8 +100,6 @@ def spawn_party(
 ) -> dict[str, object]:
     if not shutil.which("tmux"):
         return {"error": "BLOCKED: tmux required. brew install tmux"}
-    if not shutil.which("minion-swarm"):
-        return {"error": "BLOCKED: minion-swarm required."}
 
     crew_file = _find_crew_file(crew, project_dir)
     if not crew_file:
@@ -175,10 +173,8 @@ def spawn_party(
     with open(crew_config, "w") as f:
         yaml.dump(swarm_cfg, f, default_flow_style=False)
 
-    subprocess.run(
-        ["minion-swarm", "init", "--config", crew_config, "--project-dir", project_dir],
-        capture_output=True,
-    )
+    from minion.crew.daemon import init_swarm
+    init_swarm(crew_config, project_dir)
 
     if not selective:
         kill_all_crews()
