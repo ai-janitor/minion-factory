@@ -6,7 +6,7 @@
 # Usage: minion mission spawn documentation --crew scouts --party cartographer,viper,pixel,blueprint,torvalds,watchtower
 
 project_dir: .
-comms_db: ~/.minion-comms/minion.db
+
 
 system_prefix: |
   SCANNING RULES — Only scan PROJECT source code:
@@ -33,6 +33,10 @@ system_prefix: |
   │   ├── perf/           # performance: cpu-saturation-dual-model.md
   │   ├── security/       # security: secrets-in-git-history.md
   │   └── correctness/    # logic bugs: race-condition-shared-buffer.md
+  ├── patterns/           # good patterns worth replicating
+  │   ├── arch/           # architecture: clean-dependency-direction.md
+  │   ├── code/           # code quality: atomic-file-writes.md
+  │   └── ops/            # operational: graceful-shutdown-handling.md
   ├── CODE_MAP.md
   └── CODE_OWNERS.md
 

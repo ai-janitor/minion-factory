@@ -131,6 +131,8 @@ class AgentDaemon:
 
         self._log(f"starting daemon for {self.agent_name}")
         self._log(f"provider: {self.agent_cfg.provider} (resume_ready={self.resume_ready})")
+        self._log(f"db: {self.config.comms_db}")
+        self._log(f"project_dir: {self.config.project_dir}")
         self._log("mode: poll (minion poll)")
         self._write_state("idle")
 

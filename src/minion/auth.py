@@ -135,13 +135,13 @@ TRIGGER_WORDS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 CLASS_BRIEFING_FILES: dict[str, list[str]] = {
-    "lead": [".minion-comms/CODE_MAP.md", ".minion-comms/CODE_OWNERS.md", ".minion-comms/traps/"],
-    "coder": [".minion-comms/CODE_MAP.md", ".minion-comms/traps/"],
-    "builder": [".minion-comms/CODE_MAP.md", ".minion-comms/traps/"],
-    "oracle": [".minion-comms/CODE_MAP.md", ".minion-comms/CODE_OWNERS.md", ".minion-comms/intel/", ".minion-comms/traps/"],
-    "recon": [".minion-comms/CODE_MAP.md", ".minion-comms/intel/", ".minion-comms/traps/"],
-    "planner": [".minion-comms/CODE_MAP.md", ".minion-comms/CODE_OWNERS.md", ".minion-comms/traps/"],
-    "auditor": [".minion-comms/CODE_MAP.md", ".minion-comms/traps/"],
+    "lead": [".work/CODE_MAP.md", ".work/CODE_OWNERS.md", ".work/traps/"],
+    "coder": [".work/CODE_MAP.md", ".work/traps/"],
+    "builder": [".work/CODE_MAP.md", ".work/traps/"],
+    "oracle": [".work/CODE_MAP.md", ".work/CODE_OWNERS.md", ".work/intel/", ".work/traps/"],
+    "recon": [".work/CODE_MAP.md", ".work/intel/", ".work/traps/"],
+    "planner": [".work/CODE_MAP.md", ".work/CODE_OWNERS.md", ".work/traps/"],
+    "auditor": [".work/CODE_MAP.md", ".work/traps/"],
 }
 
 # ---------------------------------------------------------------------------

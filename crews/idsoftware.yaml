@@ -3,7 +3,7 @@
 # Usage: minion mission spawn bugfix --crew idsoftware --party carmack,abrash,romero,hook
 
 project_dir: .
-comms_db: ~/.minion-comms/minion.db
+
 
 lead:
   name: carmack

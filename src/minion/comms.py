@@ -407,11 +407,11 @@ def send(
                 result["nudge"] = f"No open task found for {to_agent} — create one with `create-task`"
 
         # Artifact nudge: large messages with no file path reference likely contain inline artifacts
-        _FILE_PATH_SIGNALS = (".minion-comms/", ".md\n", ".md ", ".md\t", ".md'", '.md"')
+        _FILE_PATH_SIGNALS = (".work/", ".md\n", ".md ", ".md\t", ".md'", '.md"')
         if len(message) > 500 and not any(sig in message for sig in _FILE_PATH_SIGNALS):
             result["artifact_reminder"] = (
                 "Large message without a file path detected. "
-                "SDLC artifacts should be written to .minion-comms/ first, then referenced by path."
+                "SDLC artifacts should be written to .work/ first, then referenced by path."
             )
 
         return result

@@ -71,7 +71,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
 
     project_dir = resolve_path(str(raw.get("project_dir", cfg_path.parent)), cfg_path.parent)
     comms_dir = resolve_path(
-        str(raw.get("comms_dir", ".minion-comms")),
+        str(raw.get("comms_dir", ".work")),
         project_dir,
     )
 

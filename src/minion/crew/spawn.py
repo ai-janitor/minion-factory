@@ -125,8 +125,7 @@ def spawn_party(
     crew_cfg["project_dir"] = project_dir
 
     # Inject per-project comms DB path so spawned daemons find the right DB
-    project_name = os.path.basename(project_dir)
-    crew_cfg["comms_db"] = os.path.expanduser(f"~/.minion_work/{project_name}/minion.db")
+    crew_cfg["comms_db"] = os.path.join(project_dir, ".work", "minion.db")
     crew_cfg["docs_dir"] = os.path.expanduser("~/.minion_work/docs")
 
     # Auto-install docs (protocol + contracts) before booting daemons

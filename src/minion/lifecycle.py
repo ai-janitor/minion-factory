@@ -56,10 +56,11 @@ def cold_start(agent_name: str) -> dict[str, object]:
         # Briefing files
         result["briefing_files"] = CLASS_BRIEFING_FILES.get(agent_class, [])
         result["convention_files"] = {
-            "intel": ".minion-comms/intel/",
-            "traps": ".minion-comms/traps/",
-            "code_map": ".minion-comms/CODE_MAP.md",
-            "code_owners": ".minion-comms/CODE_OWNERS.md",
+            "intel": ".work/intel/",
+            "traps": ".work/traps/",
+            "patterns": ".work/patterns/",
+            "code_map": ".work/CODE_MAP.md",
+            "code_owners": ".work/CODE_OWNERS.md",
         }
 
         # Unconsumed fenix_down records

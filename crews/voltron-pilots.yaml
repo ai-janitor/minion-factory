@@ -3,7 +3,7 @@
 # Usage: spawn_party(agent_name="keith", crew="voltron")
 
 project_dir: .
-comms_db: ~/.minion-comms/minion.db
+
 
 lead:
   name: keith
