@@ -166,6 +166,7 @@ class AgentDaemon:
                     break
 
                 if not poll_data:
+                    self._stop_event.wait(timeout=5.0)
                     continue
 
                 # Content available — invoke agent with messages/tasks inline
@@ -830,6 +831,10 @@ class AgentDaemon:
         """Call minion update-hp to write observed HP to SQLite."""
         # Use API-reported context window, fall back to 200k default
         limit = self._context_window if self._context_window > 0 else 200_000
+        # Subtract fixed Claude Code system prompt/tool overhead so HP% reflects
+        # conversation-accumulated tokens only, not the constant bootstrap cost.
+        if turn_input is not None and self._tool_overhead_tokens > 0:
+            turn_input = max(0, turn_input - self._tool_overhead_tokens)
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         env[ENV_CLASS] = "lead"  # Daemon has permission to write HP
         env[ENV_DB_PATH] = str(self.config.comms_db)

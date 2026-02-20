@@ -970,3 +970,23 @@ All 46 CLI commands ported. All public functions ported. All modules present:
 **Minor (nice to have):**
 8. **Task flow search paths** — loader.py may reference old ~/.minion-tasks/ path
 9. **`claim-task` vs `pull-task`** semantics — may need reconciliation
+
+---
+
+## Poll Loop — Tight Loop / No Backoff
+
+**Observed**: Fresh ff1 spawn from factory. All 5 daemon agents log "polling for messages..." ~5 times per second in tmux. Wall of spam, burns CPU for zero value.
+
+**Root cause**: `minion poll` crashes on every call — `ModuleNotFoundError: No module named 'minion.flow_bridge'` (polling.py:77). Module was never ported from source repos. Daemon catches the crash (exit code 1), returns None, and the while loop at runner.py:168-169 does `continue` with no sleep → immediate retry → tight loop.
+
+Two fixes needed:
+1. **Port `flow_bridge` module** — `polling.py:77` imports `active_statuses()` from it. Find in source repos and port, or stub if simple
+2. **Add backoff as defense-in-depth** — `runner.py:168-169`: add `self._stop_event.wait(timeout=5.0)` before `continue` so crashed polls don't tight-loop
+
+**Fix needed**:
+- `runner.py`: Add `self._stop_event.wait(timeout=5.0)` before `continue` on line 169 (backoff on empty)
+- `polling.py`: Verify `poll_loop()` actually honors `--interval` and `--timeout` — it should block, not return instantly when inbox is empty
+
+**Acceptance**: Tmux panes show "polling for messages..." at most once every 5-30 seconds, not 5 times per second.
+
+**Also observed**: Fighter and blackmage both reported 24% HP immediately after boot (zero work done). This is a bug in HP calculation — fresh agents cannot be at 24%. Either the token counting from the provider result is wrong, the context window denominator is wrong, or boot overhead is being double-counted. Separate issue from poll spam but surfaced during the same spawn.
