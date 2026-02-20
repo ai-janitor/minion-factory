@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "minion-factory"
+version = "0.1.0"
+description = "Unified multi-agent coordination framework — CLI, daemon, task DAG"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "pyyaml>=6.0",
+    "watchdog>=4.0.0",
+]
+
+[project.scripts]
+minion = "minion.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/minion"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.basedpyright]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

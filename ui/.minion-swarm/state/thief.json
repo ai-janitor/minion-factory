@@ -1,0 +1,8 @@
+{
+  "agent": "thief",
+  "pid": 48226,
+  "status": "stopped",
+  "updatedAt": "2026-02-20T03:06:03.356Z",
+  "consecutiveFailures": 0,
+  "resumeReady": true
+}
