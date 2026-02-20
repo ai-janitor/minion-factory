@@ -111,6 +111,18 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
 # Core Comms
 # =========================================================================
 
+@cli.command("daemon-run", hidden=True)
+@click.option("--config", required=True, help="Path to crew YAML config")
+@click.option("--agent", required=True, help="Agent name to run")
+def daemon_run(config: str, agent: str) -> None:
+    """Run a single agent daemon (internal — called by spawn-party)."""
+    from minion.daemon.config import load_config
+    from minion.daemon.runner import AgentDaemon
+    cfg = load_config(config)
+    daemon = AgentDaemon(cfg, agent)
+    daemon.run()
+
+
 @cli.command()
 @click.option("--name", required=True)
 @click.option("--class", "agent_class", required=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -28,8 +29,10 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
 
+    # Resolve absolute path to minion binary so detached process finds it
+    minion_bin = shutil.which("minion") or "minion"
     subprocess.Popen(
-        [sys.executable, "-m", "minion.daemon", "--config", config_path, "--agent", agent_name],
+        [minion_bin, "daemon-run", "--config", config_path, "--agent", agent_name],
         stdin=subprocess.DEVNULL,
         stdout=log_fp,
         stderr=subprocess.STDOUT,
