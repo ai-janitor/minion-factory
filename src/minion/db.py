@@ -14,12 +14,38 @@ from typing import Any
 from minion.defaults import resolve_db_path, resolve_docs_dir
 
 # ---------------------------------------------------------------------------
-# Paths (resolved once at import)
+# Paths — lazy resolution so env vars and cwd are read at call time, not import
 # ---------------------------------------------------------------------------
 
-DB_PATH = resolve_db_path()
-RUNTIME_DIR = os.path.dirname(DB_PATH)
+_db_path: str | None = None
 DOCS_DIR = resolve_docs_dir()
+
+
+def _get_db_path() -> str:
+    global _db_path
+    if _db_path is None:
+        _db_path = resolve_db_path()
+    return _db_path
+
+
+def reset_db_path() -> None:
+    """Clear cached DB path so next access re-resolves from env/cwd."""
+    global _db_path
+    _db_path = None
+
+
+def get_runtime_dir() -> str:
+    return os.path.dirname(_get_db_path())
+
+
+# Lazy module-level attributes — fs.py imports RUNTIME_DIR, comms.py uses DB_PATH
+def __getattr__(name: str) -> Any:
+    if name == "DB_PATH":
+        return _get_db_path()
+    if name == "RUNTIME_DIR":
+        return get_runtime_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ---------------------------------------------------------------------------
 # Connection
@@ -28,8 +54,9 @@ DOCS_DIR = resolve_docs_dir()
 
 def get_db() -> sqlite3.Connection:
     """Open a WAL-mode connection with row factory."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    db_path = _get_db_path()
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=5)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

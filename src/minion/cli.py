@@ -12,7 +12,7 @@ import sys
 
 import click
 
-from minion.db import init_db
+from minion.db import init_db, reset_db_path
 from minion.fs import ensure_dirs
 
 
@@ -91,12 +91,18 @@ def _format_compact(data: dict[str, object]) -> str:
 @click.version_option(package_name="minion-factory")
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON")
 @click.option("--compact", is_flag=True, help="Concise text output for agent context injection")
+@click.option("--project-dir", "-C", default=None, help="Project directory (default: cwd)")
 @click.pass_context
-def cli(ctx: click.Context, human: bool, compact: bool) -> None:
+def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None) -> None:
     """minion — multi-agent coordination CLI."""
     ctx.ensure_object(dict)
     ctx.obj["human"] = human
     ctx.obj["compact"] = compact
+    # Set DB path before init so all commands target the right project
+    if project_dir:
+        db_path = os.path.join(os.path.abspath(project_dir), ".work", "minion.db")
+        os.environ["MINION_DB_PATH"] = db_path
+        reset_db_path()
     init_db()
     ensure_dirs()
 
