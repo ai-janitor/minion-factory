@@ -86,8 +86,10 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         project_dir,
     )
 
+    # comms_db comes from MINION_DB_PATH env (set by spawn), not from YAML.
+    # Ignore stale comms_db in crew YAMLs — env is the source of truth.
     comms_db = _resolve_path(
-        str(raw.get("comms_db", resolve_db_path())),
+        str(os.environ.get(ENV_DB_PATH) or resolve_db_path()),
         cfg_path.parent,
     )
 

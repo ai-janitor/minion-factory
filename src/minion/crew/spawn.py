@@ -175,6 +175,7 @@ def spawn_party(
 
     # Write runtime config for minion-swarm — exclude terminal agents
     swarm_cfg = dict(crew_cfg)
+    swarm_cfg.pop("comms_db", None)  # DB path comes from env, not YAML
     swarm_cfg["agents"] = {
         name: cfg for name, cfg in all_agents_cfg.items()
         if cfg.get("transport", "daemon") != "terminal"
