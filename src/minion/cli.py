@@ -98,6 +98,7 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
     ctx.ensure_object(dict)
     ctx.obj["human"] = human
     ctx.obj["compact"] = compact
+    ctx.obj["project_dir"] = os.path.abspath(project_dir) if project_dir else None
     # Set DB path before init so all commands target the right project
     if project_dir:
         db_path = os.path.join(os.path.abspath(project_dir), ".work", "minion.db")
@@ -633,6 +634,9 @@ def list_crews(ctx: click.Context) -> None:
 def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, runtime: str) -> None:
     """Spawn daemon workers in tmux panes. Auto-registers lead from crew YAML."""
     from minion.crew import spawn_party as _spawn_party
+    # Global -C flag overrides default project-dir
+    if project_dir == "." and ctx.obj.get("project_dir"):
+        project_dir = ctx.obj["project_dir"]
     _output(_spawn_party(crew, project_dir, agents, runtime=runtime), ctx.obj["human"])
 
 
