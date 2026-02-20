@@ -57,6 +57,7 @@ minion stand-down --agent cloud
 | [Crews](docs/crews.md) | Crew YAML, spawn lifecycle, stand-down, retire |
 | [Daemon](docs/daemon.md) | Boot sequence, HP tracking, compaction, fenix-down |
 | [Auth](docs/auth.md) | Agent classes, permissions, model whitelist |
+| [CLI Reference](docs/cli-reference.md) | All 48 commands — usage, options, examples |
 
 ## Crews
 
