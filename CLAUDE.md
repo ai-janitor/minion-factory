@@ -5,7 +5,6 @@ Unified multi-agent coordination framework. RPG raid party metaphor over SQLite.
 ## Install
 
 ```bash
-# Replaces minion-comms — uninstall first if present
 uv tool uninstall minion-comms 2>/dev/null; uv tool install git+https://github.com/ai-janitor/minion-factory.git
 ```
 
@@ -39,30 +38,57 @@ Read `AGENTS.md` for the universal agent playbook (boot sequence, classes, HP, h
 
 ## CLI Gotchas
 
-- **`--human`/`--compact` are global flags** — go BEFORE the command, not after
+- **`--human`/`--compact`/`-C` are global flags** — go BEFORE the command, not after
+- **`-C <dir>` / `--project-dir <dir>`** — target a different project's DB from any directory
 - **`MINION_CLASS` env var** gates auth per `auth.py`
 - All commands are stateless — no persistent server connection
 
-## Per-Project DB
+## Project-Local `.work/` Directory
 
-Every project gets its own SQLite DB: `~/.minion_work/<project-name>/minion.db`. The CLI resolves `<project-name>` from `$PWD`.
+All runtime data lives in `.work/` inside the project repo:
 
-**When spawning daemons targeting a different project**, the daemons use that project's DB but your CLI still uses the current directory's DB. Messages go to the wrong DB and daemons never see them.
-
-**Fix:** set `MINION_DB_PATH` before sending commands:
-
-```bash
-# Spawn to a different project
-minion mission spawn bugfix --crew idsoftware --party carmack,romero,hook \
-  --project-dir ~/projects/other-project
-
-# Point CLI at that project's DB
-export MINION_DB_PATH=~/.minion_work/other-project/minion.db
-minion register --name lead --class lead --transport terminal
-minion send --from lead --to all --message "GO"
+```
+<project>/
+└── .work/
+    ├── minion.db          # SQLite — agents, messages, tasks, claims
+    ├── inbox/             # message files per agent
+    ├── battle-plans/      # session strategy files
+    ├── raid-log/          # session log entries
+    ├── intel/             # scout findings (filesystem-as-db)
+    │   ├── lang/          # per-language: python.md, cpp.md
+    │   ├── domain/        # per-domain: gpu-compute.md, auth.md
+    │   ├── arch/          # architecture: dependency-graph.md
+    │   └── infra/         # ops: ci-cd.md, docker.md
+    ├── traps/             # issues found (one file per trap)
+    │   ├── silent-fail/   # errors swallowed
+    │   ├── build/         # build system issues
+    │   ├── perf/          # performance traps
+    │   ├── security/      # security issues
+    │   └── correctness/   # logic bugs
+    ├── patterns/          # good patterns worth replicating
+    ├── CODE_MAP.md        # master codebase map
+    └── CODE_OWNERS.md     # ownership map
 ```
 
-Without this, `register`/`send`/`who` hit the wrong DB and daemons poll forever seeing nothing.
+### Cross-Project Commands
+
+Use `-C` to manage agents in a different project from any directory:
+
+```bash
+# Spawn scouts on another project
+minion -C ~/projects/other-project spawn-party --crew scouts --agents torvalds,viper
+
+# Send orders from anywhere
+minion -C ~/projects/other-project send --from commander --to torvalds --message "analyze C++ code"
+```
+
+### System Prompt Injection
+
+Crew YAMLs support `system_prefix:` — a crew-level field prepended to every agent's system prompt at spawn time. Use for scanning rules, output conventions, and behavioral directives.
+
+Claude provider passes system prompts via `--append-system-prompt` (system-level), not `-p` (user-level). This makes directives authoritative.
+
+**Prompting pattern:** Use positive instructions ("ONLY scan src/") not negation ("NEVER scan .venv/"). LLMs ignore negative instructions even at system prompt level.
 
 ## Running Tests
 
