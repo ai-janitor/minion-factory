@@ -17,6 +17,12 @@ class ClaudeProvider(BaseProvider):
             "stream-json",
             "--verbose",
         ]
+        # Inject agent's system prompt so the model treats it as system-level
+        # instruction (not user text). This makes exclusion rules, persona, etc.
+        # much harder to ignore.
+        system = self.agent_cfg.system.strip() if self.agent_cfg.system else ""
+        if system:
+            cmd.extend(["--append-system-prompt", system])
         # Only use --continue in watcher mode (single agent per session).
         # In poll mode, multiple agents share the project dir so --continue
         # would resume the wrong agent's session.

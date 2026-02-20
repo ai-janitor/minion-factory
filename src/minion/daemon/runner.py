@@ -233,8 +233,11 @@ class AgentDaemon:
             return None
 
     def _build_boot_prompt(self) -> str:
-        """Prompt for the first invocation — agent registers and sets up."""
-        system_section = self.agent_cfg.system.strip()
+        """Prompt for the first invocation — agent registers and sets up.
+
+        Note: agent_cfg.system is passed via --append-system-prompt by the
+        provider, so we exclude it here to avoid duplication.
+        """
         protocol_section = self._build_protocol_section()
         rules_section = self._build_rules_section()
         provider_section = self._build_provider_section()
@@ -263,17 +266,17 @@ class AgentDaemon:
                 "Do NOT use AskUserQuestion — it blocks in headless mode.",
                 "After running these 3 commands, STOP. Do not do anything else.",
             ])
-        sections = [system_section, protocol_section, rules_section, boot_section]
+        sections = [protocol_section, rules_section, boot_section]
         if provider_section:
             sections.insert(0, provider_section)
         return "\n\n".join(sections)
 
     def _build_inbox_prompt(self, poll_data: Dict[str, Any]) -> str:
-        """Prompt with messages/tasks already inline — no need to fetch."""
-        # Strip ON STARTUP block from system prompt — boot already ran it.
-        # Including it causes the agent to re-register and re-check_inbox
-        # on every invocation, which can create message loops.
-        system_section = self._strip_on_startup(self.agent_cfg.system.strip())
+        """Prompt with messages/tasks already inline — no need to fetch.
+
+        Note: agent_cfg.system is passed via --append-system-prompt by the
+        provider, so we exclude it here to avoid duplication.
+        """
         protocol_section = self._build_protocol_section()
         rules_section = self._build_rules_section()
 
@@ -281,7 +284,7 @@ class AgentDaemon:
         sections: List[str] = []
         if provider_section:
             sections.append(provider_section)
-        sections.extend([system_section, protocol_section])
+        sections.append(protocol_section)
 
         if self.inject_history_next_turn and len(self.buffer) > 0:
             sections.append(self._build_history_block(self.buffer.snapshot()))
@@ -445,14 +448,17 @@ class AgentDaemon:
             self._log("daemon stopped")
 
     def _build_watcher_prompt(self, message: Any) -> str:
-        """Build prompt with message content baked in (watcher mode)."""
+        """Build prompt with message content baked in (watcher mode).
+
+        Note: agent_cfg.system is passed via --append-system-prompt by the
+        provider, so we exclude it here to avoid duplication.
+        """
         max_prompt_chars = self.agent_cfg.max_prompt_chars
-        system_section = self.agent_cfg.system.strip()
         protocol_section = self._build_protocol_section()
         rules_section = self._build_rules_section()
         incoming_section = self._build_incoming_section(message)
 
-        sections: List[str] = [system_section, protocol_section]
+        sections: List[str] = [protocol_section]
 
         if self.inject_history_next_turn and len(self.buffer) > 0:
             sections.append(self._build_history_block(self.buffer.snapshot()))

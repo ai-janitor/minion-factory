@@ -110,6 +110,11 @@ def load_config(config_path: str | Path) -> SwarmConfig:
                 "Check inbox, execute tasks, and report when done."
             )
 
+        # Inject crew-level system_prefix into every agent's prompt
+        system_prefix = str(raw.get("system_prefix", "")).strip()
+        if system_prefix:
+            system = system_prefix + "\n\n" + system
+
         allowed_tools = item.get("allowed_tools")
         if allowed_tools is not None:
             allowed_tools = str(allowed_tools)

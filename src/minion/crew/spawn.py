@@ -151,6 +151,18 @@ def spawn_party(
     if not all_agents_cfg:
         return {"error": f"BLOCKED: No agents defined in crew '{crew}'."}
 
+    # Inject system_prefix into terminal agents' prompts (daemon agents get it via load_config)
+    system_prefix = crew_cfg.get("system_prefix", "")
+    if isinstance(system_prefix, str):
+        system_prefix = system_prefix.strip()
+    else:
+        system_prefix = ""
+    if system_prefix:
+        for _name, _cfg in all_agents_cfg.items():
+            if _cfg.get("transport", "daemon") == "terminal":
+                existing = _cfg.get("system", "")
+                _cfg["system"] = system_prefix + "\n\n" + existing
+
     all_agent_names = list(all_agents_cfg.keys())
 
     # --- Selective spawning ---
