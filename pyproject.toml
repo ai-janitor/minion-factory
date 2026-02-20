@@ -19,6 +19,9 @@ minion = "minion.cli:cli"
 [tool.hatch.build.targets.wheel]
 packages = ["src/minion"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "minion/docs"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

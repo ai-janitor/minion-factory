@@ -18,8 +18,9 @@ from minion.crew.terminal import spawn_terminal
 
 def install_docs() -> dict[str, object]:
     """Copy docs/ tree from package source to ~/.minion_work/docs/."""
-    # Locate docs/ relative to the minion package install path
-    src_docs = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "docs")
+    # Locate docs/ inside the minion package (force-included by hatch)
+    pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../minion/
+    src_docs = os.path.join(pkg_root, "docs")
     if not os.path.isdir(src_docs):
         return {"error": f"BLOCKED: docs/ not found at {src_docs}"}
     dest = os.path.expanduser("~/.minion_work/docs")
