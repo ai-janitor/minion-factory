@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from minion.auth import TASK_STATUSES, VALID_TRANSITIONS
+from minion.auth import CAP_REVIEW, TASK_STATUSES, VALID_TRANSITIONS, classes_with
 
 # Cache loaded flows so we don't re-parse YAML every call
 _flow_cache: dict[str, Any] = {}
@@ -115,13 +115,14 @@ def workers_for(status: str, class_required: str, task_type: str = "bugfix") -> 
     flow = _get_flow(task_type)
     if flow is not None:
         return flow.workers_for(status, class_required)
-    # Fallback: hardcoded routing
+    # Fallback: derive from capabilities
+    _reviewers = sorted(classes_with(CAP_REVIEW))
     _stage_workers: dict[str, list[str] | None] = {
         "open": None,
         "assigned": None,
         "in_progress": None,
-        "fixed": ["oracle", "recon"],
-        "verified": ["recon"],
+        "fixed": _reviewers,
+        "verified": _reviewers,
     }
     return _stage_workers.get(status)
 

@@ -53,19 +53,19 @@ stages:
     next: verified
     fail: assigned
     workers:
-      default: [oracle, recon]
-      coder: [oracle, recon]
-      builder: [recon]
-      recon: [oracle]
+      default: [oracle, recon, auditor]
+      coder: [oracle, recon, auditor]
+      builder: [recon, auditor]
+      recon: [oracle, auditor]
 
   verified:
     description: Review passed, awaiting testing
     next: closed
     fail: assigned
     workers:
-      default: [builder, recon]
-      coder: [builder, recon]
-      builder: [recon]
+      default: [builder, recon, auditor]
+      coder: [builder, recon, auditor]
+      builder: [recon, auditor]
       recon: [lead]
 
   closed:

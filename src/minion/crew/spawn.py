@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from typing import Any
 
+from minion.auth import VALID_CLASSES
 from minion.db import get_db
 from minion.crew._tmux import (
     finalize_layout,
@@ -54,7 +55,7 @@ def _find_crew_file(crew_name: str, project_dir: str = ".") -> str | None:
 
 def _role_to_class(role: str) -> str:
     """Map crew YAML role to agent class for registration."""
-    return role if role in ("lead", "coder", "builder", "oracle", "recon") else "coder"
+    return role if role in VALID_CLASSES else "coder"
 
 
 def list_crews() -> dict[str, object]:

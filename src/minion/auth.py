@@ -12,7 +12,46 @@ import click
 # Agent classes
 # ---------------------------------------------------------------------------
 
-VALID_CLASSES = {"lead", "coder", "builder", "oracle", "recon"}
+VALID_CLASSES = {"lead", "coder", "builder", "oracle", "recon", "planner", "auditor"}
+
+# ---------------------------------------------------------------------------
+# Capability constants — the only valid capability strings
+# ---------------------------------------------------------------------------
+
+CAP_MANAGE = "manage"
+CAP_CODE = "code"
+CAP_BUILD = "build"
+CAP_REVIEW = "review"
+CAP_TEST = "test"
+CAP_INVESTIGATE = "investigate"
+CAP_PLAN = "plan"
+
+VALID_CAPABILITIES = {
+    CAP_MANAGE, CAP_CODE, CAP_BUILD, CAP_REVIEW,
+    CAP_TEST, CAP_INVESTIGATE, CAP_PLAN,
+}
+
+# ---------------------------------------------------------------------------
+# Class capabilities — semantic tags for what each class does
+# ---------------------------------------------------------------------------
+
+CLASS_CAPABILITIES: dict[str, set[str]] = {
+    "lead":    {CAP_MANAGE, CAP_REVIEW},
+    "coder":   {CAP_CODE},
+    "builder": {CAP_CODE, CAP_TEST, CAP_BUILD},
+    "oracle":  {CAP_REVIEW},
+    "recon":   {CAP_REVIEW, CAP_TEST, CAP_INVESTIGATE},
+    "planner": {CAP_PLAN},
+    "auditor": {CAP_REVIEW, CAP_TEST},
+}
+
+
+def classes_with(capability: str) -> set[str]:
+    """Return all classes that have a given capability."""
+    if capability not in VALID_CAPABILITIES:
+        raise ValueError(f"Unknown capability {capability!r}. Valid: {sorted(VALID_CAPABILITIES)}")
+    return {cls for cls, caps in CLASS_CAPABILITIES.items() if capability in caps}
+
 
 # ---------------------------------------------------------------------------
 # Model whitelist per class (empty set = any model allowed)
@@ -32,6 +71,12 @@ CLASS_MODEL_WHITELIST: dict[str, set[str]] = {
     "oracle": set(),
     "recon": set(),
     "builder": set(),
+    "planner": {
+        "claude-opus-4-6", "claude-opus-4-5",
+        "claude-sonnet-4-6", "claude-sonnet-4-5",
+        "gemini-pro", "gemini-1.5-pro", "gemini-2.0-pro",
+    },
+    "auditor": set(),
 }
 
 # ---------------------------------------------------------------------------
@@ -44,6 +89,8 @@ CLASS_STALENESS_SECONDS: dict[str, int] = {
     "recon": 5 * 60,
     "lead": 15 * 60,
     "oracle": 30 * 60,
+    "planner": 15 * 60,
+    "auditor": 5 * 60,
 }
 
 # ---------------------------------------------------------------------------
@@ -93,6 +140,8 @@ CLASS_BRIEFING_FILES: dict[str, list[str]] = {
     "builder": [".minion-comms/CODE_MAP.md", ".minion-comms/traps/"],
     "oracle": [".minion-comms/CODE_MAP.md", ".minion-comms/CODE_OWNERS.md", ".minion-comms/intel/", ".minion-comms/traps/"],
     "recon": [".minion-comms/CODE_MAP.md", ".minion-comms/intel/", ".minion-comms/traps/"],
+    "planner": [".minion-comms/CODE_MAP.md", ".minion-comms/CODE_OWNERS.md", ".minion-comms/traps/"],
+    "auditor": [".minion-comms/CODE_MAP.md", ".minion-comms/traps/"],
 }
 
 # ---------------------------------------------------------------------------
@@ -122,8 +171,8 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "get-task":              (VALID_CLASSES, "Get full detail for a single task"),
     "submit-result":         (VALID_CLASSES, "Submit a result file for a task"),
     "close-task":            ({"lead"}, "Close a completed task"),
-    "claim-file":            ({"coder", "builder"}, "Claim a file for exclusive editing"),
-    "release-file":          ({"coder", "builder"}, "Release a file claim"),
+    "claim-file":            ({"coder", "builder", "planner"}, "Claim a file for exclusive editing"),
+    "release-file":          ({"coder", "builder", "planner"}, "Release a file claim"),
     "get-claims":            (VALID_CLASSES, "List active file claims"),
     "party-status":          ({"lead"}, "Full raid health dashboard"),
     "check-activity":        (VALID_CLASSES, "Check an agent's activity level"),

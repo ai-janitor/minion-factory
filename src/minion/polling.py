@@ -13,7 +13,10 @@ import os
 import time
 from typing import Any
 
+from minion.auth import CAP_REVIEW, classes_with
 from minion.db import get_db, now_iso
+
+_reviewers = classes_with(CAP_REVIEW)
 
 
 def _fetch_messages(agent: str) -> list[dict[str, Any]]:
@@ -116,7 +119,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
             candidates.extend(dict(r) for r in cursor.fetchall())
 
         # P3: fixed tasks for reviewers
-        if not candidates and agent_class in ("recon", "oracle"):
+        if not candidates and agent_class in _reviewers:
             cursor.execute(
                 """SELECT id, title, task_file, status, class_required, blocked_by
                    FROM tasks WHERE status = 'fixed' AND assigned_to IS NULL
@@ -125,7 +128,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
             candidates.extend(dict(r) for r in cursor.fetchall())
 
         # P4: verified tasks for testers
-        if not candidates and agent_class == "recon":
+        if not candidates and agent_class in _reviewers:
             cursor.execute(
                 """SELECT id, title, task_file, status, class_required, blocked_by
                    FROM tasks WHERE status = 'verified' AND assigned_to IS NULL

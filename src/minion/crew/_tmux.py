@@ -12,6 +12,8 @@ CLASS_COLORS: dict[str, str] = {
     "builder": "colour3",   # yellow
     "oracle":  "colour4",   # blue
     "recon":   "colour5",   # magenta
+    "planner": "colour6",   # cyan
+    "auditor": "colour9",   # bright red
 }
 
 
