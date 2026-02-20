@@ -507,10 +507,11 @@ class AgentDaemon:
         self._stop_event.set()
 
     def _comms_name(self) -> str:
+        """Poll mode is the default. Watcher mode only for explicit legacy paths."""
         db = str(self.config.comms_db)
-        if "minion-comms" in db or "minion_work" in db:
-            return "minion-comms"
-        return "legacy"
+        if ".minion-comms" in db:
+            return "legacy"
+        return "minion-comms"
 
     def _build_rules_section(self) -> str:
         contract = load_contract(self.config.docs_dir, "daemon-rules")

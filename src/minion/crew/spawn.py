@@ -124,8 +124,8 @@ def spawn_party(
     project_dir = os.path.abspath(project_dir)
     crew_cfg["project_dir"] = project_dir
 
-    # Inject per-project comms DB path so spawned daemons find the right DB
-    crew_cfg["comms_db"] = os.path.join(project_dir, ".work", "minion.db")
+    # DB path — passed to daemons via env, not baked into YAML
+    db_path = os.path.join(project_dir, ".work", "minion.db")
     crew_cfg["docs_dir"] = os.path.expanduser("~/.minion_work/docs")
 
     # Auto-install docs (protocol + contracts) before booting daemons
@@ -329,7 +329,7 @@ def spawn_party(
             agent_runtime = runtime  # global --runtime flag as fallback
         else:
             agent_runtime = "python"
-        start_swarm(agent, crew_config, project_dir, runtime=agent_runtime)
+        start_swarm(agent, crew_config, project_dir, runtime=agent_runtime, db_path=db_path)
 
     result_dict: dict[str, object] = {
         "status": "spawned",

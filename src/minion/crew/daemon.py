@@ -16,7 +16,7 @@ def init_swarm(config_path: str, project_dir: str) -> None:
     cfg.ensure_runtime_dirs()
 
 
-def start_agent_daemon(config_path: str, agent_name: str) -> None:
+def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> None:
     """Fork a daemon process for one agent (replaces minion-swarm start)."""
     from minion.daemon.config import load_config
     cfg = load_config(config_path)
@@ -24,7 +24,7 @@ def start_agent_daemon(config_path: str, agent_name: str) -> None:
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_fp = open(log_file, "a")
 
-    env = {**os.environ, "MINION_DB_PATH": str(cfg.comms_db)}
+    env = {**os.environ, "MINION_DB_PATH": db_path or str(cfg.comms_db)}
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
 
@@ -111,7 +111,7 @@ def _find_ts_daemon_dir() -> str:
     return os.path.expanduser("~/.minion-swarm/ts-daemon")
 
 
-def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python") -> None:
+def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python", db_path: str = "") -> None:
     """Start daemon watcher for an agent.
 
     runtime='python' uses in-process AgentDaemon.
@@ -135,4 +135,4 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         )
         log_fp.close()
     else:
-        start_agent_daemon(crew_config, agent)
+        start_agent_daemon(crew_config, agent, db_path=db_path)
