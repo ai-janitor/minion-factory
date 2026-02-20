@@ -12,5 +12,7 @@ def load_contract(docs_dir: str | Path, name: str) -> Optional[dict[str, Any]]:
     path = Path(docs_dir) / "contracts" / f"{name}.json"
     try:
         return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
+    except OSError:
+        return None  # File not found — contracts are optional
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Corrupt contract {path}: {exc}") from exc

@@ -721,8 +721,8 @@ def mission_list(ctx: click.Context) -> None:
         try:
             m = load_mission(name)
             missions.append({"name": m.name, "description": m.description, "requires": m.requires})
-        except Exception:
-            missions.append({"name": name, "error": "parse failed"})
+        except Exception as exc:
+            missions.append({"name": name, "error": f"parse failed: {exc}"})
     _output({"missions": missions}, ctx.obj["human"], ctx.obj["compact"])
 
 

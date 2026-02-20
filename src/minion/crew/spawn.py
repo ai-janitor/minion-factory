@@ -87,8 +87,8 @@ def list_crews() -> dict[str, object]:
                         leads = [legacy_lead]
                 members = {n: c.get("role", "?") for n, c in agents_cfg.items()}
                 crews.append({"crew": crew_name, "lead": leads, "members": members})
-            except Exception:
-                crews.append({"crew": crew_name, "error": "parse failed"})
+            except Exception as exc:
+                crews.append({"crew": crew_name, "error": f"parse failed: {exc}"})
 
     return {"crews": crews}
 

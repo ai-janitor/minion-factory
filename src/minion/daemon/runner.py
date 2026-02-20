@@ -226,11 +226,19 @@ class AgentDaemon:
                 try:
                     return json.loads(proc.stdout.strip())
                 except json.JSONDecodeError:
-                    self._log(f"poll returned non-JSON: {proc.stdout[:200]}")
+                    self._log(f"POLL ERROR: non-JSON output: {proc.stdout[:200]}")
                     return None
+            if proc.returncode not in (0, 1):
+                # 0=content, 1=timeout — anything else is unexpected
+                stderr_tail = (proc.stderr or "")[:300] if hasattr(proc, "stderr") else ""
+                self._log(f"POLL ERROR: exit code {proc.returncode} stderr={stderr_tail}")
+            return None
+        except FileNotFoundError:
+            self._log("FATAL: 'minion' binary not found in PATH — daemon cannot poll")
+            self._stop_event.set()
             return None
         except Exception as exc:
-            self._log(f"poll error: {exc}")
+            self._log(f"POLL ERROR: {type(exc).__name__}: {exc}")
             self._stop_event.wait(timeout=5.0)
             return None
 
@@ -498,7 +506,7 @@ class AgentDaemon:
             watcher.send_message(self.agent_name, lead, content)
             self._log(f"alerted lead '{lead}' about repeated failures")
         except Exception as exc:
-            self._log(f"failed to alert lead '{lead}': {exc}")
+            self._log(f"ALERT ERROR: failed to message lead '{lead}': {type(exc).__name__}: {exc}")
 
     # ── shared ─────────────────────────────────────────────────────────────
 
@@ -915,9 +923,11 @@ class AgentDaemon:
         if turn_output is not None:
             cmd.extend(["--turn-output", str(turn_output)])
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
+            if result.returncode != 0:
+                self._log(f"UPDATE-HP ERROR: exit {result.returncode} stderr={result.stderr[:200]}")
         except Exception as exc:
-            self._log(f"update-hp failed: {exc}")
+            self._log(f"UPDATE-HP ERROR: {type(exc).__name__}: {exc}")
 
     def _print_stream_start(self, command_name: str) -> None:
         self._invocation += 1

@@ -589,5 +589,7 @@ def list_flows() -> list[str]:
     """List available task flow names."""
     try:
         return _list_flows()
-    except Exception:
+    except Exception as exc:
+        import sys
+        print(f"WARNING: list_flows failed: {exc}", file=sys.stderr)
         return ["bugfix"]

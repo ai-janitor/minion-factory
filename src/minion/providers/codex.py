@@ -84,5 +84,6 @@ class CodexProvider(BaseProvider):
                 f.write(f"\n--- {datetime.now().isoformat()} ---\n")
                 f.write(content)
                 f.write("\n")
-        except OSError:
-            pass
+        except OSError as exc:
+            import sys
+            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)

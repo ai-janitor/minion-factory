@@ -111,7 +111,7 @@ def kill_tmux_pane_by_title(agent_name: str) -> None:
                                    capture_output=True)
                     return
     except FileNotFoundError:
-        pass
+        pass  # tmux not installed — nothing to kill
 
 
 def kill_all_crews() -> None:

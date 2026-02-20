@@ -25,12 +25,21 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_fp = open(log_file, "a")
 
-    env = {**os.environ, "MINION_DB_PATH": db_path or str(cfg.comms_db)}
+    resolved_db = db_path or str(cfg.comms_db)
+    env = {**os.environ, "MINION_DB_PATH": resolved_db}
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
 
     # Resolve absolute path to minion binary so detached process finds it
-    minion_bin = shutil.which("minion") or "minion"
+    minion_bin = shutil.which("minion")
+    if not minion_bin:
+        log_fp.write(f"FATAL: 'minion' not found in PATH: {os.environ.get('PATH', '')}\n")
+        log_fp.close()
+        raise FileNotFoundError("'minion' binary not found in PATH — is minion-factory installed?")
+
+    log_fp.write(f"[daemon-launch] bin={minion_bin} agent={agent_name} db={resolved_db} config={config_path}\n")
+    log_fp.flush()
+
     subprocess.Popen(
         [minion_bin, "daemon-run", "--config", config_path, "--agent", agent_name],
         stdin=subprocess.DEVNULL,
@@ -58,8 +67,11 @@ def stop_swarm(config_path: str) -> None:
             pid = state.get("pid")
             if pid and isinstance(pid, int):
                 os.kill(pid, signal.SIGTERM)
-        except (OSError, json.JSONDecodeError, ProcessLookupError):
-            pass
+        except ProcessLookupError:
+            pass  # Already dead — expected during cleanup
+        except (OSError, json.JSONDecodeError) as exc:
+            import sys
+            print(f"WARNING: stop_swarm failed to kill {state_file.name}: {exc}", file=sys.stderr)
 
 
 def spawn_pane(
@@ -110,7 +122,7 @@ def _find_ts_daemon_dir() -> str:
         if os.path.isdir(candidate):
             return candidate
     except ImportError:
-        pass
+        pass  # Optional dependency — fallback to default path
     return os.path.expanduser("~/.minion-swarm/ts-daemon")
 
 

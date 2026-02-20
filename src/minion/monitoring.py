@@ -33,7 +33,8 @@ def _agent_judgment(
                 if (now - mtime_dt).total_seconds() < 5 * 60:
                     return "active"
             except ValueError:
-                pass
+                import sys
+                print(f"WARNING: corrupt mtime timestamp: {mt!r}", file=sys.stderr)
 
     if last_seen:
         try:
@@ -45,7 +46,8 @@ def _agent_judgment(
                 return "idle"
             return "possibly dead"
         except ValueError:
-            pass
+            import sys
+            print(f"WARNING: corrupt last_seen timestamp: {last_seen!r}", file=sys.stderr)
 
     if last_task_update:
         try:
@@ -57,7 +59,8 @@ def _agent_judgment(
                 return "idle"
             return "possibly dead"
         except ValueError:
-            pass
+            import sys
+            print(f"WARNING: corrupt last_task_update timestamp: {last_task_update!r}", file=sys.stderr)
 
     return "possibly dead"
 
@@ -132,7 +135,8 @@ def check_activity(agent_name: str) -> dict[str, object]:
                 ls = datetime.datetime.fromisoformat(row["last_seen"])
                 result["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
             except ValueError:
-                pass
+                import sys
+                print(f"WARNING: corrupt last_seen for {agent_name}: {row['last_seen']!r}", file=sys.stderr)
 
         cursor.execute(
             """SELECT id, title, status, updated_at, activity_count, zone

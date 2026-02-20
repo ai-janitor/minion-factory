@@ -323,7 +323,8 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
             updated = datetime.datetime.fromisoformat(a["context_updated_at"])
             stale = (now - updated).total_seconds() > threshold
         except ValueError:
-            pass
+            import sys
+            print(f"WARNING: corrupt context_updated_at for {a.get('name')}: {a['context_updated_at']!r}", file=sys.stderr)
     elif threshold and not a.get("context_updated_at"):
         stale = True
     a["context_stale"] = stale
@@ -333,7 +334,8 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
             ls = datetime.datetime.fromisoformat(a["last_seen"])
             a["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
         except ValueError:
-            pass
+            import sys
+            print(f"WARNING: corrupt last_seen for {a.get('name')}: {a['last_seen']!r}", file=sys.stderr)
 
     return a
 
@@ -370,6 +372,8 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
     try:
         updated = datetime.datetime.fromisoformat(context_updated_at)
     except ValueError:
+        import sys
+        print(f"WARNING: corrupt context_updated_at for {agent_name}: {context_updated_at!r}", file=sys.stderr)
         return False, ""
 
     age_seconds = (datetime.datetime.now() - updated).total_seconds()

@@ -134,6 +134,7 @@ def available_flows() -> list[str]:
     if _HAS_DAG:
         try:
             return _mt_list_flows()
-        except Exception:
-            pass
+        except Exception as exc:
+            import sys
+            print(f"WARNING: list_flows failed: {exc}", file=sys.stderr)
     return ["bugfix"]
