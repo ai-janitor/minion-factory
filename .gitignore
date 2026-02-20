@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 .work/
+.minion-swarm/
 CLAUDE.md
