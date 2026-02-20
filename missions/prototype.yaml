@@ -1,0 +1,6 @@
+name: prototype
+description: Rapid prototype — build fast, skip formality
+requires:
+  - manage
+  - code
+  - build

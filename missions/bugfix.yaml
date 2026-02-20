@@ -1,0 +1,8 @@
+name: bugfix
+description: Find bug, fix code, test, review fix
+requires:
+  - manage
+  - investigate
+  - code
+  - test
+  - review

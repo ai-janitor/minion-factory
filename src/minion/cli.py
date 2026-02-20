@@ -677,6 +677,141 @@ def tools(ctx: click.Context, agent_class: str) -> None:
 
 # --- Flow inspection commands ---
 
+# =========================================================================
+# Missions
+# =========================================================================
+
+@cli.group("mission")
+@click.pass_context
+def mission_group(ctx: click.Context) -> None:
+    """Mission-driven team composition."""
+    pass
+
+
+@mission_group.command("list")
+@click.pass_context
+def mission_list(ctx: click.Context) -> None:
+    """List available mission templates."""
+    from minion.missions import list_missions, load_mission
+    names = list_missions()
+    missions = []
+    for name in names:
+        try:
+            m = load_mission(name)
+            missions.append({"name": m.name, "description": m.description, "requires": m.requires})
+        except Exception:
+            missions.append({"name": name, "error": "parse failed"})
+    _output({"missions": missions}, ctx.obj["human"], ctx.obj["compact"])
+
+
+@mission_group.command("suggest")
+@click.argument("mission_type")
+@click.option("--crew", default="", help="Comma-separated crew names to filter characters")
+@click.option("--project-dir", default=".", help="Project directory for crew scanning")
+@click.pass_context
+def mission_suggest(ctx: click.Context, mission_type: str, crew: str, project_dir: str) -> None:
+    """Show required capabilities, resolved slots, and eligible characters."""
+    from minion.missions import load_mission, resolve_slots, suggest_party
+    try:
+        mission = load_mission(mission_type)
+    except FileNotFoundError as e:
+        _output({"error": str(e)})
+        return
+    slots = resolve_slots(set(mission.requires))
+    crews = [c.strip() for c in crew.split(",") if c.strip()] or None
+    party = suggest_party(slots, crews=crews, project_dir=project_dir)
+    _output({
+        "mission": mission.name,
+        "description": mission.description,
+        "requires": mission.requires,
+        "slots": slots,
+        "eligible": {slot: chars for slot, chars in party.items()},
+    }, ctx.obj["human"], ctx.obj["compact"])
+
+
+@mission_group.command("spawn")
+@click.argument("mission_type")
+@click.option("--party", "party_str", default="", help="Comma-separated character names to spawn")
+@click.option("--crew", default="", help="Comma-separated crew names to filter characters")
+@click.option("--project-dir", default=".", help="Project directory")
+@click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
+              help="Daemon runtime: python or ts.")
+@click.pass_context
+def mission_spawn(ctx: click.Context, mission_type: str, party_str: str, crew: str, project_dir: str, runtime: str) -> None:
+    """Resolve mission slots, suggest party, and spawn."""
+    from minion.missions import load_mission, resolve_slots, suggest_party
+    try:
+        mission = load_mission(mission_type)
+    except FileNotFoundError as e:
+        _output({"error": str(e)})
+        return
+
+    slots = resolve_slots(set(mission.requires))
+    crews_filter = [c.strip() for c in crew.split(",") if c.strip()] or None
+    party = suggest_party(slots, crews=crews_filter, project_dir=project_dir)
+
+    if not party_str:
+        # No party specified — show suggestions and exit
+        _output({
+            "status": "suggest",
+            "mission": mission.name,
+            "slots": slots,
+            "eligible": party,
+            "hint": "Re-run with --party <names> to spawn",
+        }, ctx.obj["human"], ctx.obj["compact"])
+        return
+
+    # Validate party members exist in eligible characters
+    requested = [p.strip() for p in party_str.split(",")]
+    all_eligible = {c["name"]: c for slot_chars in party.values() for c in slot_chars}
+    unknown = [p for p in requested if p not in all_eligible]
+    if unknown:
+        _output({"error": f"Unknown characters: {', '.join(unknown)}. Eligible: {', '.join(sorted(all_eligible))}"})
+        return
+
+    # Build a dynamic crew config from selected characters
+    import os
+    import tempfile
+    import yaml
+    agents_cfg: dict = {}
+    for name in requested:
+        char = all_eligible[name]
+        crew_name = char["crew"]
+        # Load the full agent config from the crew YAML
+        from minion.crew.spawn import _find_crew_file
+        crew_file = _find_crew_file(crew_name, project_dir)
+        if not crew_file:
+            _output({"error": f"Crew file for '{crew_name}' not found"})
+            return
+        with open(crew_file) as f:
+            crew_cfg = yaml.safe_load(f)
+        agent_raw = crew_cfg.get("agents", {}).get(name, {})
+        agents_cfg[name] = agent_raw
+
+    # Write temporary crew YAML
+    dynamic_crew = {
+        "project_dir": os.path.abspath(project_dir),
+        "agents": agents_cfg,
+    }
+    tmpdir = os.path.expanduser("~/.minion-swarm")
+    os.makedirs(tmpdir, exist_ok=True)
+    tmp_crew_name = f"mission-{mission.name}"
+    tmp_path = os.path.join(tmpdir, f"{tmp_crew_name}.yaml")
+    with open(tmp_path, "w") as f:
+        yaml.dump(dynamic_crew, f, default_flow_style=False)
+
+    # Spawn via existing spawn_party
+    from minion.crew import spawn_party as _spawn_party
+    result = _spawn_party(tmp_crew_name, project_dir, runtime=runtime)
+    result["mission"] = mission.name
+    result["slots"] = slots
+    _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+
+# =========================================================================
+# Flow Inspection
+# =========================================================================
+
 @cli.command("show-flow")
 @click.argument("type_name")
 @click.pass_context

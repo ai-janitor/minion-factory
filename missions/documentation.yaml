@@ -1,0 +1,6 @@
+name: documentation
+description: Investigate codebase and produce documentation
+requires:
+  - manage
+  - investigate
+  - review

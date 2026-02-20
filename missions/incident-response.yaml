@@ -1,0 +1,9 @@
+name: incident-response
+description: Investigate incident, fix root cause, verify fix, review
+requires:
+  - manage
+  - investigate
+  - code
+  - test
+  - build
+  - review

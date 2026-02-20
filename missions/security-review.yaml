@@ -1,0 +1,6 @@
+name: security-review
+description: Investigate codebase for security vulnerabilities
+requires:
+  - manage
+  - investigate
+  - review

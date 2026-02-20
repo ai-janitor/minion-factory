@@ -1,0 +1,6 @@
+name: code-audit
+description: Review codebase for quality, patterns, and issues
+requires:
+  - manage
+  - review
+  - investigate

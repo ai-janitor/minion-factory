@@ -196,6 +196,9 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "complete-task":         (VALID_CLASSES, "DAG-routed task completion"),
     "poll":                  (VALID_CLASSES, "Poll for messages and tasks (replaces poll.sh)"),
     "list-flows":            (VALID_CLASSES, "List available task flow types"),
+    "mission list":          (VALID_CLASSES, "List available mission templates"),
+    "mission suggest":       ({"lead"}, "Show resolved slots and eligible characters for a mission"),
+    "mission spawn":         ({"lead"}, "Resolve mission, draft party, and spawn"),
 }
 
 

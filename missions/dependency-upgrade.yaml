@@ -1,0 +1,8 @@
+name: dependency-upgrade
+description: Upgrade dependencies, test compatibility, review changes
+requires:
+  - manage
+  - code
+  - test
+  - build
+  - review

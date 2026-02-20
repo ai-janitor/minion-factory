@@ -1,0 +1,7 @@
+name: bd-research
+description: Business development research — market analysis, competitive intel
+requires:
+  - manage
+  - investigate
+  - review
+  - plan

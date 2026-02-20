@@ -1,0 +1,8 @@
+name: migration
+description: Plan and execute a codebase or infrastructure migration
+requires:
+  - manage
+  - plan
+  - code
+  - test
+  - build

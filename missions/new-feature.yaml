@@ -1,0 +1,9 @@
+name: new-feature
+description: Plan, build, test, and review a new feature end-to-end
+requires:
+  - manage
+  - plan
+  - code
+  - test
+  - build
+  - review

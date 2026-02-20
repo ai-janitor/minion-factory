@@ -25,6 +25,7 @@ class AgentConfig:
     no_output_timeout_sec: int
     retry_backoff_sec: int
     retry_backoff_max_sec: int
+    skills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,9 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         retry_backoff_sec = int(item.get("retry_backoff_sec", 30))
         retry_backoff_max_sec = int(item.get("retry_backoff_max_sec", 300))
 
+        skills_raw = item.get("skills", [])
+        skills = tuple(str(s) for s in skills_raw) if isinstance(skills_raw, list) else ()
+
         agents[str(name)] = AgentConfig(
             name=str(name),
             role=role,
@@ -143,6 +147,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             no_output_timeout_sec=no_output_timeout_sec,
             retry_backoff_sec=retry_backoff_sec,
             retry_backoff_max_sec=retry_backoff_max_sec,
+            skills=skills,
         )
 
     return SwarmConfig(

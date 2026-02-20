@@ -21,6 +21,7 @@ packages = ["src/minion"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "docs" = "minion/docs"
+"missions" = "minion/missions"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
