@@ -1,0 +1,13 @@
+{
+  "inbox_header": "=== INBOX (already consumed — do NOT run check-inbox) ===",
+  "inbox_footer": "=== END INBOX ===",
+  "message_format": "FROM {sender}: {content}",
+  "task_header": "=== AVAILABLE TASKS ===",
+  "task_footer": "=== END TASKS ===",
+  "task_format": "- [{task_id}] {title} ({status}) — {claim_cmd}",
+  "post_instructions": [
+    "Process the above, then send results:",
+    "  minion send --from {agent} --to <recipient> --message '...'",
+    "Do NOT run check-inbox or re-register."
+  ]
+}

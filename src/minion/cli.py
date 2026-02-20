@@ -587,6 +587,14 @@ def clear_moon_crash(ctx: click.Context, agent: str) -> None:
 # Crew
 # =========================================================================
 
+@cli.command("install-docs")
+@click.pass_context
+def install_docs(ctx: click.Context) -> None:
+    """Copy protocol + contract docs to ~/.minion_work/docs/."""
+    from minion.crew.spawn import install_docs as _install_docs
+    _output(_install_docs(), ctx.obj["human"])
+
+
 @cli.command("list-crews")
 @click.pass_context
 def list_crews(ctx: click.Context) -> None:

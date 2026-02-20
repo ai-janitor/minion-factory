@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import List, Optional
@@ -17,7 +18,11 @@ class CodexProvider(BaseProvider):
             cmd.extend(["resume", "--last"])
         cmd.append("--json")
         if self.agent_cfg.permission_mode == "bypassPermissions":
-            cmd.extend(["-c", 'sandbox_permissions=["disk-full-read-access"]'])
+            cmd.extend([
+                "--sandbox", "workspace-write",
+                "--add-dir", os.path.expanduser("~/.minion_work"),
+                "-c", "shell_environment_policy.inherit=all",
+            ])
         if self.agent_cfg.model:
             cmd.extend(["--model", self.agent_cfg.model])
         cmd.append(prompt)

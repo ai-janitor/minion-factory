@@ -68,7 +68,8 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{agent}.log")
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         log_fp = open(log_file, "a")
-        env = {**os.environ, "MINION_CLASS": "lead"}
+        project_name = os.path.basename(os.path.abspath(project_dir))
+        env = {**os.environ, "MINION_CLASS": "lead", "MINION_PROJECT": project_name}
         env.pop("CLAUDECODE", None)
         subprocess.Popen(
             ["npx", "tsx", "src/main.ts", "--config", crew_config, "--agent", agent],

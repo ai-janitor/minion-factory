@@ -1,0 +1,19 @@
+{
+  "common": [
+    "Do not use AskUserQuestion — it blocks in headless mode.",
+    "Route questions to lead via Bash: minion send --from {agent} --to lead --message '...'",
+    "Execute exactly the incoming task.",
+    "Send one summary message when done.",
+    "Task governance: lead manages task queue and assignment ownership."
+  ],
+  "lead": [
+    "As lead: create and maintain tasks.",
+    "As lead: define scope and acceptance criteria.",
+    "As lead: ask domain owners to update technical details based on direct work.",
+    "As lead: after a task completes, review and assign the next task."
+  ],
+  "non_lead": [
+    "Non-lead agents: execute assigned tasks, report results.",
+    "If you discover new ideas, send them to lead."
+  ]
+}

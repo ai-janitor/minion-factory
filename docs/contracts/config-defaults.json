@@ -1,0 +1,10 @@
+{
+  "max_history_tokens": 100000,
+  "max_prompt_chars": 120000,
+  "no_output_timeout_sec": 600,
+  "retry_backoff_sec": 30,
+  "retry_backoff_max_sec": 300,
+  "max_console_stream_chars": 12000,
+  "token_to_char_ratio": 4,
+  "default_context_window": 200000
+}

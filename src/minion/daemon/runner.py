@@ -14,10 +14,16 @@ from minion.defaults import ENV_CLASS, ENV_DB_PATH, ENV_DOCS_DIR
 
 from .buffer import RollingBuffer
 from .config import SwarmConfig
+from .contracts import load_contract
 from .watcher import CommsWatcher
 from minion.providers import get_provider
 
-MAX_CONSOLE_STREAM_CHARS = 12_000
+# Load max_console_stream_chars from contract, fallback to 12k
+_cfg_defaults = load_contract(
+    os.getenv("MINION_DOCS_DIR", os.path.expanduser("~/.minion_work/docs")),
+    "config-defaults",
+)
+MAX_CONSOLE_STREAM_CHARS = (_cfg_defaults or {}).get("max_console_stream_chars", 12_000)
 
 # Claude Code system prompt + tool definitions token costs (approximate).
 # Each tool's JSON schema + description consumes context tokens.
@@ -233,18 +239,30 @@ class AgentDaemon:
         rules_section = self._build_rules_section()
         provider_section = self._build_provider_section()
         role = self.agent_cfg.role or "coder"
-        boot_section = "\n".join([
-            "BOOT: You just started. Run these commands via the Bash tool:",
-            f"  minion --compact register --name {self.agent_name} --class {role} --transport daemon",
-            f"  minion set-context --agent {self.agent_name} --context 'just started'",
-            f"  minion check-inbox --agent {self.agent_name}",
-            f"  minion set-status --agent {self.agent_name} --status 'ready for orders'",
-            "",
-            "IMPORTANT: You are a daemon agent managed by minion-swarm.",
-            "Do NOT run poll.sh — minion-swarm handles polling for you.",
-            "Do NOT use AskUserQuestion — it blocks in headless mode.",
-            "After running these 4 commands, STOP. Do not do anything else.",
-        ])
+
+        contract = load_contract(self.config.docs_dir, "boot-sequence")
+        if contract:
+            subs = {"{agent}": self.agent_name, "{role}": role}
+            def _sub(s: str) -> str:
+                for k, v in subs.items():
+                    s = s.replace(k, v)
+                return s
+            cmds = [f"  {_sub(c)}" for c in contract["commands"]]
+            boot_section = "\n".join(
+                [_sub(contract["preamble"])] + cmds + ["", _sub(contract["postamble"])]
+            )
+        else:
+            boot_section = "\n".join([
+                "BOOT: You just started. Run these commands via the Bash tool:",
+                f"  minion --compact register --name {self.agent_name} --class {role} --transport daemon",
+                f"  minion set-context --agent {self.agent_name} --context 'just started'",
+                f"  minion set-status --agent {self.agent_name} --status 'ready for orders'",
+                "",
+                "IMPORTANT: You are a daemon agent managed by minion-swarm.",
+                "Do NOT run poll.sh — minion-swarm handles polling for you.",
+                "Do NOT use AskUserQuestion — it blocks in headless mode.",
+                "After running these 3 commands, STOP. Do not do anything else.",
+            ])
         sections = [system_section, protocol_section, rules_section, boot_section]
         if provider_section:
             sections.insert(0, provider_section)
@@ -271,30 +289,47 @@ class AgentDaemon:
 
         # Paste messages inline — poll already consumed them from DB
         inbox_lines: List[str] = []
+        tmpl = load_contract(self.config.docs_dir, "inbox-template")
         messages = poll_data.get("messages", [])
         if messages:
-            inbox_lines.append("=== INBOX (already consumed — do NOT run check-inbox) ===")
+            inbox_lines.append(tmpl["inbox_header"] if tmpl else "=== INBOX (already consumed — do NOT run check-inbox) ===")
             for msg in messages:
                 sender = msg.get("from_agent", "unknown")
                 content = msg.get("content", "")
-                inbox_lines.append(f"FROM {sender}: {content}")
-            inbox_lines.append("=== END INBOX ===")
+                if tmpl:
+                    inbox_lines.append(tmpl["message_format"].replace("{sender}", sender).replace("{content}", content))
+                else:
+                    inbox_lines.append(f"FROM {sender}: {content}")
+            inbox_lines.append(tmpl["inbox_footer"] if tmpl else "=== END INBOX ===")
 
         tasks = poll_data.get("tasks", [])
         if tasks:
-            inbox_lines.append("=== AVAILABLE TASKS ===")
+            inbox_lines.append(tmpl["task_header"] if tmpl else "=== AVAILABLE TASKS ===")
             for task in tasks:
-                inbox_lines.append(f"  Task #{task.get('task_id')}: {task.get('title')} [{task.get('status')}]")
-                if task.get("claim_cmd"):
-                    inbox_lines.append(f"    Claim: {task['claim_cmd']}")
-            inbox_lines.append("=== END TASKS ===")
+                if tmpl:
+                    line = tmpl["task_format"]
+                    line = line.replace("{task_id}", str(task.get("task_id", "")))
+                    line = line.replace("{title}", task.get("title", ""))
+                    line = line.replace("{status}", task.get("status", ""))
+                    line = line.replace("{claim_cmd}", task.get("claim_cmd", ""))
+                    inbox_lines.append(line)
+                else:
+                    inbox_lines.append(f"  Task #{task.get('task_id')}: {task.get('title')} [{task.get('status')}]")
+                    if task.get("claim_cmd"):
+                        inbox_lines.append(f"    Claim: {task['claim_cmd']}")
+            inbox_lines.append(tmpl["task_footer"] if tmpl else "=== END TASKS ===")
 
-        inbox_lines.extend([
-            "",
-            "Process the above, then send results:",
-            f"  minion send --from {self.agent_name} --to <recipient> --message '...'",
-            "Do NOT run check-inbox or re-register.",
-        ])
+        if tmpl:
+            inbox_lines.append("")
+            for line in tmpl["post_instructions"]:
+                inbox_lines.append(line.replace("{agent}", self.agent_name))
+        else:
+            inbox_lines.extend([
+                "",
+                "Process the above, then send results:",
+                f"  minion send --from {self.agent_name} --to <recipient> --message '...'",
+                "Do NOT run check-inbox or re-register.",
+            ])
 
         sections.extend([rules_section, "\n".join(inbox_lines)])
         return "\n\n".join(s for s in sections if s.strip())
@@ -470,6 +505,16 @@ class AgentDaemon:
         return "legacy"
 
     def _build_rules_section(self) -> str:
+        contract = load_contract(self.config.docs_dir, "daemon-rules")
+        if contract:
+            def _sub(s: str) -> str:
+                return s.replace("{agent}", self.agent_name)
+            lines = ["Autonomous daemon rules:"]
+            lines.extend(f"- {_sub(r)}" for r in contract["common"])
+            role_rules = contract.get("lead" if self.agent_cfg.role == "lead" else "non_lead", [])
+            lines.extend(f"- {_sub(r)}" for r in role_rules)
+            return "\n".join(lines)
+
         lines = [
             "Autonomous daemon rules:",
             "- Do not use AskUserQuestion — it blocks in headless mode.",
@@ -528,6 +573,15 @@ class AgentDaemon:
         )
 
     def _build_history_block(self, history_snapshot: str) -> str:
+        contract = load_contract(self.config.docs_dir, "compaction-markers")
+        if contract and "history_block" in contract:
+            hb = contract["history_block"]
+            return "\n".join([
+                hb["header"],
+                hb["preamble"],
+                history_snapshot,
+                hb["footer"],
+            ])
         return "\n".join(
             [
                 "════════════════════ RECENT HISTORY (rolling buffer) ════════════════════",
@@ -737,7 +791,8 @@ class AgentDaemon:
 
     def _contains_compaction_marker(self, text: str) -> bool:
         low = text.lower()
-        markers = (
+        contract = load_contract(self.config.docs_dir, "compaction-markers")
+        markers = tuple(contract["substring_markers"]) if contract else (
             "compaction",
             "compacted",
             "context window",

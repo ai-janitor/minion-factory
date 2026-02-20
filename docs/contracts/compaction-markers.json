@@ -1,0 +1,19 @@
+{
+  "substring_markers": [
+    "compaction",
+    "compacted",
+    "context window",
+    "summarized prior",
+    "summarised prior",
+    "auto-compact"
+  ],
+  "sdk_event": {
+    "type": "system",
+    "subtype": "compact_boundary"
+  },
+  "history_block": {
+    "header": "════════════════════ RECENT HISTORY (rolling buffer) ════════════════════",
+    "preamble": "The following is your captured history from before compaction.\nUse it to restore recent context and avoid redoing completed work.",
+    "footer": "═══════════════════════ END RECENT HISTORY ═════════════════════════════"
+  }
+}

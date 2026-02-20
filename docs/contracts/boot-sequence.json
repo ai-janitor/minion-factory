@@ -1,0 +1,9 @@
+{
+  "commands": [
+    "minion --compact register --name {agent} --class {role} --transport daemon",
+    "minion set-context --agent {agent} --context 'just started'",
+    "minion set-status --agent {agent} --status 'ready for orders'"
+  ],
+  "preamble": "BOOT: You just started. Run these commands via the Bash tool:",
+  "postamble": "IMPORTANT: You are a daemon agent managed by minion-swarm.\nDo NOT run poll.sh — minion-swarm handles polling for you.\nDo NOT use AskUserQuestion — it blocks in headless mode.\nAfter running these 3 commands, STOP. Do not do anything else."
+}

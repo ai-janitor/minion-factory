@@ -544,19 +544,23 @@ Each provider runs agents in a different execution environment with different co
 
 | Provider | Issue | Root Cause |
 |----------|-------|------------|
-| **Codex (gpt-5.3-codex)** | `sqlite3.OperationalError: unable to open database file` | Codex sandbox doesn't pass `MINION_COMMS_DB_PATH` env var. Agent has zero DB access — can't read tasks, send messages, update HP, or mark inbox read |
-| **Gemini (gemini-3-flash)** | `read_file` blocked on paths outside project dir | Gemini workspace restricts filesystem to project directory. Agent self-recovered by using shell `cat` as fallback |
+| **Codex (gpt-5.3-codex)** | `sqlite3.OperationalError: unable to open database file` | Codex sandbox blocks write access + strips env vars. Agent runs `minion` CLI inside sandbox — CLI can't reach DB. **FIXED**: `--sandbox workspace-write --add-dir ~/.minion_work -c shell_environment_policy.inherit=all` |
+| **Gemini (gemini-3-flash)** | `read_file` blocked on paths outside project dir | Gemini workspace restricts filesystem to project directory. Agent self-recovered by using shell `cat` as fallback. **No `--add-dir` equivalent** — Gemini's restriction is tool-level, not shell-level. Shell commands (`cat`, `minion` CLI) work; only Gemini's native `read_file` tool is blocked. |
 | **Claude (claude-sonnet-4-6)** | `uv run pytest` vs bare `pytest` — ModuleNotFoundError | Not provider-specific, but agents forget to use `uv run` after compaction. Task specs say `uv run pytest` but agents run `pytest` directly |
 
-### What to Fix
+### What's Fixed
+
+| Issue | Resolution |
+|-------|------------|
+| Codex DB access | `codex.py` now passes `--sandbox workspace-write --add-dir ~/.minion_work -c shell_environment_policy.inherit=all`. Agent's shell (including `minion` CLI child processes) can reach the DB and inherit env vars. |
+
+### Remaining Gaps
 
 | Issue | Fix |
 |-------|-----|
 | No per-provider env validation | `spawn-party` should validate that each provider can access the DB, project files, and required env vars BEFORE starting the poll loop. Fail fast with clear error |
 | Provider capability matrix | Define per-provider: `{can_access_db: bool, can_read_outside_project: bool, env_passthrough: bool, shell_sandbox: bool}`. Use this to gate agent assignments |
-| Workspace prep per provider | Spawn should set up provider-specific workspace: symlink DB into project dir for sandboxed providers, create `.env` files, ensure `uv` venv exists |
-| Codex-specific: DB access | Options: (a) copy DB into Codex workspace, (b) use HTTP API instead of SQLite, (c) mark Codex agents as "no-comms" and use file-based dead drops |
-| Gemini-specific: path restrictions | Ensure all task-referenced files are within the project directory, or document the `cat` fallback in Gemini agent bootstrap |
+| Gemini-specific: native tool path restrictions | Gemini's `read_file` tool rejects paths outside project dir. Shell commands work fine — `minion` CLI, `cat`, etc. are unaffected. Document in Gemini agent bootstrap: "use Bash tool for files outside project dir" |
 | Agent bootstrap awareness | Each agent's system prompt should include provider-specific instructions (e.g., "always use `uv run`", "use `cat` not `read_file` for paths outside project") |
 
 ## Real-Time Agent Observability — Without Tmux

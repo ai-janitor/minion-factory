@@ -1,0 +1,6 @@
+{
+  "casing": "snake_case",
+  "required_fields": ["agent", "pid", "status", "updated_at", "consecutive_failures", "resume_ready"],
+  "optional_fields": ["provider"],
+  "status_enum": ["idle", "working", "error", "stopped"]
+}

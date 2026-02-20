@@ -16,6 +16,17 @@ from minion.crew._tmux import (
 from minion.crew.daemon import spawn_pane, start_swarm
 from minion.crew.terminal import spawn_terminal
 
+def install_docs() -> dict[str, object]:
+    """Copy docs/ tree from package source to ~/.minion_work/docs/."""
+    # Locate docs/ relative to the minion package install path
+    src_docs = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "docs")
+    if not os.path.isdir(src_docs):
+        return {"error": f"BLOCKED: docs/ not found at {src_docs}"}
+    dest = os.path.expanduser("~/.minion_work/docs")
+    shutil.copytree(src_docs, dest, dirs_exist_ok=True)
+    return {"status": "installed", "source": src_docs, "destination": dest}
+
+
 CREW_SEARCH_PATHS = [
     os.path.expanduser("~/.minion-swarm/crews"),
     os.path.expanduser("~/.minion-swarm"),
@@ -117,6 +128,9 @@ def spawn_party(
     project_name = os.path.basename(project_dir)
     crew_cfg["comms_db"] = os.path.expanduser(f"~/.minion_work/{project_name}/minion.db")
     crew_cfg["docs_dir"] = os.path.expanduser("~/.minion_work/docs")
+
+    # Auto-install docs (protocol + contracts) before booting daemons
+    install_docs()
 
     # --- Backward compat: merge legacy lead: section into agents ---
     lead_cfg = crew_cfg.pop("lead", None)
