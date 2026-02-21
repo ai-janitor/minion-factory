@@ -8,7 +8,8 @@ import subprocess
 from typing import Any
 
 from minion.auth import VALID_CLASSES
-from minion.db import get_db
+from minion.db import get_db, reset_db_path
+from minion.defaults import ENV_DB_PATH
 from minion.crew._tmux import (
     finalize_layout,
     kill_all_crews,
@@ -198,6 +199,9 @@ def spawn_party(
     # --- Auto-register all agents, clear flags ---
     from minion.comms import register as _register
 
+    # Use explicit db_path — get_db() resolves by cwd which may be wrong project
+    os.environ[ENV_DB_PATH] = db_path
+    reset_db_path()
     conn = get_db()
     try:
         conn.execute("DELETE FROM flags WHERE key = 'stand_down'")
