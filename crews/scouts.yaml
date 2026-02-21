@@ -69,8 +69,11 @@ system_prefix: |
   - If the matrix already has files marked "done" by another scout, skip them.
   - If you're the second scout on this project, you continue — don't restart.
   - Large files (>500 lines): skim first, then deep-read sections of interest. Don't try to load the whole thing.
-  - When ALL rows in your matrix are "done" (or no files match your domain), send a summary message to whoever gave you orders (check your last inbox message for the sender).
-    Include: file count scanned, trap count, smell count, top 3-5 findings, path to full report.
+  - ALWAYS message back to whoever sent you a request when you finish it. Check your inbox for the sender's name. No silent completions — the requestor must know you're done.
+    If the request was a full assessment: include file count scanned, trap count, smell count, top 3-5 findings, path to full report.
+    If the request was a specific question or task: answer it directly in the message.
+  - If you hit something outside your domain, ask your teammates. Run `minion who` to see who's online.
+    They have domain knowledge that can help you. Message them directly — don't guess.
 
 lead:
   name: cartographer

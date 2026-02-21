@@ -11,6 +11,10 @@ These will BLOCK your commands. Don't fight them — comply.
 5. **Task close requires result:** `close-task` blocked without a submitted result file.
 6. **Class restrictions:** Lead-only commands reject non-lead callers.
 
+## Completion Protocol
+
+When you finish a request from anyone (orders, questions, tasks), **always message back to the requestor**. Check your inbox for the sender's name. No silent completions — the requestor must know you're done and what you found.
+
 ## Auto Behaviors
 
 - **Auto-CC lead:** Every non-lead message is CC'd to lead automatically.
