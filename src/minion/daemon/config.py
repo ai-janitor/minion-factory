@@ -31,6 +31,7 @@ class AgentConfig:
     no_output_timeout_sec: int
     retry_backoff_sec: int
     retry_backoff_max_sec: int
+    self_dismiss: bool = False
     capabilities: tuple[str, ...] = ()
 
 
@@ -169,6 +170,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             no_output_timeout_sec=no_output_timeout_sec,
             retry_backoff_sec=retry_backoff_sec,
             retry_backoff_max_sec=retry_backoff_max_sec,
+            self_dismiss=bool(item.get("self_dismiss", False)),
             capabilities=caps,
         )
 

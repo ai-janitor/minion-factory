@@ -74,6 +74,28 @@ def handle_standdown(
     return True
 
 
+def handle_self_dismiss(
+    agent_name: str,
+    generation: int,
+    last_task_id: Optional[int],
+    log: Any,
+    write_state: Any,
+    alert_lead: Any,
+    clear_session: Any,
+) -> bool:
+    """No work + self_dismiss. Drop AI session, keep polling.
+
+    Like standdown but also clears provider session so no AI context is held.
+    Daemon stays in inner poll loop. Wake path handles fresh session on new work.
+    """
+    log(f"[self_dismiss] no remaining work (last_task_id={last_task_id}) — dropping AI session")
+    write_state("self_dismissed", generation=generation, last_task_id=last_task_id)
+    clear_session()
+    if alert_lead:
+        alert_lead(f"{agent_name} self-dismissed — AI session dropped, daemon still polling")
+    return True
+
+
 def handle_wake_from_standdown(
     agent_name: str,
     poll_data: Dict[str, Any],

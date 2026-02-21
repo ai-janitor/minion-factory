@@ -27,6 +27,7 @@ class AgentConfig:
     retry_backoff_sec: int
     retry_backoff_max_sec: int
     skills: tuple[str, ...] = ()
+    self_dismiss: bool = False
     capabilities: tuple[str, ...] = ()
 
 
@@ -163,6 +164,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             retry_backoff_sec=retry_backoff_sec,
             retry_backoff_max_sec=retry_backoff_max_sec,
             skills=skills,
+            self_dismiss=bool(item.get("self_dismiss", False)),
             capabilities=caps,
         )
 

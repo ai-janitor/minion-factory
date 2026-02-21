@@ -81,11 +81,24 @@ class PollingMixin:
             return True  # fail-open: don't stand down if check fails
 
     def _standdown(self, generation: int) -> None:
-        """Agent has no work — preserve session, keep daemon polling cheaply."""
-        self._stood_down = handle_standdown(
-            self.agent_name, generation, self._last_task_id,
-            self._log, self._write_state, self._alert_lead_poll,
-        )
+        """Agent has no work — stand down or self-dismiss based on config."""
+        if self.agent_cfg.self_dismiss:
+            from ..triggers import handle_self_dismiss
+
+            def _clear_session() -> None:
+                self.resume_ready = False
+                self._provider.session_id = None
+
+            self._stood_down = handle_self_dismiss(
+                self.agent_name, generation, self._last_task_id,
+                self._log, self._write_state, self._alert_lead_poll,
+                _clear_session,
+            )
+        else:
+            self._stood_down = handle_standdown(
+                self.agent_name, generation, self._last_task_id,
+                self._log, self._write_state, self._alert_lead_poll,
+            )
 
     def _wake_from_standdown(self, poll_data: Dict[str, Any]) -> None:
         """Wake from stood-down state. Resume if same task, fresh if new."""
