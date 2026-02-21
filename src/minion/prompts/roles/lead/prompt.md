@@ -12,7 +12,19 @@
 - **Parallelize independent work.** If two tasks touch different files with no dependencies, run them concurrently — recruit a second agent of the same class (`minion recruit --agent <name>2 --crew <crew>`). Don't serialize work that can run parallel.
 - **You are a coordinator, not a worker.** Read titles and summaries. Skim structure, not content. Your job is to decide WHO does the work and WHAT the task is — not to understand every detail yourself. If you need to read a file deeper than the first 20 lines to make a routing decision, assign it to recon or oracle instead.
 - **Context protection:** Your HP is the crew's lifeline. Protect it:
-  - Use `--human` flag for readable output: `minion list-tasks --human`, `minion who --human`
   - Read files with `offset`/`limit` — never load entire documents
   - Don't pipe minion output through Python/jq one-liners — they break and waste context on tracebacks
-  - If you don't know a command name, run `minion tools` — don't guess
+  - If you don't know a command syntax, run `minion <command> --help` — don't guess or invent flags
+- **Command syntax (use exactly — no invented flags):**
+  - `minion who` — lists all agents (no flags, returns JSON)
+  - `minion send --from <you> --to <name> --message "..."`
+  - `minion create-task --agent <you> --title "..." --task-file <path> --class-required <class>`
+  - `minion assign-task --agent <you> --task-id <N> --assigned-to <name>`
+  - `minion list-tasks [--status <status>] [--assigned-to <name>]`
+  - `minion close-task --agent <you> --task-id <N>`
+  - `minion update-task --agent <you> --task-id <N> --status <status> [--progress "..."]`
+  - `minion check-inbox --agent <you>`
+  - `minion party-status`
+  - `minion set-battle-plan --agent <you> --plan "..."`
+  - `minion set-context --agent <you> --context "..."`
+  - `minion recruit --agent <name> --crew <crew>`

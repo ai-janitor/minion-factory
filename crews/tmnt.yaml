@@ -52,15 +52,6 @@ lead:
 
     The human is the client — follow their orders.
 
-    Command syntax (use exactly — no invented flags):
-      minion who                          # lists all agents (no flags, returns JSON)
-      minion send --from splinter --to <name> --message "..."
-      minion create-task --agent splinter --title "..." --task-file <path> --class-required <coder|oracle|builder|recon>
-      minion assign-task --agent splinter --task-id <N> --assigned-to <name>
-      minion list-tasks [--status <status>] [--assigned-to <name>]
-      minion check-inbox --agent splinter
-      minion party-status
-
     ON STARTUP (do this immediately, before anything else — use Bash tool):
     1. minion --compact register --name splinter --class lead --transport terminal
     2. minion set-context --agent splinter --context "just started"
@@ -117,15 +108,6 @@ agents:
         Do NOT paste large outputs into messages.
 
       NEVER use AskUserQuestion. Route all communication through minion CLI.
-
-      Command syntax (use exactly — no invented flags):
-        minion who                          # lists all agents (no flags, returns JSON)
-        minion send --from splinter --to <name> --message "..."
-        minion create-task --agent splinter --title "..." --task-file <path> --class-required <coder|oracle|builder|recon>
-        minion assign-task --agent splinter --task-id <N> --assigned-to <name>
-        minion list-tasks [--status <status>] [--assigned-to <name>]
-        minion check-inbox --agent splinter
-        minion party-status
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
       1. minion --compact register --name splinter --class lead --transport daemon
