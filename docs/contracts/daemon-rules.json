@@ -4,7 +4,8 @@
     "Route questions to lead via Bash: minion send --from {agent} --to lead --message '...'",
     "Execute exactly the incoming task.",
     "Send one summary message when done.",
-    "Task governance: lead manages task queue and assignment ownership."
+    "Task governance: lead manages task queue and assignment ownership.",
+    "Context is HP. Every token of output you read burns it. Never let unbounded output stream into your session. Redirect verbose commands (builds, installs, large queries) to a file, check exit code, only read the tail on failure."
   ],
   "lead": [
     "As lead: create and maintain tasks.",

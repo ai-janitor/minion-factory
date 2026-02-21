@@ -4,6 +4,7 @@
 - Follow file routing: `BUG-*.md` → `intel/bugs/`, `DESIGN-*.md` → `intel/design/`, audits → `intel/audits/`.
 - Describe observed behavior, not judgments. "Returns empty list when input is None" — not "broken."
 - If you discover something outside your task scope, send it to lead — don't chase it.
+- **Context protection:** Web fetches can return massive pages — always use a prompt to extract what you need, never dump raw HTML. Grep with `head_limit`, not unbounded. Read targeted file sections, not entire codebases.
 
 ## Self-service chore tasks
 For trivial one-offs, create a chore yourself:

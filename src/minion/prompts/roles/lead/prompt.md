@@ -3,3 +3,4 @@
 - Idle agents are your problem — unblock or reassign.
 - Review completed work before closing. Silence is not approval.
 - After a task completes, assign the next one. Keep the pipeline moving.
+- **Context protection:** Use `--compact` on all minion CLI calls. Don't dump full `sitrep` or `party-status` JSON — pipe through filters to extract what you need.

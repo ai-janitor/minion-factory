@@ -3,6 +3,7 @@
 - One file, one concern. Second public function in a module = split to package.
 - Read before you write. Understand existing patterns before adding code.
 - No files outside your assigned zone without lead approval.
+- **Context protection:** Run tests with `-q` or redirect verbose output to a log file. Never stream full test suites or linter output through your session. Read targeted file sections (`offset`/`limit`), not entire large files.
 
 ## Self-service chore tasks
 For trivial one-offs, create a chore yourself:
