@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import os from 'os';
+import yaml from 'js-yaml';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.MINION_DB_PATH || path.join(os.homedir(), '.minion_work', process.env.MINION_PROJECT || 'default', 'minion.db');
@@ -46,14 +47,19 @@ app.use('/api/tasks', requireAuth);
 app.use('/api/raid-log', requireAuth);
 app.use('/api/logs', requireAuth);
 app.use('/api/task-lineage', requireAuth);
+app.use('/api/messages', requireAuth);
+app.use('/api/flows', requireAuth);
 
 app.get('/api/agents', (_req, res) => {
   const rows = db.prepare(`
-    SELECT name, agent_class, model, status, transport,
-           hp_input_tokens, hp_output_tokens, hp_tokens_limit,
-           hp_turn_input, hp_turn_output, hp_updated_at,
-           last_seen, context_summary, current_zone, current_role, registered_at
-    FROM agents ORDER BY last_seen DESC
+    SELECT a.name, a.agent_class, a.model, a.status, a.transport,
+           a.hp_input_tokens, a.hp_output_tokens, a.hp_tokens_limit,
+           a.hp_turn_input, a.hp_turn_output, a.hp_updated_at,
+           a.last_seen, a.context_summary, a.current_zone, a.current_role, a.registered_at,
+           t.id AS task_id, t.title AS task_title, t.status AS task_status
+    FROM agents a
+    LEFT JOIN tasks t ON t.assigned_to = a.name AND t.status = 'in_progress'
+    ORDER BY a.last_seen DESC
   `).all();
 
   const agents = rows.map(row => {
@@ -67,7 +73,11 @@ app.get('/api/agents', (_req, res) => {
     if (hp_pct !== null) {
       hp_status = hp_pct > 50 ? 'Healthy' : hp_pct > 25 ? 'Wounded' : 'CRITICAL';
     }
-    return { ...row, hp_pct, hp_status };
+    const current_task = row.task_id
+      ? { id: row.task_id, title: row.task_title, status: row.task_status }
+      : null;
+    const { task_id, task_title, task_status, ...agent } = row;
+    return { ...agent, hp_pct, hp_status, current_task };
   });
 
   res.json(agents);
@@ -159,6 +169,39 @@ app.get('/api/logs/:agent', (req, res) => {
   } catch {
     res.json({ agent: agentName, lines: ['(no log file found)'] });
   }
+});
+
+// Recent messages — content is read from disk and truncated to 200 chars for feed display
+app.get('/api/messages', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = db.prepare(`
+    SELECT id, from_agent, to_agent, content_file, timestamp, read_flag, is_cc
+    FROM messages ORDER BY timestamp DESC LIMIT ?
+  `).all(limit);
+
+  const messages = rows.map(row => {
+    let content = '';
+    try {
+      const raw = fs.readFileSync(row.content_file, 'utf-8');
+      content = raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
+    } catch {
+      content = '(file not found)';
+    }
+    return { ...row, content };
+  });
+
+  res.json(messages);
+});
+
+// Flow definitions — load YAML from missions/ dir, return as JSON
+const missionsDir = path.join(__dirname, '..', 'missions');
+
+app.get('/api/flows/:type', (req, res) => {
+  const type = req.params.type.replace(/[^a-zA-Z0-9_-]/g, '');
+  const filePath = path.join(missionsDir, `${type}.yaml`);
+  const raw = fs.readFileSync(filePath, 'utf-8');
+  const data = yaml.load(raw);
+  res.json(data);
 });
 
 // Serve static files from dist/ in production

@@ -121,6 +121,40 @@ def kill_tmux_pane_by_title(agent_name: str) -> None:
         print("WARNING: tmux not found — cannot kill pane", file=sys.stderr)
 
 
+def update_pane_task(agent_name: str, task_label: str = "") -> None:
+    """Update a tmux pane title to show current task without changing agent name.
+
+    Finds the pane whose title starts with 'agent(role)' and appends the task label.
+    If task_label is empty, resets to just 'agent(role) model'.
+    """
+    try:
+        result = subprocess.run(
+            ["tmux", "list-panes", "-a", "-F",
+             "#{session_name}:#{window_name}.#{pane_index} #{pane_title}"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(" ", 1)
+            if len(parts) != 2:
+                continue
+            pane_target, title = parts
+            # Match pane by agent name prefix: "agent(role) model ..."
+            if not (title == agent_name or title.startswith(f"{agent_name}(")):
+                continue
+            # Keep the base title (agent(role) model) and append task
+            base = title.split(" | ")[0]  # strip any previous task suffix
+            new_title = f"{base} | {task_label}" if task_label else base
+            subprocess.run(
+                ["tmux", "select-pane", "-t", pane_target, "-T", new_title],
+                capture_output=True,
+            )
+            return
+    except FileNotFoundError:
+        pass
+
+
 def kill_all_crews() -> None:
     """Stop all minion-swarm configs and kill all crew- tmux sessions."""
     from minion.crew.daemon import stop_swarm

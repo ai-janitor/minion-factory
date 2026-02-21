@@ -8,6 +8,7 @@ from typing import Any
 import sqlite3
 
 from minion.db import get_db, now_iso, staleness_check
+from minion.crew._tmux import update_pane_task
 from .loader import load_flow, list_flows as _list_flows
 
 # Cache loaded flows
@@ -133,12 +134,17 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
         if flow and flow.is_terminal(task_row["status"]):
             return {"error": f"BLOCKED: Task #{task_id} is in terminal status '{task_row['status']}'."}
 
+        cursor.execute("SELECT title FROM tasks WHERE id = ?", (task_id,))
+        title_row = cursor.fetchone()
+        task_title = title_row["title"] if title_row else f"T{task_id}"
+
         cursor.execute(
             "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
             (assigned_to, now, task_id),
         )
         _log_transition(cursor, task_id, task_row["status"], "assigned", assigned_to, now)
         conn.commit()
+        update_pane_task(assigned_to, f"T{task_id}: {task_title}")
         return {"status": "assigned", "task_id": task_id, "assigned_to": assigned_to}
     finally:
         conn.close()
@@ -375,6 +381,9 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
         )
         _log_transition(cursor, task_id, task_row["status"], "closed", agent_name, now)
         conn.commit()
+        # Clear pane task label for the agent who had this task
+        if task_row["assigned_to"]:
+            update_pane_task(task_row["assigned_to"])
         return {"status": "closed", "task_id": task_id, "title": task_row["title"]}
     finally:
         conn.close()
@@ -509,6 +518,8 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         )
         conn.commit()
 
+        update_pane_task(agent_name, f"T{task_id}: {task_row['title']}")
+
         result: dict[str, object] = {
             "status": "claimed",
             "task_id": task_id,
@@ -596,6 +607,10 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
 
         cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
         conn.commit()
+
+        # Clear pane task label when agent is done with this phase
+        if eligible is not None or (flow and flow.is_terminal(new_status)):
+            update_pane_task(agent_name)
 
         result: dict[str, object] = {
             "status": "completed",
