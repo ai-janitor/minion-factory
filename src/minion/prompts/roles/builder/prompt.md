@@ -17,7 +17,7 @@ minion create-task --agent {you} --title "..." --task-file .work/tasks/<mission>
 minion pull-task --agent {you} --task-id N
 # do the work
 minion submit-result --agent {you} --task-id N --result-file .work/results/<slug>.md
-minion close-task --agent {you} --task-id N
+minion complete-phase --agent {you} --task-id N
 ```
 For non-trivial requests, ask lead to create a proper task instead:
 `minion send --from {you} --to lead --message "Need a task for: ..."`

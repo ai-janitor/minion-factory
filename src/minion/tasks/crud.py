@@ -358,10 +358,10 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
             return {"error": f"Task #{task_id} not found."}
 
         task_type = task_row["task_type"] or "bugfix"
-        # Non-leads can close their own chore tasks
-        is_own_chore = task_type == "chore" and task_row["assigned_to"] == agent_name
-        if row["agent_class"] != "lead" and not is_own_chore:
-            return {"error": f"BLOCKED: Only lead-class agents can close tasks (non-leads can close their own chores). '{agent_name}' is '{row['agent_class']}'."}
+        # Non-leads can close tasks assigned to them (their own phase)
+        is_own_task = task_row["assigned_to"] == agent_name
+        if row["agent_class"] != "lead" and not is_own_task:
+            return {"error": f"BLOCKED: Only lead-class agents can close other agents' tasks. '{agent_name}' can only close tasks assigned to them."}
         flow = _get_flow(task_type)
         if flow and flow.is_terminal(task_row["status"]):
             return {"error": f"Task #{task_id} is already in terminal status '{task_row['status']}'."}
@@ -376,6 +376,55 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
         _log_transition(cursor, task_id, task_row["status"], "closed", agent_name, now)
         conn.commit()
         return {"status": "closed", "task_id": task_id, "title": task_row["title"]}
+    finally:
+        conn.close()
+
+
+def reopen_task(agent_name: str, task_id: int, to_status: str = "assigned") -> dict[str, object]:
+    """Lead-only: reopen a terminal task back to an earlier phase."""
+    conn = get_db()
+    cursor = conn.cursor()
+    now = now_iso()
+    try:
+        cursor.execute("SELECT agent_class FROM agents WHERE name = ?", (agent_name,))
+        row = cursor.fetchone()
+        if not row:
+            return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
+        if row["agent_class"] != "lead":
+            return {"error": f"BLOCKED: Only lead can reopen tasks. '{agent_name}' is '{row['agent_class']}'."}
+
+        cursor.execute(
+            "SELECT id, status, task_type, title, assigned_to FROM tasks WHERE id = ?",
+            (task_id,),
+        )
+        task_row = cursor.fetchone()
+        if not task_row:
+            return {"error": f"Task #{task_id} not found."}
+
+        task_type = task_row["task_type"] or "bugfix"
+        flow = _get_flow(task_type)
+
+        if flow and to_status not in flow.stages:
+            return {"error": f"Invalid status '{to_status}'. Valid: {', '.join(sorted(flow.stages.keys()))}"}
+        if flow and flow.is_terminal(to_status):
+            return {"error": f"Cannot reopen to terminal status '{to_status}'."}
+
+        old_status = task_row["status"]
+        cursor.execute(
+            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+            (to_status, now, task_id),
+        )
+        _log_transition(cursor, task_id, old_status, to_status, agent_name, now)
+        conn.commit()
+
+        result: dict[str, object] = {
+            "status": "reopened", "task_id": task_id,
+            "title": task_row["title"],
+            "from_status": old_status, "to_status": to_status,
+        }
+        if flow:
+            result["dag"] = flow.render_dag(to_status)
+        return result
     finally:
         conn.close()
 
@@ -474,8 +523,8 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         conn.close()
 
 
-def complete_task(agent_name: str, task_id: int, passed: bool = True) -> dict[str, object]:
-    """DAG-routed task completion — agent says done, DAG decides next status and routing."""
+def complete_phase(agent_name: str, task_id: int, passed: bool = True) -> dict[str, object]:
+    """Complete your phase — DAG decides next status and routing."""
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

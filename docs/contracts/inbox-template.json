@@ -5,6 +5,7 @@
   "task_header": "=== AVAILABLE TASKS ===",
   "task_footer": "=== END TASKS ===",
   "task_format": "- [{task_id}] {title} ({status}) — {claim_cmd}",
+  "dag_format": "    DAG: {dag}",
   "post_instructions": [
     "Process the above, then send results:",
     "  minion send --from {agent} --to <recipient> --message '...'",

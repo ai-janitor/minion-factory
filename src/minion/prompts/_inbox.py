@@ -48,6 +48,11 @@ def format_inbox(docs_dir: Path, poll_data: Dict[str, Any], agent: str) -> str:
                 )
                 if task.get("claim_cmd"):
                     inbox_lines.append(f"    Claim: {task['claim_cmd']}")
+            # Show DAG so agent sees where they are in the flow
+            dag = task.get("dag")
+            if dag:
+                dag_fmt = tmpl.get("dag_format", "    DAG: {dag}") if tmpl else "    DAG: {dag}"
+                inbox_lines.append(dag_fmt.replace("{dag}", dag))
         inbox_lines.append(tmpl["task_footer"] if tmpl else "=== END TASKS ===")
 
     if tmpl:

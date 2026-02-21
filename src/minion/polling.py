@@ -99,7 +99,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
         # P1: already assigned to agent
         actives = active_statuses()
         cursor.execute(
-            """SELECT id, title, task_file, status, class_required, blocked_by
+            """SELECT id, title, task_file, status, class_required, blocked_by, task_type
                FROM tasks WHERE assigned_to = ? AND status IN ({})
                ORDER BY created_at ASC LIMIT 10""".format(
                 ",".join("?" for _ in actives)
@@ -111,7 +111,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
         # P2: open tasks matching class
         if not candidates:
             cursor.execute(
-                """SELECT id, title, task_file, status, class_required, blocked_by
+                """SELECT id, title, task_file, status, class_required, blocked_by, task_type
                    FROM tasks WHERE status = 'open' AND class_required = ? AND assigned_to IS NULL
                    ORDER BY created_at ASC LIMIT 10""",
                 (agent_class,),
@@ -121,7 +121,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
         # P3: fixed tasks for reviewers
         if not candidates and agent_class in _reviewers:
             cursor.execute(
-                """SELECT id, title, task_file, status, class_required, blocked_by
+                """SELECT id, title, task_file, status, class_required, blocked_by, task_type
                    FROM tasks WHERE status = 'fixed' AND assigned_to IS NULL
                    ORDER BY created_at ASC LIMIT 10"""
             )
@@ -130,7 +130,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
         # P4: verified tasks for testers
         if not candidates and agent_class in _reviewers:
             cursor.execute(
-                """SELECT id, title, task_file, status, class_required, blocked_by
+                """SELECT id, title, task_file, status, class_required, blocked_by, task_type
                    FROM tasks WHERE status = 'verified' AND assigned_to IS NULL
                    ORDER BY created_at ASC LIMIT 10"""
             )
@@ -149,12 +149,22 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 )
                 if cursor.fetchone()[0] > 0:
                     continue
+            # Render DAG so agent sees where they are in the flow
+            task_type = task.get("task_type") or "bugfix"
+            dag_str = ""
+            try:
+                from minion.tasks import load_flow
+                flow = load_flow(task_type)
+                dag_str = flow.render_dag(task["status"])
+            except Exception:
+                pass
             result.append({
                 "task_id": task["id"],
                 "title": task["title"],
                 "status": task["status"],
                 "task_file": task["task_file"],
                 "claim_cmd": f"minion pull-task --agent {agent} --task-id {task['id']}",
+                "dag": dag_str,
             })
         return result
     finally:

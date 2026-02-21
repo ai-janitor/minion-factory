@@ -99,6 +99,46 @@ class TaskFlow:
             return False
         return stage.terminal
 
+    def render_dag(self, current_status: str | None = None) -> str:
+        """Render DAG as inline text showing phases and current position.
+
+        Example: open → assigned → [IN_PROGRESS] → fixed(oracle) → verified(lead) → closed
+        """
+        # Walk the happy path from first stage
+        parts: list[str] = []
+        visited: set[str] = set()
+        # Find the starting stage (first one that nothing points to as 'next')
+        pointed_to = {s.next for s in self.stages.values() if s.next}
+        starts = [name for name in self.stages if name not in pointed_to]
+        cursor = starts[0] if starts else next(iter(self.stages), None)
+
+        while cursor and cursor not in visited:
+            visited.add(cursor)
+            stage = self.stages.get(cursor)
+            if stage is None:
+                break
+
+            # Format: [STATUS] if current, status(workers) otherwise
+            label = cursor.upper() if current_status and cursor == current_status else cursor
+            if current_status and cursor == current_status:
+                label = f"[{label}]"
+
+            # Show worker classes if stage reassigns
+            workers = stage.workers
+            if workers and cursor != current_status:
+                if isinstance(workers, list):
+                    label += f"({','.join(workers)})"
+                elif isinstance(workers, dict):
+                    # Use default workers list
+                    default = workers.get("default", [])
+                    if default:
+                        label += f"({','.join(default)})"
+
+            parts.append(label)
+            cursor = stage.next
+
+        return " → ".join(parts)
+
 
 @dataclass
 class Transition:

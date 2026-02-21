@@ -322,6 +322,17 @@ def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
     _output(_close_task(agent, task_id), ctx.obj["human"])
 
 
+@cli.command("reopen-task")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--to-status", default="assigned", help="Target status (default: assigned)")
+@click.pass_context
+def reopen_task_cmd(ctx: click.Context, agent: str, task_id: int, to_status: str) -> None:
+    """Reopen a terminal task back to an earlier phase. Lead only."""
+    from minion.tasks import reopen_task as _reopen_task
+    _output(_reopen_task(agent, task_id, to_status), ctx.obj["human"])
+
+
 @cli.command("pull-task")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
@@ -332,15 +343,15 @@ def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
     _output(_pull_task(agent, task_id), ctx.obj["human"])
 
 
-@cli.command("complete-task")
+@cli.command("complete-phase")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--failed", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
 @click.pass_context
-def complete_task_cmd(ctx: click.Context, agent: str, task_id: int, failed: bool) -> None:
-    """DAG-routed task completion."""
-    from minion.tasks import complete_task as _complete_task
-    _output(_complete_task(agent, task_id, passed=not failed), ctx.obj["human"])
+def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: bool) -> None:
+    """Complete your phase — DAG routes to next stage."""
+    from minion.tasks import complete_phase as _complete_phase
+    _output(_complete_phase(agent, task_id, passed=not failed), ctx.obj["human"])
 
 
 @cli.command()
