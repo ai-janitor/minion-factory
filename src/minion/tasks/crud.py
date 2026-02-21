@@ -523,7 +523,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         conn.close()
 
 
-def complete_phase(agent_name: str, task_id: int, passed: bool = True) -> dict[str, object]:
+def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: str | None = None) -> dict[str, object]:
     """Complete your phase — DAG decides next status and routing."""
     conn = get_db()
     cursor = conn.cursor()
@@ -569,12 +569,21 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True) -> dict[s
         if new_status is None:
             return {"error": f"No transition from '{current}' (passed={passed}) in flow '{task_type}'."}
 
+        # Blocked requires a reason so lead can act on it
+        if new_status == "blocked" and not reason:
+            return {"error": "BLOCKED transition requires --reason explaining why you're stuck."}
+
         # Who works on the next stage?
         eligible = flow.workers_for(new_status, class_required) if flow else None
 
         # Update task
         fields = ["status = ?", "updated_at = ?", "activity_count = activity_count + 1"]
         params: list[object] = [new_status, now]
+
+        # Write block reason to progress field
+        if new_status == "blocked" and reason:
+            fields.append("progress = ?")
+            params.append(f"BLOCKED: {reason}")
 
         # If next stage needs a different worker class, clear assignment for re-pull
         if eligible is not None:

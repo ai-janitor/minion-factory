@@ -15,6 +15,7 @@ class Stage:
     requires: list[str] = field(default_factory=list)
     terminal: bool = False
     skip: bool = False
+    parked: bool = False
 
 
 @dataclass

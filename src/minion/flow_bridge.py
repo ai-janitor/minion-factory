@@ -76,7 +76,7 @@ def active_statuses(task_type: str = "bugfix") -> tuple[str, ...]:
     if flow is not None:
         return tuple(
             name for name, stage in flow.stages.items()
-            if not stage.terminal and name not in flow.dead_ends
+            if not stage.terminal and not stage.parked and name not in flow.dead_ends
         )
     return ("open", "assigned", "in_progress", "fixed", "verified")
 

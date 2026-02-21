@@ -84,6 +84,8 @@ def _validate(raw: dict, name: str) -> None:
             continue
         if cfg.get("terminal"):
             continue
+        if cfg.get("parked"):
+            continue
         if "next" not in cfg:
             raise ValueError(
                 f"Flow '{name}', stage '{stage_name}': non-terminal stage must have 'next'"
@@ -100,6 +102,7 @@ def _build_stage(name: str, cfg: dict) -> Stage:
         requires=cfg.get("requires", []),
         terminal=cfg.get("terminal", False),
         skip=cfg.get("skip", False),
+        parked=cfg.get("parked", False),
     )
 
 

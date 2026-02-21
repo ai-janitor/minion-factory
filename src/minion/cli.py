@@ -140,10 +140,10 @@ def check_inbox(ctx: click.Context, agent: str) -> None:
     _output(_check_inbox(agent), ctx.obj["human"])
 
 
-@cli.command("get-history")
+@cli.command("list-history")
 @click.option("--count", default=20, type=int)
 @click.pass_context
-def get_history(ctx: click.Context, count: int) -> None:
+def list_history(ctx: click.Context, count: int) -> None:
     """Return the last N messages across all agents."""
     from minion.comms import get_history as _get_history
     _output(_get_history(count), ctx.obj["human"])
@@ -208,12 +208,12 @@ def log_raid(ctx: click.Context, agent: str, entry: str, priority: str) -> None:
     _output(_log_raid(agent, entry, priority), ctx.obj["human"])
 
 
-@cli.command("get-raid-log")
+@cli.command("list-raid-log")
 @click.option("--priority", default="")
 @click.option("--count", default=20, type=int)
 @click.option("--agent", default="")
 @click.pass_context
-def get_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
+def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
     """Read the raid log."""
     from minion.warroom import get_raid_log as _get_raid_log
     _output(_get_raid_log(priority, count, agent), ctx.obj["human"])
@@ -267,7 +267,7 @@ def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progr
     _output(_update_task(agent, task_id, status, progress, files), ctx.obj["human"])
 
 
-@cli.command("get-tasks")
+@cli.command("list-tasks")
 @click.option("--status", default="")
 @click.option("--project", default="")
 @click.option("--zone", default="")
@@ -275,7 +275,7 @@ def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progr
 @click.option("--class-required", default="", help="Filter by required agent class")
 @click.option("--count", default=50, type=int)
 @click.pass_context
-def get_tasks(ctx: click.Context, status: str, project: str, zone: str, assigned_to: str, class_required: str, count: int) -> None:
+def list_tasks(ctx: click.Context, status: str, project: str, zone: str, assigned_to: str, class_required: str, count: int) -> None:
     """List tasks."""
     from minion.tasks import get_tasks as _get_tasks
     _output(_get_tasks(status, project, zone, assigned_to, class_required, count), ctx.obj["human"])
@@ -347,11 +347,12 @@ def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--failed", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
+@click.option("--reason", default=None, help="Required when blocking — why you're stuck")
 @click.pass_context
-def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: bool) -> None:
+def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: bool, reason: str | None) -> None:
     """Complete your phase — DAG routes to next stage."""
     from minion.tasks import complete_phase as _complete_phase
-    _output(_complete_phase(agent, task_id, passed=not failed), ctx.obj["human"])
+    _output(_complete_phase(agent, task_id, passed=not failed, reason=reason), ctx.obj["human"])
 
 
 @cli.command()
@@ -417,10 +418,10 @@ def release_file(ctx: click.Context, agent: str, file_path: str, force: bool) ->
     _output(_release_file(agent, file_path, force), ctx.obj["human"])
 
 
-@cli.command("get-claims")
+@cli.command("list-claims")
 @click.option("--agent", default="")
 @click.pass_context
-def get_claims(ctx: click.Context, agent: str) -> None:
+def list_claims(ctx: click.Context, agent: str) -> None:
     """List active file claims."""
     from minion.filesafety import get_claims as _get_claims
     _output(_get_claims(agent), ctx.obj["human"])
@@ -534,9 +535,9 @@ def end_session(ctx: click.Context, agent: str) -> None:
 # Triggers
 # =========================================================================
 
-@cli.command("get-triggers")
+@cli.command("list-triggers")
 @click.pass_context
-def get_triggers(ctx: click.Context) -> None:
+def list_triggers(ctx: click.Context) -> None:
     """Return the trigger word codebook."""
     from minion.triggers import get_triggers as _get_triggers
     _output(_get_triggers(), ctx.obj["human"])
@@ -883,6 +884,17 @@ def logs_agent(agent, lines, follow):
     """Show (and optionally follow) one agent's log."""
     from minion.crew.logs import tail_agent_log
     tail_agent_log(agent, lines, follow)
+
+
+# =========================================================================
+# Hidden aliases — backwards compat for old `get-*` collection names
+# =========================================================================
+
+cli.add_command(list_tasks, "get-tasks")
+cli.add_command(list_history, "get-history")
+cli.add_command(list_raid_log, "get-raid-log")
+cli.add_command(list_claims, "get-claims")
+cli.add_command(list_triggers, "get-triggers")
 
 
 if __name__ == "__main__":

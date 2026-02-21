@@ -45,6 +45,7 @@ stages:
   in_progress:
     description: Agent actively working
     next: fixed
+    fail: blocked
     requires: [submit_result]
     workers: null
 
@@ -67,6 +68,12 @@ stages:
       coder: [builder, recon, auditor]
       builder: [recon, auditor]
       recon: [lead]
+
+  blocked:
+    description: Agent hit a wall — parked until lead unblocks
+    next: assigned
+    parked: true
+    workers: [lead]
 
   closed:
     description: Done — result accepted
