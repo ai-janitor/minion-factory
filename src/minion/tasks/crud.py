@@ -21,7 +21,9 @@ def _get_flow(task_type: str = "bugfix") -> Any | None:
         flow = load_flow(task_type)
         _flow_cache[task_type] = flow
         return flow
-    except (FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError) as exc:
+        import sys
+        print(f"WARNING: task flow '{task_type}' failed to load: {exc}", file=sys.stderr)
         _flow_cache[task_type] = None
         return None
 

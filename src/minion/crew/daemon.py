@@ -99,10 +99,12 @@ def spawn_pane(
         ], check=True)
     else:
         # Rebalance layout before splitting so tmux has room for the new pane
-        subprocess.run(
+        r = subprocess.run(
             ["tmux", "select-layout", "-t", tmux_session, "tiled"],
-            capture_output=True,
+            capture_output=True, text=True,
         )
+        if r.returncode != 0:
+            print(f"WARNING: pre-split layout rebalance failed for {tmux_session}: {r.stderr.strip()}", file=sys.stderr)
         result = subprocess.run([
             "tmux", "split-window", "-t", tmux_session,
             "bash", "-c", pane_cmd,

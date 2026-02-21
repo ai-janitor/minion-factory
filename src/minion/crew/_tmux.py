@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 
 
 CLASS_COLORS: dict[str, str] = {
@@ -31,7 +32,9 @@ def open_terminal_with_command(cmd: str, title: str = "") -> None:
         {title_line}
     end tell
     '''
-    subprocess.run(["osascript", "-e", script], capture_output=True)
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"WARNING: open_terminal_with_command failed: {result.stderr.strip()}", file=sys.stderr)
 
 
 def _terminal_bounds(pane_count: int) -> tuple[int, int, int, int]:
@@ -72,7 +75,9 @@ def open_tmux_terminal(tmux_session: str, pane_count: int = 1) -> None:
         set bounds of front window to {{{x0}, {y0}, {x1}, {y1}}}
     end tell
     '''
-    subprocess.run(["osascript", "-e", script], capture_output=True)
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"WARNING: open_tmux_terminal failed: {result.stderr.strip()}", file=sys.stderr)
 
 
 def close_terminal_by_title(title: str) -> None:
@@ -89,7 +94,9 @@ def close_terminal_by_title(title: str) -> None:
         end repeat
     end tell
     '''
-    subprocess.run(["osascript", "-e", script], capture_output=True)
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"WARNING: close_terminal_by_title failed: {result.stderr.strip()}", file=sys.stderr)
 
 
 def kill_tmux_pane_by_title(agent_name: str) -> None:
@@ -111,7 +118,7 @@ def kill_tmux_pane_by_title(agent_name: str) -> None:
                                    capture_output=True)
                     return
     except FileNotFoundError:
-        pass  # tmux not installed — nothing to kill
+        print("WARNING: tmux not found — cannot kill pane", file=sys.stderr)
 
 
 def kill_all_crews() -> None:
@@ -155,24 +162,29 @@ def style_pane(tmux_session: str, pane_idx: int, agent: str, role: str, model: s
     pane_title = f"{base_title} {short}" if short else base_title
     pane_target = f"{tmux_session}:{0}.{pane_idx}"
 
-    subprocess.run([
+    r1 = subprocess.run([
         "tmux", "select-pane", "-t", pane_target, "-T", pane_title,
-    ], capture_output=True)
-    subprocess.run([
+    ], capture_output=True, text=True)
+    if r1.returncode != 0:
+        print(f"WARNING: style_pane title failed for {pane_target}: {r1.stderr.strip()}", file=sys.stderr)
+    r2 = subprocess.run([
         "tmux", "set-option", "-p", "-t", pane_target, "@cc", color,
-    ], capture_output=True)
+    ], capture_output=True, text=True)
+    if r2.returncode != 0:
+        print(f"WARNING: style_pane color failed for {pane_target}: {r2.stderr.strip()}", file=sys.stderr)
 
 
 def finalize_layout(tmux_session: str, is_new: bool, pane_count: int = 1) -> None:
     """Apply tiled layout, border colors, and open terminal if new."""
-    subprocess.run(["tmux", "select-layout", "-t", tmux_session, "tiled"],
-                   capture_output=True)
-    subprocess.run(["tmux", "set-option", "-t", tmux_session,
-                    "pane-border-status", "top"], capture_output=True)
-    subprocess.run([
-        "tmux", "set-option", "-t", tmux_session, "pane-border-format",
-        "#[fg=#{@cc}] #{pane_title} #[default]",
-    ], capture_output=True)
+    for cmd, label in [
+        (["tmux", "select-layout", "-t", tmux_session, "tiled"], "layout"),
+        (["tmux", "set-option", "-t", tmux_session, "pane-border-status", "top"], "border-status"),
+        (["tmux", "set-option", "-t", tmux_session, "pane-border-format",
+          "#[fg=#{@cc}] #{pane_title} #[default]"], "border-format"),
+    ]:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"WARNING: finalize_layout {label} failed for {tmux_session}: {r.stderr.strip()}", file=sys.stderr)
 
     if is_new:
         open_tmux_terminal(tmux_session, pane_count)

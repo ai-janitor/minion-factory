@@ -199,6 +199,11 @@ class AgentDaemon:
                         self.agent_cfg.retry_backoff_max_sec,
                     )
                     self._log(f"failure #{self.consecutive_failures}; backing off {backoff}s ({self.last_error or 'unknown'})")
+                    if self.consecutive_failures >= 3:
+                        self._alert_lead_poll(
+                            f"agent {self.agent_name} has {self.consecutive_failures} "
+                            f"consecutive failures. Last error: {self.last_error or 'unknown'}"
+                        )
                     self._stop_event.wait(timeout=float(backoff))
         finally:
             self._write_state("stopped")
@@ -371,6 +376,21 @@ class AgentDaemon:
                 turn_input=result.input_tokens, turn_output=result.output_tokens,
             )
 
+            # Context death detection — agent burned through context window
+            ctx = self._context_window if self._context_window > 0 else 200_000
+            turn_used = result.input_tokens
+            if self._tool_overhead_tokens > 0:
+                turn_used = max(0, turn_used - self._tool_overhead_tokens)
+            hp_pct = max(0.0, 100 - (turn_used / ctx * 100)) if ctx > 0 else 0.0
+            if hp_pct <= 5:
+                self._alert_lead_poll(
+                    f"agent {self.agent_name} at {hp_pct:.0f}% HP — context exhausted. "
+                    f"Stopping daemon. Respawn to continue from assessment matrix."
+                )
+                self._write_state("phoenix_down", hp_pct=hp_pct)
+                self._stop_event.set()
+                return True  # invocation itself succeeded, but agent is cooked
+
         if result.compaction_detected:
             self.inject_history_next_turn = True
             self._log("detected context compaction marker; history will be re-injected next cycle")
@@ -495,6 +515,33 @@ class AgentDaemon:
                 message.content,
             ]
         )
+
+    def _alert_lead_poll(self, message: str) -> None:
+        """Send alert to lead via minion CLI (poll mode — no direct DB access)."""
+        import sys
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        env[ENV_CLASS] = "lead"
+        env[ENV_DB_PATH] = str(self.config.comms_db)
+        env[ENV_DOCS_DIR] = str(self.config.docs_dir)
+        try:
+            result = subprocess.run(
+                ["minion", "send", "--from", self.agent_name, "--to", "commander",
+                 "--message", message],
+                capture_output=True, text=True, timeout=10, env=env,
+            )
+            if result.returncode != 0:
+                # Fall back to any lead
+                r2 = subprocess.run(
+                    ["minion", "send", "--from", self.agent_name, "--to", "lead",
+                     "--message", message],
+                    capture_output=True, text=True, timeout=10, env=env,
+                )
+                if r2.returncode != 0:
+                    print(f"ALERT SEND FAILED: both commander and lead unreachable. stderr={r2.stderr[:200]}", file=sys.stderr, flush=True)
+        except Exception as exc:
+            print(f"ALERT SEND FAILED: {exc}", file=sys.stderr, flush=True)
+        self._log(f"ALERT: {message}")
+        print(f"🚨 [{self.agent_name}] {message}", file=sys.stderr, flush=True)
 
     def _alert_lead_watcher(self, watcher: Any) -> None:
         lead = watcher.find_lead_agent() or "lead"
@@ -925,9 +972,15 @@ class AgentDaemon:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
             if result.returncode != 0:
-                self._log(f"UPDATE-HP ERROR: exit {result.returncode} stderr={result.stderr[:200]}")
+                import sys
+                msg = f"UPDATE-HP ERROR: exit {result.returncode} stderr={result.stderr[:200]}"
+                self._log(msg)
+                print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
         except Exception as exc:
-            self._log(f"UPDATE-HP ERROR: {type(exc).__name__}: {exc}")
+            import sys
+            msg = f"UPDATE-HP ERROR: {type(exc).__name__}: {exc}"
+            self._log(msg)
+            print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
 
     def _print_stream_start(self, command_name: str) -> None:
         self._invocation += 1

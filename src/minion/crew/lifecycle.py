@@ -39,7 +39,10 @@ def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
             stop_swarm(config_path)
         close_terminal_by_title(f"workers:crew-{crew}")
         close_terminal_by_title(f"lead:")
-        subprocess.run(["tmux", "kill-session", "-t", f"crew-{crew}"], capture_output=True)
+        r = subprocess.run(["tmux", "kill-session", "-t", f"crew-{crew}"], capture_output=True, text=True)
+        if r.returncode != 0:
+            import sys
+            print(f"WARNING: tmux kill-session crew-{crew} failed: {r.stderr.strip()}", file=sys.stderr)
         return {"status": "dismissed", "crew": crew}
     else:
         kill_all_crews()
