@@ -125,7 +125,12 @@ class AgentDaemon:
             self._run_watcher_mode()
 
     def _run_poll_mode(self) -> None:
-        """minion-comms mode: poll.sh + claude invocations. No direct DB access."""
+        """minion-comms mode: poll.sh + claude invocations. No direct DB access.
+
+        Outer loop handles auto-respawn on context death (phoenix_down).
+        Inner loop handles message polling and agent invocations.
+        Only SIGTERM/SIGINT or stand_down exits the outer loop.
+        """
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
 
@@ -134,21 +139,50 @@ class AgentDaemon:
         self._log(f"db: {self.config.comms_db}")
         self._log(f"project_dir: {self.config.project_dir}")
         self._log("mode: poll (minion poll)")
-        self._write_state("idle")
 
-        # Reset stale HP from previous session
+        generation = 0
+        while not self._stop_event.is_set():
+            generation += 1
+            exit_reason = self._poll_generation(generation)
+            if exit_reason == "phoenix_down" and not self._stop_event.is_set():
+                self._log(f"🔄 auto-respawn: generation {generation} died (context exhausted), rebooting as generation {generation + 1}")
+                self._reset_for_respawn()
+                continue
+            break
+
+        self._write_state("stopped")
+        self._log("daemon stopped")
+
+    def _reset_for_respawn(self) -> None:
+        """Reset daemon state for a fresh generation after context death."""
+        self._stop_event.clear()
+        self._session_input_tokens = 0
+        self._session_output_tokens = 0
+        self._tool_overhead_tokens = 0
+        self._context_window = 0
+        self._invocation = 0
+        self.resume_ready = False
+        self.consecutive_failures = 0
+        self.last_error = None
+        self.buffer = RollingBuffer(self.agent_cfg.max_history_tokens)
+        self.inject_history_next_turn = False
+
+    def _poll_generation(self, generation: int) -> str:
+        """Run one boot + poll cycle. Returns exit reason: 'phoenix_down', 'signal', or 'stand_down'."""
+        self._write_state("idle", generation=generation)
+
+        # Reset stale HP from previous generation
         self._update_hp(0, 0, turn_input=0, turn_output=0)
 
         # Boot: invoke claude directly to run ON STARTUP instructions
-        self._log("boot: invoking agent for ON STARTUP")
-        self._write_state("working")
+        self._log(f"boot (gen {generation}): invoking agent for ON STARTUP")
+        self._write_state("working", generation=generation)
         boot_prompt = self._build_boot_prompt()
         result = self._run_agent(boot_prompt)
         if result.exit_code == 0:
             self.resume_ready = True
             if result.input_tokens > 0:
-                # input_tokens now includes cache tokens — real context consumed
-                prompt_tokens = len(boot_prompt) // 4  # rough chars-to-tokens
+                prompt_tokens = len(boot_prompt) // 4
                 self._tool_overhead_tokens = max(0, result.input_tokens - prompt_tokens)
                 ctx = self._context_window if self._context_window > 0 else 200_000
                 self._log(f"boot HP: {result.input_tokens // 1000}k/{ctx // 1000}k context, overhead≈{self._tool_overhead_tokens // 1000}k, prompt≈{prompt_tokens} tokens")
@@ -158,66 +192,71 @@ class AgentDaemon:
                     self._session_input_tokens, self._session_output_tokens,
                     turn_input=result.input_tokens, turn_output=result.output_tokens,
                 )
-            self._log("boot: complete")
+            self._log(f"boot (gen {generation}): complete")
         else:
-            self._log(f"boot: failed (exit {result.exit_code})")
+            self._log(f"boot (gen {generation}): failed (exit {result.exit_code})")
 
-        self._write_state("idle")
+        self._write_state("idle", generation=generation)
 
-        try:
-            while not self._stop_event.is_set():
-                # Block until poll returns content (messages/tasks)
-                self._log("polling for messages...")
-                poll_data = self._poll_inbox()
+        while not self._stop_event.is_set():
+            self._log("polling for messages...")
+            poll_data = self._poll_inbox()
 
-                if self._stop_event.is_set():
-                    break
+            if self._stop_event.is_set():
+                # Check if we're stopping due to phoenix_down vs signal/stand_down
+                state = self._read_state()
+                if state.get("status") == "phoenix_down":
+                    return "phoenix_down"
+                return "signal"
 
-                if not poll_data:
-                    self._stop_event.wait(timeout=5.0)
-                    continue
+            if not poll_data:
+                self._stop_event.wait(timeout=5.0)
+                continue
 
-                # Content available — invoke agent with messages/tasks inline
-                self._write_state("working")
-                messages = poll_data.get("messages", [])
-                tasks = poll_data.get("tasks", [])
-                for msg in messages:
-                    sender = msg.get("from_agent", "?")
-                    content = msg.get("content", "")
-                    preview = content[:200].replace("\n", " ")
-                    self._log(f"📨 from {sender}: {preview}")
-                for task in tasks:
-                    self._log(f"📋 task #{task.get('task_id')}: {task.get('title', '?')}")
-                if not messages and not tasks:
-                    self._log("messages detected, invoking agent")
-                prompt = self._build_inbox_prompt(poll_data)
-                ok = self._process_prompt(prompt)
+            self._write_state("working", generation=generation)
+            messages = poll_data.get("messages", [])
+            tasks = poll_data.get("tasks", [])
+            for msg in messages:
+                sender = msg.get("from_agent", "?")
+                content = msg.get("content", "")
+                preview = content[:200].replace("\n", " ")
+                self._log(f"📨 from {sender}: {preview}")
+            for task in tasks:
+                self._log(f"📋 task #{task.get('task_id')}: {task.get('title', '?')}")
+            if not messages and not tasks:
+                self._log("messages detected, invoking agent")
+            prompt = self._build_inbox_prompt(poll_data)
+            ok = self._process_prompt(prompt)
 
-                if ok:
-                    self.consecutive_failures = 0
-                    self.last_error = None
-                    self._write_state("idle")
-                else:
-                    self.consecutive_failures += 1
-                    self._write_state(
-                        "error",
-                        failures=self.consecutive_failures,
-                        last_error=self.last_error,
+            if ok:
+                self.consecutive_failures = 0
+                self.last_error = None
+                # Check if _process_prompt triggered phoenix_down
+                state = self._read_state()
+                if state.get("status") == "phoenix_down":
+                    return "phoenix_down"
+                self._write_state("idle", generation=generation)
+            else:
+                self.consecutive_failures += 1
+                self._write_state(
+                    "error",
+                    failures=self.consecutive_failures,
+                    last_error=self.last_error,
+                    generation=generation,
+                )
+                backoff = min(
+                    self.agent_cfg.retry_backoff_sec * (2 ** (self.consecutive_failures - 1)),
+                    self.agent_cfg.retry_backoff_max_sec,
+                )
+                self._log(f"failure #{self.consecutive_failures}; backing off {backoff}s ({self.last_error or 'unknown'})")
+                if self.consecutive_failures >= 3:
+                    self._alert_lead_poll(
+                        f"agent {self.agent_name} has {self.consecutive_failures} "
+                        f"consecutive failures. Last error: {self.last_error or 'unknown'}"
                     )
-                    backoff = min(
-                        self.agent_cfg.retry_backoff_sec * (2 ** (self.consecutive_failures - 1)),
-                        self.agent_cfg.retry_backoff_max_sec,
-                    )
-                    self._log(f"failure #{self.consecutive_failures}; backing off {backoff}s ({self.last_error or 'unknown'})")
-                    if self.consecutive_failures >= 3:
-                        self._alert_lead_poll(
-                            f"agent {self.agent_name} has {self.consecutive_failures} "
-                            f"consecutive failures. Last error: {self.last_error or 'unknown'}"
-                        )
-                    self._stop_event.wait(timeout=float(backoff))
-        finally:
-            self._write_state("stopped")
-            self._log("daemon stopped")
+                self._stop_event.wait(timeout=float(backoff))
+
+        return "signal"
 
     def _poll_inbox(self) -> Optional[Dict[str, Any]]:
         """Run minion poll as a subprocess. Returns poll data dict or None.
@@ -1017,6 +1056,14 @@ class AgentDaemon:
         except (OSError, json.JSONDecodeError, TypeError):
             return False
         return bool(payload.get("resume_ready", False))
+
+    def _read_state(self) -> dict[str, Any]:
+        if not self.state_path.exists():
+            return {}
+        try:
+            return json.loads(self.state_path.read_text())
+        except (OSError, json.JSONDecodeError, TypeError):
+            return {}
 
     def _write_state(self, status: str, **extra: Any) -> None:
         payload = {
