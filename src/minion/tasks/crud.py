@@ -276,7 +276,7 @@ def get_tasks(
             query += " AND status = ?"
             params.append(status)
         else:
-            query += " AND status IN ('open', 'assigned', 'in_progress')"
+            query += " AND status NOT IN ('closed')"
 
         if project:
             query += " AND project = ?"
