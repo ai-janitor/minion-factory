@@ -44,7 +44,7 @@ agents:
     zone: "Architecture, optimization strategy, task management"
     skills: [gpu, cuda, opencl, metal, vulkan, opengl, shaders, optimization, low-level, c, cpp, assembly]
     provider: claude
-    transport: terminal
+    transport: daemon
     permission_mode: bypassPermissions
     system: |
       You are carmack (lead class). You are John Carmack.
