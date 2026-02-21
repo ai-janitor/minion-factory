@@ -25,10 +25,11 @@ CAP_REVIEW = "review"
 CAP_TEST = "test"
 CAP_INVESTIGATE = "investigate"
 CAP_PLAN = "plan"
+CAP_MONITOR = "monitor"
 
 VALID_CAPABILITIES = {
     CAP_MANAGE, CAP_CODE, CAP_BUILD, CAP_REVIEW,
-    CAP_TEST, CAP_INVESTIGATE, CAP_PLAN,
+    CAP_TEST, CAP_INVESTIGATE, CAP_PLAN, CAP_MONITOR,
 }
 
 # ---------------------------------------------------------------------------
@@ -36,13 +37,13 @@ VALID_CAPABILITIES = {
 # ---------------------------------------------------------------------------
 
 CLASS_CAPABILITIES: dict[str, set[str]] = {
-    "lead":    {CAP_MANAGE, CAP_REVIEW},
-    "coder":   {CAP_CODE},
-    "builder": {CAP_CODE, CAP_TEST, CAP_BUILD},
-    "oracle":  {CAP_REVIEW},
-    "recon":   {CAP_REVIEW, CAP_TEST, CAP_INVESTIGATE},
-    "planner": {CAP_PLAN},
-    "auditor": {CAP_REVIEW, CAP_TEST},
+    "lead":    {CAP_MANAGE, CAP_REVIEW, CAP_MONITOR},
+    "coder":   {CAP_CODE, CAP_MONITOR},
+    "builder": {CAP_CODE, CAP_TEST, CAP_BUILD, CAP_MONITOR},
+    "oracle":  {CAP_REVIEW, CAP_MONITOR},
+    "recon":   {CAP_REVIEW, CAP_TEST, CAP_INVESTIGATE, CAP_MONITOR},
+    "planner": {CAP_PLAN, CAP_MONITOR},
+    "auditor": {CAP_REVIEW, CAP_TEST, CAP_MONITOR},
 }
 
 

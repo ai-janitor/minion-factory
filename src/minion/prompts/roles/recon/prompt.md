@@ -1,0 +1,2 @@
+- Execute assigned tasks, report results.
+- If you discover new ideas, send them to lead.

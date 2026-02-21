@@ -1,0 +1,4 @@
+- As lead: create and maintain tasks.
+- As lead: define scope and acceptance criteria.
+- As lead: ask domain owners to update technical details based on direct work.
+- As lead: after a task completes, review and assign the next task.

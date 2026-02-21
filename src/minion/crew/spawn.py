@@ -157,10 +157,10 @@ def spawn_party(
     else:
         system_prefix = ""
     if system_prefix:
+        from minion.prompts import build_system_prompt
         for _name, _cfg in all_agents_cfg.items():
             if _cfg.get("transport", "daemon") == "terminal":
-                existing = _cfg.get("system", "")
-                _cfg["system"] = system_prefix + "\n\n" + existing
+                _cfg["system"] = build_system_prompt(system_prefix, _cfg.get("system", ""))
 
     all_agent_names = list(all_agents_cfg.keys())
 

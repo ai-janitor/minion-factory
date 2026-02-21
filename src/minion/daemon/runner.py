@@ -302,38 +302,14 @@ class AgentDaemon:
         Note: agent_cfg.system is passed via --append-system-prompt by the
         provider, so we exclude it here to avoid duplication.
         """
-        protocol_section = self._build_protocol_section()
-        rules_section = self._build_rules_section()
-        provider_section = self._build_provider_section()
-        role = self.agent_cfg.role or "coder"
-
-        contract = load_contract(self.config.docs_dir, "boot-sequence")
-        if contract:
-            subs = {"{agent}": self.agent_name, "{role}": role}
-            def _sub(s: str) -> str:
-                for k, v in subs.items():
-                    s = s.replace(k, v)
-                return s
-            cmds = [f"  {_sub(c)}" for c in contract["commands"]]
-            boot_section = "\n".join(
-                [_sub(contract["preamble"])] + cmds + ["", _sub(contract["postamble"])]
-            )
-        else:
-            boot_section = "\n".join([
-                "BOOT: You just started. Run these commands via the Bash tool:",
-                f"  minion --compact register --name {self.agent_name} --class {role} --transport daemon",
-                f"  minion set-context --agent {self.agent_name} --context 'just started'",
-                f"  minion set-status --agent {self.agent_name} --status 'ready for orders'",
-                "",
-                "IMPORTANT: You are a daemon agent managed by minion-swarm.",
-                "Do NOT run poll.sh — minion-swarm handles polling for you.",
-                "Do NOT use AskUserQuestion — it blocks in headless mode.",
-                "After running these 3 commands, STOP. Do not do anything else.",
-            ])
-        sections = [protocol_section, rules_section, boot_section]
-        if provider_section:
-            sections.insert(0, provider_section)
-        return "\n\n".join(sections)
+        from minion.prompts import build_boot_prompt as _build_boot
+        return _build_boot(
+            docs_dir=self.config.docs_dir,
+            agent=self.agent_name,
+            role=self.agent_cfg.role or "coder",
+            guardrails=self._build_provider_section(),
+            capabilities=self.agent_cfg.capabilities,
+        )
 
     def _build_inbox_prompt(self, poll_data: Dict[str, Any]) -> str:
         """Prompt with messages/tasks already inline — no need to fetch.
@@ -341,65 +317,21 @@ class AgentDaemon:
         Note: agent_cfg.system is passed via --append-system-prompt by the
         provider, so we exclude it here to avoid duplication.
         """
-        protocol_section = self._build_protocol_section()
-        rules_section = self._build_rules_section()
-
-        provider_section = self._build_provider_section()
-        sections: List[str] = []
-        if provider_section:
-            sections.append(provider_section)
-        sections.append(protocol_section)
-
+        history_snapshot = None
         if self.inject_history_next_turn and len(self.buffer) > 0:
-            sections.append(self._build_history_block(self.buffer.snapshot()))
+            history_snapshot = self.buffer.snapshot()
             self.inject_history_next_turn = False
 
-        # Paste messages inline — poll already consumed them from DB
-        inbox_lines: List[str] = []
-        tmpl = load_contract(self.config.docs_dir, "inbox-template")
-        messages = poll_data.get("messages", [])
-        if messages:
-            inbox_lines.append(tmpl["inbox_header"] if tmpl else "=== INBOX (already consumed — do NOT run check-inbox) ===")
-            for msg in messages:
-                sender = msg.get("from_agent", "unknown")
-                content = msg.get("content", "")
-                if tmpl:
-                    inbox_lines.append(tmpl["message_format"].replace("{sender}", sender).replace("{content}", content))
-                else:
-                    inbox_lines.append(f"FROM {sender}: {content}")
-            inbox_lines.append(tmpl["inbox_footer"] if tmpl else "=== END INBOX ===")
-
-        tasks = poll_data.get("tasks", [])
-        if tasks:
-            inbox_lines.append(tmpl["task_header"] if tmpl else "=== AVAILABLE TASKS ===")
-            for task in tasks:
-                if tmpl:
-                    line = tmpl["task_format"]
-                    line = line.replace("{task_id}", str(task.get("task_id", "")))
-                    line = line.replace("{title}", task.get("title", ""))
-                    line = line.replace("{status}", task.get("status", ""))
-                    line = line.replace("{claim_cmd}", task.get("claim_cmd", ""))
-                    inbox_lines.append(line)
-                else:
-                    inbox_lines.append(f"  Task #{task.get('task_id')}: {task.get('title')} [{task.get('status')}]")
-                    if task.get("claim_cmd"):
-                        inbox_lines.append(f"    Claim: {task['claim_cmd']}")
-            inbox_lines.append(tmpl["task_footer"] if tmpl else "=== END TASKS ===")
-
-        if tmpl:
-            inbox_lines.append("")
-            for line in tmpl["post_instructions"]:
-                inbox_lines.append(line.replace("{agent}", self.agent_name))
-        else:
-            inbox_lines.extend([
-                "",
-                "Process the above, then send results:",
-                f"  minion send --from {self.agent_name} --to <recipient> --message '...'",
-                "Do NOT run check-inbox or re-register.",
-            ])
-
-        sections.extend([rules_section, "\n".join(inbox_lines)])
-        return "\n\n".join(s for s in sections if s.strip())
+        from minion.prompts import build_inbox_prompt as _build_inbox
+        return _build_inbox(
+            docs_dir=self.config.docs_dir,
+            agent=self.agent_name,
+            role=self.agent_cfg.role or "coder",
+            poll_data=poll_data,
+            guardrails=self._build_provider_section(),
+            history_snapshot=history_snapshot,
+            capabilities=self.agent_cfg.capabilities,
+        )
 
     @staticmethod
     def _strip_on_startup(text: str) -> str:
@@ -533,18 +465,21 @@ class AgentDaemon:
         provider, so we exclude it here to avoid duplication.
         """
         max_prompt_chars = self.agent_cfg.max_prompt_chars
-        protocol_section = self._build_protocol_section()
-        rules_section = self._build_rules_section()
-        incoming_section = self._build_incoming_section(message)
 
-        sections: List[str] = [protocol_section]
-
+        history_snapshot = None
         if self.inject_history_next_turn and len(self.buffer) > 0:
-            sections.append(self._build_history_block(self.buffer.snapshot()))
+            history_snapshot = self.buffer.snapshot()
             self.inject_history_next_turn = False
 
-        sections.extend([rules_section, incoming_section])
-        prompt = "\n\n".join(s for s in sections if s.strip())
+        from minion.prompts import build_watcher_prompt as _build_watcher
+        prompt = _build_watcher(
+            docs_dir=self.config.docs_dir,
+            agent=self.agent_name,
+            role=self.agent_cfg.role or "coder",
+            message_section=self._build_incoming_section(message),
+            history_snapshot=history_snapshot,
+            capabilities=self.agent_cfg.capabilities,
+        )
 
         if len(prompt) > max_prompt_chars:
             prompt = prompt[:max_prompt_chars]
@@ -617,94 +552,9 @@ class AgentDaemon:
             return "legacy"
         return "minion-comms"
 
-    def _build_rules_section(self) -> str:
-        contract = load_contract(self.config.docs_dir, "daemon-rules")
-        if contract:
-            def _sub(s: str) -> str:
-                return s.replace("{agent}", self.agent_name)
-            lines = ["Autonomous daemon rules:"]
-            lines.extend(f"- {_sub(r)}" for r in contract["common"])
-            role_rules = contract.get("lead" if self.agent_cfg.role == "lead" else "non_lead", [])
-            lines.extend(f"- {_sub(r)}" for r in role_rules)
-            return "\n".join(lines)
-
-        lines = [
-            "Autonomous daemon rules:",
-            "- Do not use AskUserQuestion — it blocks in headless mode.",
-            f"- Route questions to lead via Bash: minion send --from {self.agent_name} --to lead --message '...'",
-            "- Execute exactly the incoming task.",
-            "- Send one summary message when done.",
-            "- Task governance: lead manages task queue and assignment ownership.",
-        ]
-
-        if self.agent_cfg.role == "lead":
-            lines.extend(
-                [
-                    "- As lead: create and maintain tasks.",
-                    "- As lead: define scope and acceptance criteria.",
-                    "- As lead: ask domain owners to update technical details based on direct work.",
-                    "- As lead: after a task completes, review and assign the next task.",
-                ]
-            )
-        else:
-            lines.extend(
-                [
-                    "- Non-lead agents: execute assigned tasks, report results.",
-                    "- If you discover new ideas, send them to lead.",
-                ]
-            )
-
-        return "\n".join(lines)
-
     def _build_provider_section(self) -> str:
         """Provider-specific prompt guardrails — delegated to provider module."""
         return self._provider.prompt_guardrails()
-
-    def _build_protocol_section(self) -> str:
-        """Read protocol-common.md + protocol-{role}.md, fallback to hardcoded."""
-        protocol_dir = self.config.docs_dir
-        role = self.agent_cfg.role or "coder"
-        sections: List[str] = []
-        for fname in ["protocol-common.md", f"protocol-{role}.md"]:
-            doc = protocol_dir / fname
-            if doc.exists():
-                sections.append(doc.read_text().strip())
-        if sections:
-            return "\n\n".join(sections)
-        # Fallback if protocol docs not installed
-        name = self.agent_name
-        return "\n".join(
-            [
-                "Communication protocol — use the `minion` CLI via Bash tool:",
-                f"- Check inbox: minion check-inbox --agent {name}",
-                f"- Send message: minion send --from {name} --to <recipient> --message '...'",
-                f"- Set status: minion set-status --agent {name} --status '...'",
-                f"- Set context: minion set-context --agent {name} --context '...'",
-                f"- View agents: minion who",
-                "- All minion commands output JSON. Use Bash tool to run them.",
-            ]
-        )
-
-    def _build_history_block(self, history_snapshot: str) -> str:
-        contract = load_contract(self.config.docs_dir, "compaction-markers")
-        if contract and "history_block" in contract:
-            hb = contract["history_block"]
-            return "\n".join([
-                hb["header"],
-                hb["preamble"],
-                history_snapshot,
-                hb["footer"],
-            ])
-        return "\n".join(
-            [
-                "════════════════════ RECENT HISTORY (rolling buffer) ════════════════════",
-                "The following is your captured stream-json history from before compaction.",
-                "Use it to restore recent context and avoid redoing completed work.",
-                "══════════════════════════════════════════════════════════════════════════",
-                history_snapshot,
-                "═══════════════════════ END RECENT HISTORY ═════════════════════════════",
-            ]
-        )
 
     def _truncate_tail(self, text: str, max_chars: int, prefix: str) -> str:
         if max_chars <= 0:

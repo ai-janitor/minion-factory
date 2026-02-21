@@ -27,6 +27,7 @@ class AgentConfig:
     retry_backoff_sec: int
     retry_backoff_max_sec: int
     skills: tuple[str, ...] = ()
+    capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -114,9 +115,8 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             )
 
         # Inject crew-level system_prefix into every agent's prompt
-        system_prefix = str(raw.get("system_prefix", "")).strip()
-        if system_prefix:
-            system = system_prefix + "\n\n" + system
+        from minion.prompts import build_system_prompt
+        system = build_system_prompt(str(raw.get("system_prefix", "")), system)
 
         allowed_tools = item.get("allowed_tools")
         if allowed_tools is not None:
@@ -141,6 +141,13 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         skills_raw = item.get("skills", [])
         skills = tuple(str(s) for s in skills_raw) if isinstance(skills_raw, list) else ()
 
+        from minion.auth import CLASS_CAPABILITIES, VALID_CAPABILITIES
+        caps_raw = item.get("capabilities")
+        if isinstance(caps_raw, list):
+            caps = tuple(str(c) for c in caps_raw if str(c) in VALID_CAPABILITIES)
+        else:
+            caps = tuple(sorted(CLASS_CAPABILITIES.get(role, set())))
+
         agents[str(name)] = AgentConfig(
             name=str(name),
             role=role,
@@ -156,6 +163,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             retry_backoff_sec=retry_backoff_sec,
             retry_backoff_max_sec=retry_backoff_max_sec,
             skills=skills,
+            capabilities=caps,
         )
 
     return SwarmConfig(

@@ -13,12 +13,10 @@ def spawn_terminal(
     cfg: dict,
 ) -> None:
     """Launch an interactive claude session in a new Terminal.app window."""
+    from minion.prompts import build_terminal_prompt
+
     system_prompt = cfg.get("system", "").strip()
-    poll_instruction = (
-        f"\n\nIMPORTANT: On startup, run `minion poll --agent {agent} &` "
-        f"in the background to receive messages from other agents."
-    )
-    full_prompt = (system_prompt + poll_instruction) if system_prompt else ""
+    full_prompt = build_terminal_prompt(system_prompt, agent)
 
     cmd_parts = [f"cd {project_dir}", "claude --dangerously-skip-permissions"]
     if full_prompt:
