@@ -100,6 +100,13 @@ class PollingMixin:
             self._log, _clear_session,
         )
 
+    def _comms_name(self) -> str:
+        """Poll mode is the default. Watcher mode only for explicit legacy paths."""
+        db = str(self.config.comms_db)
+        if ".minion-comms" in db:
+            return "legacy"
+        return "minion-comms"
+
     # Defined in other mixins
     def _log(self, message: str) -> None: ...
     def _write_state(self, status: str, **extra: Any) -> None: ...

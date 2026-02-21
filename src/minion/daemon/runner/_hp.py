@@ -151,6 +151,23 @@ class HPMixin:
             self._log(msg)
             print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
 
+    def _record_boot_hp(self, boot_prompt: str, result: Any) -> None:
+        """Log boot token usage. Overhead estimate is input_tokens minus chars/4 — not accurate."""
+        prompt_tokens = len(boot_prompt) // 4  # rough char-to-token ratio, not measured
+        self._tool_overhead_tokens = max(0, result.input_tokens - prompt_tokens)
+        ctx = self._context_window if self._context_window > 0 else 200_000
+        self._log(
+            f"boot HP: {result.input_tokens // 1000}k/{ctx // 1000}k context, "
+            f"overhead≈{self._tool_overhead_tokens // 1000}k (estimate, not accurate), "
+            f"prompt≈{prompt_tokens} tokens (chars/4)"
+        )
+        self._session_input_tokens += result.input_tokens
+        self._session_output_tokens += result.output_tokens
+        self._update_hp(
+            self._session_input_tokens, self._session_output_tokens,
+            turn_input=result.input_tokens, turn_output=result.output_tokens,
+        )
+
     # These are defined in other mixins but referenced here for type checking
     def _update_session_id(self, session_id: str) -> None: ...
     def _log(self, message: str) -> None: ...

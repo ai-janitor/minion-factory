@@ -70,3 +70,13 @@ class PromptMixin:
     def _build_provider_section(self) -> str:
         """Provider-specific prompt guardrails — delegated to provider module."""
         return self._provider.prompt_guardrails()
+
+    def _truncate_tail(self, text: str, max_chars: int, prefix: str) -> str:
+        if max_chars <= 0:
+            return ""
+        if len(text) <= max_chars:
+            return text
+        if len(prefix) >= max_chars:
+            return prefix[:max_chars]
+        keep = max_chars - len(prefix)
+        return f"{prefix}{text[-keep:]}"

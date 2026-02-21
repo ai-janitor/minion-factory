@@ -1,4 +1,4 @@
-"""Stand down, retire, and zone handoff — crew dismissal and agent lifecycle."""
+"""Stand down, retire, stop, and zone handoff — crew dismissal and agent lifecycle."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import subprocess
+import time
 
 from minion.comms import deregister
 from minion.db import get_db, now_iso
@@ -207,3 +208,32 @@ def hand_off_zone(
         }
     finally:
         conn.close()
+
+
+def stop_agent_process(agent: str) -> dict[str, object]:
+    """Stop a single daemon agent: SIGTERM with 5s grace, then SIGKILL."""
+    pids_dir = resolve_swarm_runtime_dir() / "pids"
+    pid_file = pids_dir / f"{agent}.pid"
+    if not pid_file.exists():
+        return {"error": f"No PID file for '{agent}' — not running?"}
+    pid = int(pid_file.read_text().strip())
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        pid_file.unlink(missing_ok=True)
+        return {"error": f"Agent '{agent}' PID {pid} not alive — stale PID file removed."}
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+            time.sleep(0.2)
+        except OSError:
+            break
+    else:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    pid_file.unlink(missing_ok=True)
+    return {"status": "stopped", "agent": agent, "pid": pid}

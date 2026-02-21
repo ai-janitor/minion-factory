@@ -1,15 +1,17 @@
-"""State I/O — read/write agent state JSON, load resume flag."""
+"""State I/O — read/write agent state JSON, load resume flag, respawn reset."""
 from __future__ import annotations
 
 import json
 import os
-from typing import Any, TYPE_CHECKING
+import threading
+from typing import Any, Optional, TYPE_CHECKING
 
 from ._constants import utc_now_iso, _get_rss_bytes
 
 if TYPE_CHECKING:
     from pathlib import Path
     from ..config import SwarmConfig, AgentConfig
+    from ..buffer import RollingBuffer
 
 
 class StateMixin:
@@ -21,8 +23,18 @@ class StateMixin:
     state_path: Path
     resume_ready: bool
     consecutive_failures: int
+    last_error: Optional[str]
+    inject_history_next_turn: bool
     _stood_down: bool
     _child_pid: int | None
+    _stop_event: threading.Event
+    _session_input_tokens: int
+    _session_output_tokens: int
+    _tool_overhead_tokens: int
+    _context_window: int
+    _invocation: int
+    _last_task_id: int | None
+    buffer: RollingBuffer
 
     def _load_resume_ready(self) -> bool:
         if not self.state_path.exists():
@@ -71,3 +83,21 @@ class StateMixin:
                 conn.close()
             except Exception:
                 pass
+
+    def _reset_for_respawn(self) -> None:
+        """Reset daemon state for a fresh generation after context death."""
+        from ..buffer import RollingBuffer
+
+        self._stop_event.clear()
+        self._session_input_tokens = 0
+        self._session_output_tokens = 0
+        self._tool_overhead_tokens = 0
+        self._context_window = 0
+        self._invocation = 0
+        self.resume_ready = False
+        self.consecutive_failures = 0
+        self.last_error = None
+        self.buffer = RollingBuffer(self.agent_cfg.max_history_tokens)
+        self.inject_history_next_turn = False
+        self._stood_down = False
+        self._last_task_id = None

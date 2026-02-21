@@ -33,7 +33,6 @@ from ._watcher_mode import WatcherModeMixin
 
 from ..buffer import RollingBuffer
 from ..config import SwarmConfig
-from ..watcher import CommsWatcher
 from ..triggers import handle_signal
 
 from minion.providers import get_provider
@@ -91,12 +90,6 @@ class AgentDaemon(
         )
         self._error_log = self.config.logs_dir / f"{self.agent_name}.error.log"
 
-    def _get_watcher(self) -> Any:
-        """Lazy-init watcher for legacy watcher mode only."""
-        if self._watcher is None:
-            self._watcher = CommsWatcher(self.agent_name, self.config.comms_db)
-        return self._watcher
-
     def run(self) -> None:
         self.config.ensure_runtime_dirs()
 
@@ -139,22 +132,6 @@ class AgentDaemon(
         self._write_state("stopped")
         self._log("daemon stopped")
 
-    def _reset_for_respawn(self) -> None:
-        """Reset daemon state for a fresh generation after context death."""
-        self._stop_event.clear()
-        self._session_input_tokens = 0
-        self._session_output_tokens = 0
-        self._tool_overhead_tokens = 0
-        self._context_window = 0
-        self._invocation = 0
-        self.resume_ready = False
-        self.consecutive_failures = 0
-        self.last_error = None
-        self.buffer = RollingBuffer(self.agent_cfg.max_history_tokens)
-        self.inject_history_next_turn = False
-        self._stood_down = False
-        self._last_task_id = None
-
     def _poll_generation(self, generation: int) -> str:
         """Run one boot + poll cycle. Returns exit reason: 'phoenix_down', 'signal', or 'stand_down'."""
         self._write_state("idle", generation=generation)
@@ -170,16 +147,7 @@ class AgentDaemon(
         if result.exit_code == 0:
             self.resume_ready = True
             if result.input_tokens > 0:
-                prompt_tokens = len(boot_prompt) // 4
-                self._tool_overhead_tokens = max(0, result.input_tokens - prompt_tokens)
-                ctx = self._context_window if self._context_window > 0 else 200_000
-                self._log(f"boot HP: {result.input_tokens // 1000}k/{ctx // 1000}k context, overhead\u2248{self._tool_overhead_tokens // 1000}k, prompt\u2248{prompt_tokens} tokens")
-                self._session_input_tokens += result.input_tokens
-                self._session_output_tokens += result.output_tokens
-                self._update_hp(
-                    self._session_input_tokens, self._session_output_tokens,
-                    turn_input=result.input_tokens, turn_output=result.output_tokens,
-                )
+                self._record_boot_hp(boot_prompt, result)
             self._log(f"boot (gen {generation}): complete")
         else:
             self._log(f"boot (gen {generation}): failed (exit {result.exit_code})")
@@ -263,23 +231,6 @@ class AgentDaemon(
 
     def _handle_signal(self, signum: int, _frame: Any) -> None:
         handle_signal(signum, self._log, self._stop_event)
-
-    def _comms_name(self) -> str:
-        """Poll mode is the default. Watcher mode only for explicit legacy paths."""
-        db = str(self.config.comms_db)
-        if ".minion-comms" in db:
-            return "legacy"
-        return "minion-comms"
-
-    def _truncate_tail(self, text: str, max_chars: int, prefix: str) -> str:
-        if max_chars <= 0:
-            return ""
-        if len(text) <= max_chars:
-            return text
-        if len(prefix) >= max_chars:
-            return prefix[:max_chars]
-        keep = max_chars - len(prefix)
-        return f"{prefix}{text[-keep:]}"
 
     def _log(self, message: str) -> None:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from threading import Event
     from ..config import SwarmConfig, AgentConfig
+    from ..watcher import CommsWatcher
 
 
 class WatcherModeMixin:
@@ -16,8 +17,16 @@ class WatcherModeMixin:
     agent_cfg: AgentConfig
     agent_name: str
     _stop_event: Event
+    _watcher: Any
     consecutive_failures: int
     last_error: str | None
+
+    def _get_watcher(self) -> Any:
+        """Lazy-init watcher for legacy watcher mode only."""
+        if self._watcher is None:
+            from ..watcher import CommsWatcher
+            self._watcher = CommsWatcher(self.agent_name, self.config.comms_db)
+        return self._watcher
 
     def _run_watcher_mode(self) -> None:
         """Legacy watcher mode: direct DB access."""
@@ -136,4 +145,3 @@ class WatcherModeMixin:
     def _process_prompt(self, prompt: str) -> bool: ...
     def _alert_lead_watcher(self, watcher: Any) -> None: ...
     def _handle_signal(self, signum: int, _frame: Any) -> None: ...
-    def _get_watcher(self) -> Any: ...

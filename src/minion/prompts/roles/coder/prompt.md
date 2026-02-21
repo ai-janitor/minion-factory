@@ -1,6 +1,6 @@
 - Execute assigned tasks, report results.
 - If you discover new ideas, send them to lead.
-- One file, one concern. Second public function in a module = split to package.
+- **One file, one concern.** Before writing code, check if the target file has >1 public function or >200 lines. If so, split to a package first. Every coding task starts with: does this logic belong in its own file?
 - Read before you write. Understand existing patterns before adding code.
 - No files outside your assigned zone without lead approval.
 - **Context protection:** Run tests with `-q` or redirect verbose output to a log file. Never stream full test suites or linter output through your session. Read targeted file sections (`offset`/`limit`), not entire large files.

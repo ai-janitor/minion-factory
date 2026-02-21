@@ -6,7 +6,6 @@ MINION_CLASS env var gates commands via auth.require_class.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 
@@ -14,77 +13,7 @@ import click
 
 from minion.db import init_db, reset_db_path
 from minion.fs import ensure_dirs
-
-
-def _output(data: dict[str, object], human: bool = False, compact: bool = False) -> None:
-    """Print result as JSON (default), human-readable, or compact text."""
-    if "error" in data:
-        click.echo(json.dumps(data, indent=2, default=str), err=True)
-        sys.exit(1)
-    if compact:
-        click.echo(_format_compact(data))
-    elif human:
-        for k, v in data.items():
-            if isinstance(v, (list, dict)):
-                click.echo(f"{k}: {json.dumps(v, indent=2, default=str)}")
-            else:
-                click.echo(f"{k}: {v}")
-    else:
-        click.echo(json.dumps(data, indent=2, default=str))
-
-
-def _format_compact(data: dict[str, object]) -> str:
-    """Format CLI output as concise text for agent context injection."""
-    lines: list[str] = []
-
-    # Status line
-    status = data.get("status", "")
-    agent = data.get("agent", data.get("agent_name", ""))
-    cls = data.get("class", data.get("agent_class", ""))
-    if status and agent:
-        transport = ""
-        playbook = data.get("playbook")
-        if isinstance(playbook, dict):
-            transport = f", {playbook.get('type', '')}"
-        lines.append(f"{status}: {agent} ({cls}{transport})")
-
-    # Tools as compact table
-    tools = data.get("tools")
-    if isinstance(tools, list) and tools:
-        lines.append("")
-        lines.append("Commands:")
-        for t in tools:
-            if isinstance(t, dict):
-                cmd = t.get("command", "")
-                desc = t.get("description", "")
-                lines.append(f"  {cmd:30s} {desc}")
-
-    # Triggers as one-liner
-    triggers = data.get("triggers")
-    if isinstance(triggers, str) and triggers:
-        codes = []
-        for line in triggers.splitlines():
-            if line.startswith("| `"):
-                code = line.split("`")[1]
-                codes.append(code)
-        if codes:
-            lines.append("")
-            lines.append(f"Triggers: {', '.join(codes)}")
-
-    # Playbook as bullets
-    playbook = data.get("playbook")
-    if isinstance(playbook, dict):
-        steps = playbook.get("steps", [])
-        if steps:
-            lines.append("")
-            lines.append("Playbook:")
-            for step in steps:
-                lines.append(f"  - {step}")
-
-    if not lines:
-        return json.dumps(data, indent=2, default=str)
-
-    return "\n".join(lines)
+from minion.output import output as _output
 
 
 @click.group()
@@ -842,72 +771,12 @@ def mission_suggest(ctx: click.Context, mission_type: str, crew: str, project_di
 @click.pass_context
 def mission_spawn(ctx: click.Context, mission_type: str, party_str: str, crew: str, project_dir: str, runtime: str) -> None:
     """Resolve mission slots, suggest party, and spawn."""
-    from minion.missions import load_mission, resolve_slots, suggest_party
+    from minion.missions import resolve_and_spawn
     try:
-        mission = load_mission(mission_type)
+        result = resolve_and_spawn(mission_type, party_str, crew, project_dir, runtime)
     except FileNotFoundError as e:
         _output({"error": str(e)})
         return
-
-    slots = resolve_slots(set(mission.requires))
-    crews_filter = [c.strip() for c in crew.split(",") if c.strip()] or None
-    party = suggest_party(slots, crews=crews_filter, project_dir=project_dir)
-
-    if not party_str:
-        # No party specified — show suggestions and exit
-        _output({
-            "status": "suggest",
-            "mission": mission.name,
-            "slots": slots,
-            "eligible": party,
-            "hint": "Re-run with --party <names> to spawn",
-        }, ctx.obj["human"], ctx.obj["compact"])
-        return
-
-    # Validate party members exist in eligible characters
-    requested = [p.strip() for p in party_str.split(",")]
-    all_eligible = {c["name"]: c for slot_chars in party.values() for c in slot_chars}
-    unknown = [p for p in requested if p not in all_eligible]
-    if unknown:
-        _output({"error": f"Unknown characters: {', '.join(unknown)}. Eligible: {', '.join(sorted(all_eligible))}"})
-        return
-
-    # Build a dynamic crew config from selected characters
-    import os
-    import tempfile
-    import yaml
-    agents_cfg: dict = {}
-    for name in requested:
-        char = all_eligible[name]
-        crew_name = char["crew"]
-        # Load the full agent config from the crew YAML
-        from minion.crew.spawn import _find_crew_file
-        crew_file = _find_crew_file(crew_name, project_dir)
-        if not crew_file:
-            _output({"error": f"Crew file for '{crew_name}' not found"})
-            return
-        with open(crew_file) as f:
-            crew_cfg = yaml.safe_load(f)
-        agent_raw = crew_cfg.get("agents", {}).get(name, {})
-        agents_cfg[name] = agent_raw
-
-    # Write temporary crew YAML
-    dynamic_crew = {
-        "project_dir": os.path.abspath(project_dir),
-        "agents": agents_cfg,
-    }
-    tmpdir = os.path.expanduser("~/.minion-swarm")
-    os.makedirs(tmpdir, exist_ok=True)
-    tmp_crew_name = f"mission-{mission.name}"
-    tmp_path = os.path.join(tmpdir, f"{tmp_crew_name}.yaml")
-    with open(tmp_path, "w") as f:
-        yaml.dump(dynamic_crew, f, default_flow_style=False)
-
-    # Spawn via existing spawn_party
-    from minion.crew import spawn_party as _spawn_party
-    result = _spawn_party(tmp_crew_name, project_dir, runtime=runtime)
-    result["mission"] = mission.name
-    result["slots"] = slots
     _output(result, ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -991,35 +860,8 @@ def start_agent(ctx, agent, crew, project_dir):
 @click.pass_context
 def stop_agent(ctx, agent):
     """Stop a single daemon agent (SIGTERM → SIGKILL)."""
-    import signal, time
-    from minion.defaults import resolve_swarm_runtime_dir
-    pids_dir = resolve_swarm_runtime_dir() / "pids"
-    pid_file = pids_dir / f"{agent}.pid"
-    if not pid_file.exists():
-        _output({"error": f"No PID file for '{agent}' — not running?"})
-        return
-    pid = int(pid_file.read_text().strip())
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        pid_file.unlink(missing_ok=True)
-        _output({"error": f"Agent '{agent}' PID {pid} not alive — stale PID file removed."})
-        return
-    os.kill(pid, signal.SIGTERM)
-    deadline = time.time() + 5
-    while time.time() < deadline:
-        try:
-            os.kill(pid, 0)
-            time.sleep(0.2)
-        except OSError:
-            break
-    else:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
-    pid_file.unlink(missing_ok=True)
-    _output({"status": "stopped", "agent": agent, "pid": pid}, ctx.obj["human"], ctx.obj["compact"])
+    from minion.crew.lifecycle import stop_agent_process
+    _output(stop_agent_process(agent), ctx.obj["human"], ctx.obj["compact"])
 
 
 @cli.command("logs")
@@ -1028,26 +870,8 @@ def stop_agent(ctx, agent):
 @click.option("--follow/--no-follow", default=False)
 def logs_agent(agent, lines, follow):
     """Show (and optionally follow) one agent's log."""
-    from collections import deque
-    import time
-    from minion.defaults import resolve_swarm_runtime_dir
-    log_file = resolve_swarm_runtime_dir() / "logs" / f"{agent}.log"
-    if not log_file.exists():
-        click.echo(f"Log file not found: {log_file}", err=True)
-        sys.exit(1)
-    with log_file.open("r") as fp:
-        if lines > 0:
-            tail = deque(fp, maxlen=lines)
-            for line in tail:
-                click.echo(line, nl=False)
-        if not follow:
-            return
-        while True:
-            line = fp.readline()
-            if line:
-                click.echo(line, nl=False)
-            else:
-                time.sleep(0.5)
+    from minion.crew.logs import tail_agent_log
+    tail_agent_log(agent, lines, follow)
 
 
 if __name__ == "__main__":
