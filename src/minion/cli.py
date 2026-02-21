@@ -429,6 +429,17 @@ def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
     sys.exit(exit_code)
 
 
+@cli.command("check-work")
+@click.option("--agent", required=True)
+@click.pass_context
+def check_work_cmd(ctx: click.Context, agent: str) -> None:
+    """Check if agent has available tasks. Exit 0 = work, 1 = no work."""
+    from minion.polling import _find_available_tasks
+    tasks = _find_available_tasks(agent)
+    _output({"has_work": len(tasks) > 0, "task_count": len(tasks), "tasks": tasks}, ctx.obj["human"])
+    sys.exit(0 if tasks else 1)
+
+
 @cli.command("list-flows")
 @click.pass_context
 def list_flows_cmd(ctx: click.Context) -> None:

@@ -133,6 +133,8 @@ class AgentDaemon:
         self._child_pid: int | None = None
         self._generation = 0
         self._invocation_row_id: int | None = None
+        self._stood_down = False
+        self._last_task_id: int | None = None
 
         self.state_path = self.config.state_dir / f"{self.agent_name}.json"
         self.resume_ready = self._load_resume_ready()
@@ -207,6 +209,8 @@ class AgentDaemon:
         self.last_error = None
         self.buffer = RollingBuffer(self.agent_cfg.max_history_tokens)
         self.inject_history_next_turn = False
+        self._stood_down = False
+        self._last_task_id = None
 
     def _poll_generation(self, generation: int) -> str:
         """Run one boot + poll cycle. Returns exit reason: 'phoenix_down', 'signal', or 'stand_down'."""
@@ -254,7 +258,11 @@ class AgentDaemon:
                 self._stop_event.wait(timeout=5.0)
                 continue
 
+            # Wake from standdown if needed (decides resume vs fresh)
+            if self._stood_down:
+                self._wake_from_standdown(poll_data)
             self._write_state("working", generation=generation)
+
             messages = poll_data.get("messages", [])
             tasks = poll_data.get("tasks", [])
             for msg in messages:
@@ -266,6 +274,12 @@ class AgentDaemon:
                 self._log(f"📋 task #{task.get('task_id')}: {task.get('title', '?')}")
             if not messages and not tasks:
                 self._log("messages detected, invoking agent")
+
+            # Track which task we're about to work on
+            task_ids = [t.get("task_id") for t in tasks if t.get("task_id")]
+            if task_ids:
+                self._last_task_id = task_ids[0]
+
             prompt = self._build_inbox_prompt(poll_data)
             ok = self._process_prompt(prompt)
 
@@ -276,7 +290,11 @@ class AgentDaemon:
                 state = self._read_state()
                 if state.get("status") == "phoenix_down":
                     return "phoenix_down"
-                self._write_state("idle", generation=generation)
+                # Standdown check: did the agent just finish its last piece of work?
+                if not self._check_available_work():
+                    self._standdown(generation)
+                else:
+                    self._write_state("idle", generation=generation)
             else:
                 self.consecutive_failures += 1
                 self._write_state(
@@ -336,6 +354,44 @@ class AgentDaemon:
             self._log(f"POLL ERROR: {type(exc).__name__}: {exc}")
             self._stop_event.wait(timeout=5.0)
             return None
+
+    def _check_available_work(self) -> bool:
+        """Quick DB check: does this agent have any claimable tasks?"""
+        try:
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            env[ENV_DB_PATH] = str(self.config.comms_db)
+            env[ENV_DOCS_DIR] = str(self.config.docs_dir)
+            proc = subprocess.run(
+                ["minion", "check-work", "--agent", self.agent_name],
+                capture_output=True, text=True, timeout=10, env=env,
+            )
+            return proc.returncode == 0
+        except Exception as exc:
+            self._log(f"check-work failed: {exc}, assuming work exists")
+            return True  # fail-open: don't stand down if check fails
+
+    def _standdown(self, generation: int) -> None:
+        """Agent has no work — preserve session, keep daemon polling cheaply."""
+        self._stood_down = True
+        # Keep session_id and resume_ready so we can resume if same task routes back
+        self._write_state("stood_down", generation=generation,
+                          last_task_id=self._last_task_id)
+        self._log(f"[standdown] no remaining work (last_task_id={self._last_task_id})")
+
+    def _wake_from_standdown(self, poll_data: Dict[str, Any]) -> None:
+        """Wake from stood-down state. Resume if same task, fresh if new."""
+        self._stood_down = False
+        incoming_ids = {t.get("task_id") for t in poll_data.get("tasks", [])}
+        messages = poll_data.get("messages", [])
+
+        if messages or (self._last_task_id and self._last_task_id in incoming_ids):
+            # Same task routed back OR message — resume session (context is valuable)
+            self._log("waking from standdown: resume session")
+        else:
+            # New task — fresh session, old context is noise
+            self._log(f"waking from standdown: new task(s) {incoming_ids}, fresh session")
+            self.resume_ready = False
+            self._provider.session_id = None
 
     def _build_boot_prompt(self) -> str:
         """Prompt for the first invocation — agent registers and sets up.
@@ -1150,6 +1206,7 @@ class AgentDaemon:
             "updated_at": utc_now_iso(),
             "consecutive_failures": self.consecutive_failures,
             "resume_ready": self.resume_ready,
+            "stood_down": self._stood_down,
         }
         payload.update(extra)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

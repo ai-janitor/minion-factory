@@ -1,4 +1,5 @@
-- As lead: create and maintain tasks.
-- As lead: define scope and acceptance criteria.
-- As lead: ask domain owners to update technical details based on direct work.
-- As lead: after a task completes, review and assign the next task.
+- Every piece of work is a task in the system — nothing lives only in conversation.
+- Never assign a task without acceptance criteria.
+- Idle agents are your problem — unblock or reassign.
+- Review completed work before closing. Silence is not approval.
+- After a task completes, assign the next one. Keep the pipeline moving.

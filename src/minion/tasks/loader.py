@@ -12,22 +12,25 @@ from .dag import Stage, TaskFlow
 
 # Search order: env var, ~/.minion/task-flows/, bundled with package
 def _find_flows_dir() -> Path:
-    import sysconfig
-
     env = os.getenv("MINION_FLOWS_DIR") or os.getenv("MINION_TASKS_FLOWS_DIR")
     if env:
         return Path(env)
     user_dir = Path.home() / ".minion" / "task-flows"
     if user_dir.exists():
         return user_dir
-    shared = Path(sysconfig.get_path("data")) / "share" / "minion" / "task-flows"
-    if shared.exists():
-        return shared
-    # In minion-factory, task-flows/ is 4 levels up from src/minion/tasks/loader.py
+    # Bundled inside the installed package (force-included by pyproject.toml)
+    bundled = Path(__file__).resolve().parent.parent / "task-flows"
+    if bundled.exists():
+        return bundled
+    # Dev fallback: task-flows/ at repo root
     return Path(__file__).resolve().parent.parent.parent.parent / "task-flows"
 
 
 _DEFAULT_FLOWS_DIR = _find_flows_dir()
+
+# Runtime cache — loaded once, kept in memory
+_FLOW_CACHE: dict[str, TaskFlow] = {}
+_FLOWS_LOADED = False
 
 
 def _load_yaml(path: Path) -> dict:
@@ -100,9 +103,28 @@ def _build_stage(name: str, cfg: dict) -> Stage:
     )
 
 
-def load_flow(task_type: str, flows_dir: str | Path | None = None) -> TaskFlow:
-    """Load a task flow DAG by type name. Resolves inheritance from _base.yaml."""
-    flows_path = Path(flows_dir) if flows_dir else _DEFAULT_FLOWS_DIR
+def _load_all_flows(flows_dir: Path | None = None) -> None:
+    """Load all flows from disk into memory cache. Called once."""
+    global _FLOWS_LOADED
+    flows_path = flows_dir or _DEFAULT_FLOWS_DIR
+    if not flows_path.exists():
+        _FLOWS_LOADED = True
+        return
+    for p in sorted(flows_path.glob("*.yaml")):
+        name = p.stem
+        if name.startswith("_"):
+            continue  # skip _base.yaml (only used for inheritance)
+        try:
+            flow = _load_flow_from_disk(name, flows_path)
+            _FLOW_CACHE[name] = flow
+        except Exception as exc:
+            import sys
+            print(f"WARNING: failed to load flow '{name}': {exc}", file=sys.stderr)
+    _FLOWS_LOADED = True
+
+
+def _load_flow_from_disk(task_type: str, flows_path: Path) -> TaskFlow:
+    """Load a single flow from YAML, resolving inheritance."""
     filename = f"_{task_type}.yaml" if task_type == "base" else f"{task_type}.yaml"
     flow_path = flows_path / filename
     if not flow_path.exists():
@@ -119,13 +141,21 @@ def load_flow(task_type: str, flows_dir: str | Path | None = None) -> TaskFlow:
     )
 
 
+def load_flow(task_type: str, flows_dir: str | Path | None = None) -> TaskFlow:
+    """Load a task flow DAG by type name. Returns from cache if already loaded."""
+    if not _FLOWS_LOADED:
+        _load_all_flows(Path(flows_dir) if flows_dir else None)
+    if task_type in _FLOW_CACHE:
+        return _FLOW_CACHE[task_type]
+    # Not in cache — try loading from disk (custom type added after startup)
+    flows_path = Path(flows_dir) if flows_dir else _DEFAULT_FLOWS_DIR
+    flow = _load_flow_from_disk(task_type, flows_path)
+    _FLOW_CACHE[task_type] = flow
+    return flow
+
+
 def list_flows(flows_dir: str | Path | None = None) -> list[str]:
     """List available task type names."""
-    flows_path = Path(flows_dir) if flows_dir else _DEFAULT_FLOWS_DIR
-    names = []
-    for p in sorted(flows_path.glob("*.yaml")):
-        name = p.stem
-        if name.startswith("_"):
-            name = name[1:]
-        names.append(name)
-    return names
+    if not _FLOWS_LOADED:
+        _load_all_flows(Path(flows_dir) if flows_dir else None)
+    return sorted(_FLOW_CACHE.keys())

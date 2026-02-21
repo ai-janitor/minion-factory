@@ -1,0 +1,20 @@
+# Chore — lightweight self-service task for non-leads
+# No review, no testing. Agent creates it, does it, closes it.
+name: chore
+inherits: _base
+description: Self-service one-off — create, do, close
+
+stages:
+  assigned:
+    skip: true
+
+  fixed:
+    skip: true
+
+  verified:
+    skip: true
+
+  closed:
+    description: Done
+    terminal: true
+    workers: null  # any agent can close their own chore

@@ -49,10 +49,43 @@ Use in messages for fast coordination. Server detects automatically.
 
 ## Filesystem Locations
 
-- Messages: `~/.minion_work/<project>/inbox/<agent>/`
-- Battle plans: `~/.minion_work/<project>/battle-plans/`
-- Raid log: `~/.minion_work/<project>/raid-log/`
-- Protocol docs: `~/.minion_work/docs/`
-- Loot: `.dead-drop/<agent>/`
-- Intel: `.dead-drop/intel/`
-- Traps: `.dead-drop/traps/`
+All work lives under `.work/` in the project root.
+
+```
+.work/
+├── battle-plans/              ← commander session plans (timestamped)
+├── inbox/<agent>/             ← per-agent message inboxes
+├── intel/                     ← findings, research, analysis
+│   ├── audits/                ← codebase audits
+│   ├── bench/                 ← benchmark research
+│   ├── bugs/                  ← bug reports (BUG-*.md)
+│   ├── design/                ← design docs (DESIGN-*.md)
+│   ├── domain/                ← domain knowledge
+│   ├── lang/                  ← language-specific analysis
+│   └── tests/                 ← test infrastructure research
+├── minion.db                  ← agent/task/message database
+├── raid-log/                  ← session raid log
+├── results/                   ← task deliverables
+│   └── <mission>/             ← grouped by mission (bench/, tests/, etc.)
+├── tasks/                     ← task specs
+│   └── <mission>/             ← grouped by mission
+└── traps/                     ← gotchas and landmines
+    └── <topic>/               ← grouped by topic (gpu/, etc.)
+```
+
+### File routing rules
+
+| Content | Location | Naming |
+|---------|----------|--------|
+| Bug report | `intel/bugs/` | `BUG-<slug>.md` |
+| Design doc | `intel/design/` | `DESIGN-<slug>.md` |
+| Codebase audit | `intel/audits/` | `<module>-audit.md` |
+| Research/recon | `intel/<topic>/` | `<descriptive-name>.md` |
+| Task spec | `tasks/<mission>/` | `<task-slug>.md` |
+| Task result | `results/<mission>/` | `<task-slug>.md` |
+| Gotcha/trap | `traps/` or `traps/<topic>/` | `<slug>.md` |
+
+**Rules:**
+- No floating files at `intel/` root — always use a subdirectory
+- Group tasks and results by mission (bench, tests, migration, etc.)
+- Bug reports belong in the **project where the bug lives**, not where you found it

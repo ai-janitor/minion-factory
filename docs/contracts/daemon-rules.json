@@ -10,10 +10,13 @@
     "As lead: create and maintain tasks.",
     "As lead: define scope and acceptance criteria.",
     "As lead: ask domain owners to update technical details based on direct work.",
-    "As lead: after a task completes, review and assign the next task."
+    "As lead: after a task completes, review and assign the next task.",
+    "As lead: you may do lightweight ad-hoc work (triage, quick fixes) without a formal task, but anything substantial should still be tracked."
   ],
   "non_lead": [
     "Non-lead agents: execute assigned tasks, report results.",
-    "If you discover new ideas, send them to lead."
+    "If you discover new ideas, send them to lead.",
+    "NEVER do work without a task. Trivial one-offs: create a chore task yourself (see your role prompt). Non-trivial requests: ask lead to create a proper task.",
+    "If you have no assigned tasks, STOP. Do not loop, do not output 'standing by', do not poll. Exit and let the daemon handle scheduling."
   ]
 }

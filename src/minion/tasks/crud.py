@@ -52,11 +52,11 @@ def create_task(
         row = cursor.fetchone()
         if not row:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
-        if row["agent_class"] != "lead":
-            return {"error": f"BLOCKED: Only lead-class agents can create tasks. '{agent_name}' is '{row['agent_class']}'."}
+        if row["agent_class"] != "lead" and task_type != "chore":
+            return {"error": f"BLOCKED: Only lead-class agents can create tasks (use --type chore for self-service). '{agent_name}' is '{row['agent_class']}'."}
 
         cursor.execute("SELECT COUNT(*) FROM battle_plan WHERE status = 'active'")
-        if cursor.fetchone()[0] == 0:
+        if cursor.fetchone()[0] == 0 and task_type != "chore":
             return {"error": "BLOCKED: No active battle plan. Lead must call set-battle-plan first."}
 
         if not os.path.exists(task_file):
@@ -352,15 +352,16 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
         row = cursor.fetchone()
         if not row:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
-        if row["agent_class"] != "lead":
-            return {"error": f"BLOCKED: Only lead-class agents can close tasks. '{agent_name}' is '{row['agent_class']}'."}
-
-        cursor.execute("SELECT id, status, result_file, title, task_type FROM tasks WHERE id = ?", (task_id,))
+        cursor.execute("SELECT id, status, result_file, title, task_type, assigned_to FROM tasks WHERE id = ?", (task_id,))
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
-        
+
         task_type = task_row["task_type"] or "bugfix"
+        # Non-leads can close their own chore tasks
+        is_own_chore = task_type == "chore" and task_row["assigned_to"] == agent_name
+        if row["agent_class"] != "lead" and not is_own_chore:
+            return {"error": f"BLOCKED: Only lead-class agents can close tasks (non-leads can close their own chores). '{agent_name}' is '{row['agent_class']}'."}
         flow = _get_flow(task_type)
         if flow and flow.is_terminal(task_row["status"]):
             return {"error": f"Task #{task_id} is already in terminal status '{task_row['status']}'."}
