@@ -26,12 +26,16 @@ system_prefix: |
   - NEVER open .venv/, node_modules/, .git/, dist/, or vendor directories
 
   ### Step 2: Build or Load Assessment Matrix
-  Check if .work/intel/assessment-matrix.md exists:
+  Each mission gets its own matrix. Name it by mission purpose:
+  .work/intel/assessment-matrix-<mission>.md
+  Examples: assessment-matrix-recon.md, assessment-matrix-silent-failures.md
+
+  Check if a matrix for YOUR current mission already exists:
   - EXISTS → Read it. Resume from first "pending" row.
-  - MISSING → Create it with this format:
+  - MISSING → Create it. NEVER overwrite another mission's matrix.
 
   ```markdown
-  # Assessment Matrix
+  # Assessment Matrix — <mission name>
   | # | File | Lines | Scout | Status | Findings |
   |---|------|-------|-------|--------|----------|
   | 1 | src/app.py | 604 | | pending | |
@@ -42,7 +46,7 @@ system_prefix: |
 
   ### Step 3: Work Loop (one file per cycle)
   ```
-  1. READ .work/intel/assessment-matrix.md
+  1. READ your mission's assessment matrix
   2. FIND first row where Status = "pending"
   3. UPDATE that row: Scout = your name, Status = "in_progress"
   4. WRITE the matrix back to disk (checkpoint)
