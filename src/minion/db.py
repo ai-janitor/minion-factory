@@ -447,17 +447,20 @@ def load_onboarding(agent_class: str) -> str:
 
 
 def scan_triggers(message: str) -> list[str]:
-    """Return trigger words found in message text."""
+    """Return trigger words found in message text.
+
+    Only matches deliberate !!trigger!! pattern — not casual mentions.
+    """
     from minion.auth import TRIGGER_WORDS
     lower = message.lower()
-    return [word for word in TRIGGER_WORDS if word in lower]
+    return [word for word in TRIGGER_WORDS if f"!!{word}!!" in lower]
 
 
 def format_trigger_codebook() -> str:
     """Format the trigger word codebook for display."""
     from minion.auth import TRIGGER_WORDS
     lines = ["## Trigger Words (Brevity Codes)", ""]
-    lines.append("Short code words for fast coordination. Use in messages — comms recognizes them automatically.")
+    lines.append("Wrap in `!!` to activate: `!!stand_down!!`. Bare mentions are ignored.")
     lines.append("")
     lines.append("| Code | Meaning |")
     lines.append("|---|---|")
