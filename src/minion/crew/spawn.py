@@ -72,6 +72,9 @@ def list_crews() -> dict[str, object]:
         for fname in sorted(os.listdir(d)):
             if not fname.endswith(".yaml"):
                 continue
+            # Exclude runtime-only YAMLs (recruit, mission, temp crew configs)
+            if fname.startswith(("recruit-", "mission-", "crew-")):
+                continue
             crew_name = fname.replace(".yaml", "")
             if crew_name in seen:
                 continue
