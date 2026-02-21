@@ -13,6 +13,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from minion.daemon.triggers import (
+    handle_phoenix_down,
+    handle_stand_down,
+    handle_standdown,
+    handle_signal,
+    handle_wake_from_standdown,
+)
+
 from minion.defaults import ENV_CLASS, ENV_DB_PATH, ENV_DOCS_DIR
 
 from .buffer import RollingBuffer
@@ -187,7 +195,7 @@ class AgentDaemon:
             self._generation += 1
             generation = self._generation
             exit_reason = self._poll_generation(generation)
-            if exit_reason == "phoenix_down" and not self._stop_event.is_set():
+            if exit_reason == "phoenix_down":
                 self._log(f"🔄 auto-respawn: generation {generation} died (context exhausted), rebooting as generation {generation + 1}")
                 self._reset_for_respawn()
                 continue
@@ -333,8 +341,7 @@ class AgentDaemon:
                 env=env,
             )
             if proc.returncode == 3:
-                self._log("stand_down detected — leader dismissed the party")
-                self._stop_event.set()
+                handle_stand_down(self.agent_name, self._log, self._stop_event)
                 return None
             if proc.returncode == 0 and proc.stdout.strip():
                 try:
@@ -373,26 +380,23 @@ class AgentDaemon:
 
     def _standdown(self, generation: int) -> None:
         """Agent has no work — preserve session, keep daemon polling cheaply."""
-        self._stood_down = True
-        # Keep session_id and resume_ready so we can resume if same task routes back
-        self._write_state("stood_down", generation=generation,
-                          last_task_id=self._last_task_id)
-        self._log(f"[standdown] no remaining work (last_task_id={self._last_task_id})")
+        self._stood_down = handle_standdown(
+            self.agent_name, generation, self._last_task_id,
+            self._log, self._write_state,
+        )
 
     def _wake_from_standdown(self, poll_data: Dict[str, Any]) -> None:
         """Wake from stood-down state. Resume if same task, fresh if new."""
         self._stood_down = False
-        incoming_ids = {t.get("task_id") for t in poll_data.get("tasks", [])}
-        messages = poll_data.get("messages", [])
 
-        if messages or (self._last_task_id and self._last_task_id in incoming_ids):
-            # Same task routed back OR message — resume session (context is valuable)
-            self._log("waking from standdown: resume session")
-        else:
-            # New task — fresh session, old context is noise
-            self._log(f"waking from standdown: new task(s) {incoming_ids}, fresh session")
+        def _clear_session() -> None:
             self.resume_ready = False
             self._provider.session_id = None
+
+        handle_wake_from_standdown(
+            self.agent_name, poll_data, self._last_task_id,
+            self._log, _clear_session,
+        )
 
     def _build_boot_prompt(self) -> str:
         """Prompt for the first invocation — agent registers and sets up.
@@ -462,12 +466,10 @@ class AgentDaemon:
                 turn_used = max(0, turn_used - self._tool_overhead_tokens)
             hp_pct = max(0.0, 100 - (turn_used / ctx * 100)) if ctx > 0 else 0.0
             if hp_pct <= 5:
-                self._alert_lead_poll(
-                    f"agent {self.agent_name} at {hp_pct:.0f}% HP — context exhausted. "
-                    f"Stopping daemon. Respawn to continue from assessment matrix."
+                handle_phoenix_down(
+                    self.agent_name, hp_pct,
+                    self._write_state, self._stop_event, self._alert_lead_poll,
                 )
-                self._write_state("phoenix_down", hp_pct=hp_pct)
-                self._stop_event.set()
                 return True  # invocation itself succeeded, but agent is cooked
 
         if result.interrupted:
@@ -649,8 +651,7 @@ class AgentDaemon:
     # ── shared ─────────────────────────────────────────────────────────────
 
     def _handle_signal(self, signum: int, _frame: Any) -> None:
-        self._log(f"received signal {signum}, shutting down")
-        self._stop_event.set()
+        handle_signal(signum, self._log, self._stop_event)
 
     def _comms_name(self) -> str:
         """Poll mode is the default. Watcher mode only for explicit legacy paths."""

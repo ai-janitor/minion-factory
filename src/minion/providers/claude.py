@@ -17,12 +17,12 @@ class ClaudeProvider(BaseProvider):
             "stream-json",
             "--verbose",
         ]
-        # Inject agent's system prompt so the model treats it as system-level
-        # instruction (not user text). This makes exclusion rules, persona, etc.
-        # much harder to ignore.
+        # Replace the default system prompt entirely so daemon agents don't
+        # inherit user CLAUDE.md, ~/.claude/rules/, or Claude CLI defaults.
+        # Only our assembled prompt + persona goes in.
         system = self.agent_cfg.system.strip() if self.agent_cfg.system else ""
         if system:
-            cmd.extend(["--append-system-prompt", system])
+            cmd.extend(["--system-prompt", system])
         # Session continuity: --resume <id> targets a specific session,
         # --continue resumes the last session (watcher mode only).
         # They're mutually exclusive.
