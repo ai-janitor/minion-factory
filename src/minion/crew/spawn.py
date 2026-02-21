@@ -331,6 +331,28 @@ def spawn_party(
         style_pane(tmux_session, pane_idx, agent, agent_roles.get(agent, ""), model=resolved_cfgs.get(agent, {}).get("model", ""), provider=resolved_cfgs.get(agent, {}).get("provider", ""))
         pane_idx += 1
 
+    # --- Spawn non-agent panes (dashboard, monitors, etc.) ---
+    # panes: key in crew YAML — no agent registration, just tmux panes
+    import yaml as _yaml
+    with open(crew_file) as _f:
+        _raw_crew = _yaml.safe_load(_f)
+    panes_cfg = _raw_crew.get("panes", {})
+    for pane_name, pcfg in panes_cfg.items():
+        raw_cmd = pcfg.get("cmd", "")
+        if not raw_cmd:
+            continue
+        cmd = raw_cmd.format(project_dir=project_dir)
+        role = pcfg.get("role", "")
+        result = spawn_pane(tmux_session, pane_name, project_dir, crew_config,
+                            session_exists, pane_cmd=cmd)
+        if result is not True:
+            import sys as _sys
+            print(f"WARNING: failed to spawn pane {pane_name!r}: {result}", file=_sys.stderr)
+            continue
+        session_exists = True
+        style_pane(tmux_session, pane_idx, pane_name, role, model="", provider="")
+        pane_idx += 1
+
     finalize_layout(tmux_session, is_new, pane_count=pane_idx)
 
     # Start daemons — per-agent runtime from transport, global --runtime as fallback

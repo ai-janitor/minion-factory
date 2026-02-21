@@ -898,6 +898,18 @@ def logs_agent(agent, lines, follow):
 
 
 # =========================================================================
+# Dashboard
+# =========================================================================
+
+@cli.command("dashboard")
+@click.pass_context
+def dashboard_cmd(ctx: click.Context) -> None:
+    """Live task board. Run in a tmux pane — no DB registration."""
+    from minion.dashboard import run
+    run()
+
+
+# =========================================================================
 # Hidden aliases — backwards compat for old `get-*` collection names
 # =========================================================================
 

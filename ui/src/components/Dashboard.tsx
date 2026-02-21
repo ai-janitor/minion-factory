@@ -1,4 +1,4 @@
-// Main dashboard layout — tabs for Tasks, Messages, Agents views
+// Main dashboard layout — tabs for Pipeline, Comms, Logs, Sprint views
 // Agent panel always visible at top; main content area switches by tab
 import TaskBoard from "./TaskBoard"
 import RaidLog from "./RaidLog"
@@ -26,10 +26,10 @@ export default function Dashboard() {
 
         {/* Main tabbed content area */}
         <Tabs defaultValue="tasks" className="flex-1">
-          <TabsList className="mb-3">
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
-            <TabsTrigger value="overview">Logs</TabsTrigger>
+          <TabsList className="mb-3 flex-wrap">
+            <TabsTrigger value="tasks">Pipeline</TabsTrigger>
+            <TabsTrigger value="messages">Comms</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="sprint">Sprint</TabsTrigger>
           </TabsList>
 
@@ -47,7 +47,7 @@ export default function Dashboard() {
           </TabsContent>
 
           {/* Live logs + raid log */}
-          <TabsContent value="overview" className="space-y-6 mt-0">
+          <TabsContent value="logs" className="space-y-6 mt-0">
             <section>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">Agent Logs</h2>
               <AgentLogs />

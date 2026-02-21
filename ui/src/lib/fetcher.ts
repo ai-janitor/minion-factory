@@ -10,6 +10,9 @@ export const fetcher = (url: string) => {
       window.location.reload()
       throw new Error("Unauthorized")
     }
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}`)
+    }
     return r.json()
   })
 }

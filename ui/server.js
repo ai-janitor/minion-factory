@@ -193,15 +193,55 @@ app.get('/api/messages', (req, res) => {
   res.json(messages);
 });
 
-// Flow definitions — load YAML from missions/ dir, return as JSON
-const missionsDir = path.join(__dirname, '..', 'missions');
+// Flow definitions — load YAML from task-flows/ dir, resolve inheritance, extract DAG shape
+const taskFlowsDir = path.join(__dirname, '..', 'task-flows');
+
+function loadRawFlow(type, dir) {
+  // _base is stored as _base.yaml; all others as <type>.yaml
+  const filename = type === '_base' ? '_base.yaml' : `${type}.yaml`;
+  const raw = yaml.load(fs.readFileSync(path.join(dir, filename), 'utf-8'));
+  return raw;
+}
+
+function resolveFlow(type, dir) {
+  const raw = loadRawFlow(type, dir);
+  if (!raw.inherits) return raw;
+  const parent = resolveFlow(raw.inherits === 'base' ? '_base' : raw.inherits, dir);
+  const stages = { ...(parent.stages || {}), ...(raw.stages || {}) };
+  const result = { ...parent, ...raw, stages };
+  delete result.inherits;
+  return result;
+}
+
+// Follow `next` links from `open` to extract the main pipeline order
+function extractPipeline(stages) {
+  const pipeline = [];
+  let current = 'open';
+  const seen = new Set();
+  while (current && stages[current] && !seen.has(current)) {
+    seen.add(current);
+    if (!stages[current].parked && !stages[current].skip) pipeline.push(current);
+    current = stages[current].next;
+  }
+  return pipeline;
+}
 
 app.get('/api/flows/:type', (req, res) => {
   const type = req.params.type.replace(/[^a-zA-Z0-9_-]/g, '');
-  const filePath = path.join(missionsDir, `${type}.yaml`);
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  const data = yaml.load(raw);
-  res.json(data);
+  try {
+    const flow = resolveFlow(type, taskFlowsDir);
+    const stages = flow.stages || {};
+    const pipeline = extractPipeline(stages);
+    const dead_ends = flow.dead_ends || [];
+    // Parked stages (e.g. blocked) are excluded from pipeline and dead_ends — surface them separately
+    const parked = Object.entries(stages)
+      .filter(([, s]) => s.parked && !s.skip)
+      .map(([name]) => name);
+    res.json({ type, pipeline, dead_ends, parked });
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: `Flow '${type}' not found` });
+    res.status(500).json({ error: `Failed to load flow: ${err.message}` });
+  }
 });
 
 // Serve static files from dist/ in production

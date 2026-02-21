@@ -230,3 +230,8 @@ agents:
       3. minion check-inbox --agent april
       4. minion set-status --agent april --status "ready for orders"
       Then wait for messages. Check inbox regularly.
+
+panes:
+  dashboard:
+    role: monitor
+    cmd: "cd {project_dir} && uv run minion dashboard"

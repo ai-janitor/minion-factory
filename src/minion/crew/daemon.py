@@ -89,15 +89,17 @@ def spawn_pane(
     project_dir: str,
     crew_config: str,
     session_exists: bool,
+    pane_cmd: str = "",
 ) -> bool:
-    """Create a tmux pane tailing the agent's log file.
+    """Create a tmux pane. Uses tail -f <log> unless pane_cmd is given.
 
-    Returns True if pane was created, False if it didn't fit.
+    Returns True if pane was created, error string if it didn't fit.
     """
-    log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{agent}.log")
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    open(log_file, "a").close()
-    pane_cmd = f"tail -f {log_file}"
+    if not pane_cmd:
+        log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{agent}.log")
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        open(log_file, "a").close()
+        pane_cmd = f"tail -f {log_file}"
 
     if not session_exists:
         subprocess.run([

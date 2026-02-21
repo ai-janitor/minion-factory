@@ -15,6 +15,7 @@ CLASS_COLORS: dict[str, str] = {
     "recon":   "colour5",   # magenta
     "planner": "colour6",   # cyan
     "auditor": "colour9",   # bright red
+    "monitor": "colour7",   # white — dashboard and non-agent panes
 }
 
 

@@ -40,6 +40,8 @@ function secondsSince(last_seen: string | null): number {
 function relativeTime(last_seen: string | null): string {
   if (!last_seen) return "never"
   const secs = secondsSince(last_seen)
+  // secondsSince returns NaN when DB emits truthy-but-unparseable strings (e.g. "null")
+  if (!isFinite(secs)) return "-"
   if (secs < 60) return `${Math.round(secs)}s ago`
   if (secs < 3600) return `${Math.round(secs / 60)}m ago`
   return `${Math.round(secs / 3600)}h ago`

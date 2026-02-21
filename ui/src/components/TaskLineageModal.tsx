@@ -37,24 +37,38 @@ interface Props {
 }
 
 // --------------------------------------------------------------------------
-// Flow definition (fallback — mirrors flow_bridge.py hardcoded pipeline)
+// Flow definition — loaded from API, hardcoded as fallback
 // --------------------------------------------------------------------------
 
-const MAIN_PIPELINE = ["open", "assigned", "in_progress", "fixed", "verified", "closed"]
-const DEAD_ENDS = new Set(["abandoned", "stale", "obsolete"])
+const FALLBACK_PIPELINE = ["open", "assigned", "in_progress", "fixed", "verified", "closed"]
+const FALLBACK_DEAD_ENDS = new Set(["abandoned", "stale", "obsolete"])
+const FALLBACK_PARKED = ["blocked"]
 
-function stageClass(stage: string, currentStatus: string, visitedSet: Set<string>): string {
+interface FlowDefinition {
+  type: string
+  pipeline: string[]
+  dead_ends: string[]
+  parked: string[]
+}
+
+function stageClass(
+  stage: string,
+  currentStatus: string,
+  visitedSet: Set<string>,
+  pipeline: string[],
+  deadEnds: Set<string>,
+): string {
   if (stage === currentStatus) {
-    if (DEAD_ENDS.has(stage)) return "bg-orange-500/20 border-orange-500 text-orange-300 ring-2 ring-orange-500"
+    if (deadEnds.has(stage)) return "bg-orange-500/20 border-orange-500 text-orange-300 ring-2 ring-orange-500"
     return "bg-blue-500/20 border-blue-500 text-blue-300 ring-2 ring-blue-500"
   }
-  if (DEAD_ENDS.has(stage)) {
+  if (deadEnds.has(stage)) {
     return visitedSet.has(stage)
       ? "bg-zinc-700 border-zinc-500 text-zinc-300"
       : "bg-zinc-800/40 border-zinc-700 text-zinc-600"
   }
-  const pipelineIdx = MAIN_PIPELINE.indexOf(stage)
-  const currentIdx = MAIN_PIPELINE.indexOf(currentStatus)
+  const pipelineIdx = pipeline.indexOf(stage)
+  const currentIdx = pipeline.indexOf(currentStatus)
   if (pipelineIdx >= 0 && currentIdx >= 0 && pipelineIdx < currentIdx) {
     return "bg-green-900/40 border-green-700 text-green-400"
   }
@@ -65,29 +79,63 @@ function stageClass(stage: string, currentStatus: string, visitedSet: Set<string
 // Sub-components
 // --------------------------------------------------------------------------
 
-function FlowDiagram({ currentStatus, visitedSet }: { currentStatus: string; visitedSet: Set<string> }) {
-  const deadEndsInHistory = Array.from(DEAD_ENDS).filter(s => visitedSet.has(s) || s === currentStatus)
+function FlowDiagram({
+  currentStatus,
+  visitedSet,
+  pipeline,
+  deadEnds,
+  parked,
+}: {
+  currentStatus: string
+  visitedSet: Set<string>
+  pipeline: string[]
+  deadEnds: Set<string>
+  parked: string[]
+}) {
+  const deadEndsInHistory = Array.from(deadEnds).filter(s => visitedSet.has(s) || s === currentStatus)
+  // Show parked stages when currently parked or previously visited
+  const parkedVisible = parked.filter(s => s === currentStatus || visitedSet.has(s))
 
   return (
     <div className="space-y-3">
       {/* Main pipeline */}
       <div className="flex items-center gap-1 flex-wrap">
-        {MAIN_PIPELINE.map((stage, i) => (
+        {pipeline.map((stage, i) => (
           <div key={stage} className="flex items-center gap-1">
             <span
               className={cn(
                 "px-2 py-1 rounded border text-xs font-mono font-medium transition-all",
-                stageClass(stage, currentStatus, visitedSet)
+                stageClass(stage, currentStatus, visitedSet, pipeline, deadEnds)
               )}
             >
               {stage}
             </span>
-            {i < MAIN_PIPELINE.length - 1 && (
+            {i < pipeline.length - 1 && (
               <span className="text-zinc-600 text-xs">→</span>
             )}
           </div>
         ))}
       </div>
+
+      {/* Parked stages (blocked, etc.) — shown when task is/was parked */}
+      {parkedVisible.length > 0 && (
+        <div className="flex items-center gap-2 pl-2">
+          <span className="text-zinc-600 text-xs">⏸ parked:</span>
+          {parkedVisible.map(stage => (
+            <span
+              key={stage}
+              className={cn(
+                "px-2 py-1 rounded border text-xs font-mono font-medium",
+                stage === currentStatus
+                  ? "bg-yellow-500/20 border-yellow-500 text-yellow-300 ring-2 ring-yellow-500"
+                  : "bg-zinc-700 border-zinc-500 text-zinc-300"
+              )}
+            >
+              {stage}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Dead ends (only if ever visited) */}
       {deadEndsInHistory.length > 0 && (
@@ -98,7 +146,7 @@ function FlowDiagram({ currentStatus, visitedSet }: { currentStatus: string; vis
               key={stage}
               className={cn(
                 "px-2 py-1 rounded border text-xs font-mono font-medium",
-                stageClass(stage, currentStatus, visitedSet)
+                stageClass(stage, currentStatus, visitedSet, pipeline, deadEnds)
               )}
             >
               {stage}
@@ -119,7 +167,7 @@ function HistoryTimeline({ history }: { history: HistoryEntry[] }) {
     <ol className="space-y-2">
       {history.map((entry, i) => (
         <li key={i} className="flex items-start gap-3 text-sm">
-          <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0 mt-2" />
+          <span className="mt-2 w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
           <div className="flex flex-col gap-0.5">
             <span className="text-zinc-200 font-mono text-xs">
               {entry.from_status == null ? (
@@ -145,7 +193,15 @@ function HistoryTimeline({ history }: { history: HistoryEntry[] }) {
 // --------------------------------------------------------------------------
 
 export default function TaskLineageModal({ taskId, onClose }: Props) {
-  const { data, isLoading } = useSWR<LineageData>(`/api/task-lineage/${taskId}`, fetcher)
+  const { data, isLoading, error } = useSWR<LineageData>(`/api/task-lineage/${taskId}`, fetcher)
+  // Load flow definition from API once we know the flow_type; fall back to hardcoded on error
+  const { data: flowDef } = useSWR<FlowDefinition>(
+    data ? `/api/flows/${data.flow_type}` : null,
+    fetcher
+  )
+  const pipeline = flowDef?.pipeline ?? FALLBACK_PIPELINE
+  const deadEnds = new Set<string>(flowDef?.dead_ends ?? FALLBACK_DEAD_ENDS)
+  const parked = flowDef?.parked ?? FALLBACK_PARKED
   const overlayRef = useRef<HTMLDivElement>(null)
 
   // Close on Escape
@@ -159,7 +215,7 @@ export default function TaskLineageModal({ taskId, onClose }: Props) {
     if (e.target === overlayRef.current) onClose()
   }
 
-  const visitedSet = new Set(data?.history.map(h => h.to_status) ?? [])
+  const visitedSet = new Set<string>(data?.history.map(h => h.to_status) ?? [])
 
   return (
     <div
@@ -181,6 +237,10 @@ export default function TaskLineageModal({ taskId, onClose }: Props) {
           <p className="text-zinc-500 text-sm">Loading lineage...</p>
         )}
 
+        {error && (
+          <p className="text-red-400 text-sm">Failed to load lineage: {error.message ?? "unknown error"}</p>
+        )}
+
         {data && (
           <div className="space-y-6">
             {/* Task header */}
@@ -193,7 +253,7 @@ export default function TaskLineageModal({ taskId, onClose }: Props) {
                 <Badge
                   className={cn(
                     "text-xs",
-                    DEAD_ENDS.has(data.task.status)
+                    deadEnds.has(data.task.status)
                       ? "bg-orange-500/20 border-orange-500 text-orange-300"
                       : data.task.status === "closed"
                       ? "bg-green-900/40 border-green-700 text-green-400"
@@ -218,7 +278,13 @@ export default function TaskLineageModal({ taskId, onClose }: Props) {
               <h3 className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">
                 Flow · {data.flow_type}
               </h3>
-              <FlowDiagram currentStatus={data.task.status} visitedSet={visitedSet} />
+              <FlowDiagram
+                currentStatus={data.task.status}
+                visitedSet={visitedSet}
+                pipeline={pipeline}
+                deadEnds={deadEnds}
+                parked={parked}
+              />
             </div>
 
             {/* History */}
