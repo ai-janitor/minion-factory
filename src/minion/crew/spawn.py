@@ -332,7 +332,7 @@ def spawn_party(
         pane_idx += 1
 
     # --- Spawn non-agent panes (dashboard, monitors, etc.) ---
-    # panes: key in crew YAML — no agent registration, just tmux panes
+    # panes: key in crew YAML — separate tmux windows, no agent registration
     import yaml as _yaml
     with open(crew_file) as _f:
         _raw_crew = _yaml.safe_load(_f)
@@ -342,15 +342,28 @@ def spawn_party(
         if not raw_cmd:
             continue
         cmd = raw_cmd.format(project_dir=project_dir)
-        role = pcfg.get("role", "")
-        result = spawn_pane(tmux_session, pane_name, project_dir, crew_config,
-                            session_exists, pane_cmd=cmd)
-        if result is not True:
+        wrapped = f"{cmd}; echo '[pane exited — press enter]'; read"
+        # Rebalance before split so tmux has room
+        subprocess.run(
+            ["tmux", "select-layout", "-t", tmux_session, "tiled"],
+            capture_output=True, text=True,
+        )
+        result = subprocess.run(
+            ["tmux", "split-window", "-t", tmux_session,
+             "bash", "-c", wrapped],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
             import sys as _sys
-            print(f"WARNING: failed to spawn pane {pane_name!r}: {result}", file=_sys.stderr)
+            print(f"WARNING: failed to spawn pane {pane_name!r}: {result.stderr.strip()}", file=_sys.stderr)
             continue
-        session_exists = True
-        style_pane(tmux_session, pane_idx, pane_name, role, model="", provider="")
+        # Move to pane 0 so dashboards/monitors sit at the top
+        new_pane_idx = pane_idx
+        subprocess.run(
+            ["tmux", "swap-pane", "-t", f"{tmux_session}:0.0",
+             "-s", f"{tmux_session}:0.{new_pane_idx}"],
+            capture_output=True, text=True,
+        )
         pane_idx += 1
 
     finalize_layout(tmux_session, is_new, pane_count=pane_idx)

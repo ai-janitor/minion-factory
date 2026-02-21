@@ -41,7 +41,10 @@ def run() -> None:
             agents   = fetch_agents(conn)
             activity = fetch_activity(conn)
             conn.close()
-            width, height = os.get_terminal_size(fallback=(120, 40))
+            try:
+                width, height = os.get_terminal_size()
+            except OSError:
+                width, height = 120, 40
             screen = render_screen(tasks, agents, activity, width, height)
             clear_and_print(screen)
         except sqlite3.OperationalError:

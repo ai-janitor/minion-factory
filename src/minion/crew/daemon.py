@@ -105,7 +105,7 @@ def spawn_pane(
         subprocess.run([
             "tmux", "new-session", "-d",
             "-s", tmux_session, "-n", agent,
-            "-x", "220", "-y", "50",
+            "-x", "300", "-y", "80",
             "bash", "-c", pane_cmd,
         ], check=True)
     else:
