@@ -13,6 +13,7 @@ class BaseProvider(ABC):
         self.agent_name = agent_name
         self.agent_cfg = agent_cfg
         self.use_poll = use_poll
+        self.session_id: str | None = None
 
     @abstractmethod
     def build_command(self, prompt: str, use_resume: bool = False) -> List[str]:

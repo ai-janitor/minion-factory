@@ -14,7 +14,12 @@
    - `minion hand-off-zone --from {old} --to {new} --zone "..."`
    - `minion assign-task --agent {you} --task-id N --assigned-to {new_worker}`
    - Hand-off includes the task file location and any context the next agent needs to continue without starting over.
-8. When the current crew lacks the expertise for queued work, scout for specialists. Browse available characters and crews to find agents with the right capabilities, then recruit them.
-   - `minion list-crews` — see all available crew rosters
-   - `minion mission suggest {type}` — show eligible characters and their capabilities for a mission type
-   - `minion mission spawn {type}` — recruit and spawn the right party
+8. When the current crew lacks the expertise for queued work, scout for specialists. Browse available characters and crews to find agents with the right capabilities, then recruit them into your running crew.
+   - `minion list-crews` — see all available crew rosters and characters
+   - `minion recruit --name {name} --from-crew {source} --crew {crew}` — pull a character from another crew into your running session (inherits their full config: system prompt, model, provider, capabilities)
+   - `minion recruit --name {name} --class {class} --crew {crew} --capabilities {caps}` — create a new ad-hoc agent from scratch
+   - `minion mission suggest {type}` — show eligible characters for a mission type
+   - `minion mission spawn {type}` — recruit and spawn a full mission party
+9. Interrupt an agent mid-turn when it's going down the wrong path or you need to redirect it. The agent's daemon stays alive — only the current invocation is killed. Follow up with a resume message containing new instructions.
+   - `minion interrupt --agent {name} --requesting-agent {you}` — kill the agent's current invocation
+   - `minion resume --agent {name} --from {you} --message "new instructions"` — send a message the daemon picks up on next poll; the agent resumes its session with your new instructions

@@ -224,6 +224,18 @@ def spawn_party(
         )
         registered.add(name)
 
+    # Write crew column for all spawned agents
+    conn2 = get_db()
+    try:
+        for name in all_agent_names:
+            conn2.execute(
+                "UPDATE agents SET crew = ? WHERE name = ?",
+                (crew, name),
+            )
+        conn2.commit()
+    finally:
+        conn2.close()
+
     # --- Name deconfliction for agents already registered by other crews ---
     spawn_agents: list[str] = []
     renames: dict[str, str] = {}

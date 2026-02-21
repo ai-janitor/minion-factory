@@ -163,6 +163,42 @@ CREATE TABLE IF NOT EXISTS agent_retire (
     set_at      TEXT NOT NULL,
     set_by      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS invocation_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name      TEXT NOT NULL,
+    pid             INTEGER NOT NULL,
+    model           TEXT,
+    generation      INTEGER,
+    rss_bytes       INTEGER,
+    input_tokens    INTEGER,
+    output_tokens   INTEGER,
+    exit_code       INTEGER,
+    timed_out       INTEGER DEFAULT 0,
+    interrupted     INTEGER DEFAULT 0,
+    compacted       INTEGER DEFAULT 0,
+    started_at      TEXT NOT NULL,
+    ended_at        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS compaction_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name      TEXT NOT NULL,
+    model           TEXT,
+    pid             INTEGER,
+    rss_pre_bytes   INTEGER,
+    rss_post_bytes  INTEGER,
+    tokens_pre      INTEGER,
+    tokens_post     INTEGER,
+    generation      INTEGER,
+    compacted_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_interrupt (
+    agent_name  TEXT PRIMARY KEY,
+    set_at      TEXT NOT NULL,
+    set_by      TEXT NOT NULL
+);
 """
 
 # ---------------------------------------------------------------------------
@@ -241,6 +277,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ("hp_turn_input", "INTEGER DEFAULT NULL"),
         ("hp_turn_output", "INTEGER DEFAULT NULL"),
         ("hp_alerts_fired", "TEXT DEFAULT NULL"),
+        ("pid", "INTEGER DEFAULT NULL"),
+        ("crew", "TEXT DEFAULT NULL"),
+        ("session_id", "TEXT DEFAULT NULL"),
+        ("rss_bytes", "INTEGER DEFAULT NULL"),
     ]:
         if col not in agent_cols:
             conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {typedef}")

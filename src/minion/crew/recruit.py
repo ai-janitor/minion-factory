@@ -12,6 +12,7 @@ from minion.auth import VALID_CAPABILITIES, VALID_CLASSES
 from minion.comms import register as _register
 from minion.crew._tmux import finalize_layout, style_pane
 from minion.crew.daemon import init_swarm, spawn_pane, start_swarm
+from minion.crew.spawn import _find_crew_file
 
 
 def recruit_agent(
@@ -19,6 +20,7 @@ def recruit_agent(
     agent_class: str,
     crew: str,
     *,
+    from_crew: str = "",
     capabilities: str = "",
     system: str = "",
     provider: str = "claude",
@@ -30,6 +32,32 @@ def recruit_agent(
     project_dir: str = ".",
 ) -> dict[str, Any]:
     """Add a single ad-hoc agent into an already-running crew tmux session."""
+
+    project_dir = os.path.abspath(project_dir)
+
+    # --- Pull character config from source crew YAML ---
+    if from_crew:
+        source_file = _find_crew_file(from_crew, project_dir)
+        if not source_file:
+            return {"error": f"BLOCKED: Source crew '{from_crew}' not found."}
+        with open(source_file) as f:
+            source_cfg = yaml.safe_load(f)
+        char_cfg = source_cfg.get("agents", {}).get(name)
+        if not char_cfg:
+            available = sorted(source_cfg.get("agents", {}).keys())
+            return {"error": f"BLOCKED: Character '{name}' not in crew '{from_crew}'. Available: {', '.join(available)}"}
+        # Source crew values are defaults — CLI flags override
+        agent_class = agent_class or char_cfg.get("role", "coder")
+        provider = provider or char_cfg.get("provider", "claude")
+        model = model or char_cfg.get("model", "")
+        transport = transport or char_cfg.get("transport", "daemon")
+        permission_mode = permission_mode or char_cfg.get("permission_mode", "")
+        zone = zone or char_cfg.get("zone", "")
+        system = system or char_cfg.get("system", "")
+        if not capabilities:
+            source_caps = char_cfg.get("capabilities")
+            if isinstance(source_caps, list):
+                capabilities = ",".join(str(c) for c in source_caps)
 
     # --- Validate inputs ---
     if agent_class not in VALID_CLASSES:
@@ -56,7 +84,6 @@ def recruit_agent(
         return {"error": f"BLOCKED: tmux session '{tmux_session}' not found. Spawn the crew first."}
 
     # --- Register agent in DB ---
-    project_dir = os.path.abspath(project_dir)
     _register(
         agent_name=name,
         agent_class=agent_class,
@@ -64,7 +91,16 @@ def recruit_agent(
         transport=transport,
     )
 
-    # --- Build minimal single-agent YAML ---
+    # Write crew column
+    from minion.db import get_db
+    conn = get_db()
+    try:
+        conn.execute("UPDATE agents SET crew = ? WHERE name = ?", (crew, name))
+        conn.commit()
+    finally:
+        conn.close()
+
+    # --- Build single-agent YAML with full config ---
     agent_cfg: dict[str, Any] = {
         "role": agent_class,
         "provider": provider,

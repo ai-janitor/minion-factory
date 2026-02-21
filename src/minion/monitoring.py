@@ -101,6 +101,13 @@ def party_status() -> dict[str, object]:
                 })
             a["claimed_files"] = claimed_files
 
+            # Compaction count from compaction_log
+            cursor.execute(
+                "SELECT COUNT(*) as cnt FROM compaction_log WHERE agent_name = ?",
+                (name,),
+            )
+            a["compaction_count"] = cursor.fetchone()["cnt"]
+
             # Strip verbose fields for compact dashboard
             for key in ("context_summary", "files_read"):
                 a.pop(key, None)
@@ -258,9 +265,17 @@ def sitrep() -> dict[str, object]:
     cursor = conn.cursor()
     now = datetime.datetime.now()
     try:
-        # Agents with HP
+        # Agents with HP + compaction metrics
         cursor.execute("SELECT * FROM agents ORDER BY last_seen DESC")
-        agents = [enrich_agent_row(row, now) for row in cursor.fetchall()]
+        agents = []
+        for row in cursor.fetchall():
+            a = enrich_agent_row(row, now)
+            cursor.execute(
+                "SELECT COUNT(*) as cnt FROM compaction_log WHERE agent_name = ?",
+                (a["name"],),
+            )
+            a["compaction_count"] = cursor.fetchone()["cnt"]
+            agents.append(a)
 
         # Active tasks
         cursor.execute(

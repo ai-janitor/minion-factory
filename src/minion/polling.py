@@ -173,6 +173,9 @@ def _check_signals(agent: str) -> str | None:
         cur.execute("SELECT agent_name FROM agent_retire WHERE agent_name = ?", (agent,))
         if cur.fetchone():
             return "retire"
+        cur.execute("SELECT agent_name FROM agent_interrupt WHERE agent_name = ?", (agent,))
+        if cur.fetchone():
+            return "interrupt"
         return None
     finally:
         conn.close()

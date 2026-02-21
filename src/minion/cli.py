@@ -642,35 +642,42 @@ def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, ru
 
 @cli.command()
 @click.option("--name", required=True, help="Agent name")
-@click.option("--class", "agent_class", required=True, help="Agent class (lead, coder, builder, ...)")
+@click.option("--class", "agent_class", default="", help="Agent class (lead, coder, builder, ...)")
 @click.option("--crew", required=True, help="Running crew to join (tmux session crew-<name>)")
+@click.option("--from-crew", default="", help="Source crew YAML to pull character config from")
 @click.option("--capabilities", default="", help="Comma-separated capabilities (code,review,...)")
 @click.option("--system", default="", help="System prompt override")
-@click.option("--provider", default="claude", help="Provider (claude, codex, opencode, gemini)")
+@click.option("--provider", default="", help="Provider (claude, codex, opencode, gemini)")
 @click.option("--model", default="", help="Model override")
-@click.option("--transport", default="daemon", help="Transport type (daemon, daemon-ts)")
+@click.option("--transport", default="", help="Transport type (daemon, daemon-ts)")
 @click.option("--permission-mode", default="", help="Permission mode for the agent")
 @click.option("--zone", default="", help="Zone assignment")
 @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
               help="Daemon runtime: python or ts.")
 @click.pass_context
 def recruit(ctx: click.Context, name: str, agent_class: str, crew: str,
-            capabilities: str, system: str, provider: str, model: str,
-            transport: str, permission_mode: str, zone: str, runtime: str) -> None:
+            from_crew: str, capabilities: str, system: str, provider: str,
+            model: str, transport: str, permission_mode: str, zone: str,
+            runtime: str) -> None:
     """Add an ad-hoc agent into a running crew. Lead only."""
     from minion.auth import require_class
     require_class("lead")(lambda: None)()
+    # --from-crew or --class is required
+    if not from_crew and not agent_class:
+        click.echo("BLOCKED: Provide --from-crew or --class.", err=True)
+        raise SystemExit(1)
     from minion.crew import recruit_agent as _recruit
     project_dir = ctx.obj.get("project_dir") or "."
     _output(_recruit(
         name=name,
-        agent_class=agent_class,
+        agent_class=agent_class or "coder",
         crew=crew,
+        from_crew=from_crew,
         capabilities=capabilities,
         system=system,
-        provider=provider,
+        provider=provider or "claude",
         model=model,
-        transport=transport,
+        transport=transport or "daemon",
         permission_mode=permission_mode,
         zone=zone,
         runtime=runtime,
@@ -700,6 +707,31 @@ def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> N
     require_class("lead")(lambda: None)()
     from minion.crew import retire_agent as _retire_agent
     _output(_retire_agent(agent, requesting_agent), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--agent", required=True, help="Agent to interrupt")
+@click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
+@click.pass_context
+def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
+    """Interrupt an agent's current invocation. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.crew import interrupt_agent as _interrupt
+    _output(_interrupt(agent, requesting_agent), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--agent", required=True, help="Agent to resume")
+@click.option("--message", required=True, help="Message to send on resume")
+@click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
+@click.pass_context
+def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
+    """Send a resume message to an interrupted agent. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.comms import send as _send
+    _output(_send(from_agent, agent, message), ctx.obj["human"])
 
 
 @cli.command("hand-off-zone")

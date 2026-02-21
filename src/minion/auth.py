@@ -191,6 +191,8 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "stand-down":            ({"lead"}, "Dismiss the party"),
     "retire-agent":          ({"lead"}, "Signal a single daemon to exit gracefully"),
     "recruit":               ({"lead"}, "Add an ad-hoc agent into a running crew"),
+    "interrupt":             ({"lead"}, "Interrupt an agent's current invocation"),
+    "resume":                ({"lead"}, "Send a resume message to an interrupted agent"),
     "hand-off-zone":         (VALID_CLASSES, "Direct zone handoff between agents"),
     "tools":                 (VALID_CLASSES, "List available tools for your class"),
     "pull-task":             (VALID_CLASSES, "Auto-pull next actionable task from DAG"),

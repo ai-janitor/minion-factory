@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import queue
+import resource
 import signal
 import subprocess
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from minion.defaults import ENV_CLASS, ENV_DB_PATH, ENV_DOCS_DIR
@@ -63,6 +66,34 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _get_rss_bytes(pid: int | None = None) -> int:
+    """RSS in bytes for a given PID. Falls back to self if pid is None or stale.
+
+    macOS `ps -o rss=` returns KB. Linux `/proc/<pid>/statm` page 1 is pages.
+    """
+    target = pid or os.getpid()
+    try:
+        if platform.system() == "Linux":
+            with open(f"/proc/{target}/statm") as f:
+                pages = int(f.read().split()[1])
+            return pages * resource.getpagesize()
+        else:
+            # macOS / BSD — ps returns KB
+            result = subprocess.run(
+                ["ps", "-o", "rss=", "-p", str(target)],
+                capture_output=True, text=True, timeout=2,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip()) * 1024
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    # Fallback: measure self (daemon)
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if platform.system() == "Linux":
+        rss *= 1024
+    return rss
+
+
 from dataclasses import dataclass
 
 
@@ -74,6 +105,7 @@ class AgentRunResult:
     command_name: str
     input_tokens: int = 0
     output_tokens: int = 0
+    interrupted: bool = False
 
 
 class AgentDaemon:
@@ -97,6 +129,10 @@ class AgentDaemon:
         self._session_output_tokens = 0
         self._tool_overhead_tokens = 0  # Claude Code system prompt/tools overhead, measured at boot
         self._context_window = 0        # Set from modelUsage.contextWindow in stream-json
+
+        self._child_pid: int | None = None
+        self._generation = 0
+        self._invocation_row_id: int | None = None
 
         self.state_path = self.config.state_dir / f"{self.agent_name}.json"
         self.resume_ready = self._load_resume_ready()
@@ -134,15 +170,20 @@ class AgentDaemon:
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
 
+        # Write PID + crew to DB so observability doesn't depend on state files
+        crew_name = self.config.config_path.stem if self.config.config_path else None
+        self._write_agent_runtime(crew=crew_name)
+
         self._log(f"starting daemon for {self.agent_name}")
         self._log(f"provider: {self.agent_cfg.provider} (resume_ready={self.resume_ready})")
         self._log(f"db: {self.config.comms_db}")
         self._log(f"project_dir: {self.config.project_dir}")
         self._log("mode: poll (minion poll)")
 
-        generation = 0
+        self._generation = 0
         while not self._stop_event.is_set():
-            generation += 1
+            self._generation += 1
+            generation = self._generation
             exit_reason = self._poll_generation(generation)
             if exit_reason == "phoenix_down" and not self._stop_event.is_set():
                 self._log(f"🔄 auto-respawn: generation {generation} died (context exhausted), rebooting as generation {generation + 1}")
@@ -372,9 +413,18 @@ class AgentDaemon:
                 self._stop_event.set()
                 return True  # invocation itself succeeded, but agent is cooked
 
+        if result.interrupted:
+            self._log("invocation interrupted by lead — returning to poll loop")
+            return True
+
         if result.compaction_detected:
             self.inject_history_next_turn = True
             self._log("detected context compaction marker; history will be re-injected next cycle")
+            # Log compaction event with token counts
+            self._log_compaction(
+                tokens_pre=self._session_input_tokens,
+                tokens_post=result.input_tokens,
+            )
 
         if result.timed_out:
             self.last_error = f"{self.agent_cfg.provider} produced no output for {self.agent_cfg.no_output_timeout_sec}s"
@@ -608,6 +658,9 @@ class AgentDaemon:
                 bufsize=1,
                 env=env,
             )
+            self._child_pid = proc.pid
+            self._update_child_pid_in_db()
+            self._invocation_row_id = self._insert_invocation_start()
         except FileNotFoundError:
             self._log(f"command not found: {cmd[0]}")
             return AgentRunResult(exit_code=127, timed_out=False, compaction_detected=False, command_name=cmd[0])
@@ -631,8 +684,10 @@ class AgentDaemon:
         stream_fp = open(stream_log, "a")
 
         timed_out = False
+        interrupted = False
         compaction_detected = False
         last_output_at = time.monotonic()
+        last_interrupt_check = time.monotonic()
         displayed_chars = 0
         hidden_chars = 0
         total_input_tokens = 0
@@ -648,6 +703,14 @@ class AgentDaemon:
                     timed_out = True
                     proc.terminate()
                     break
+                # Check interrupt flag every ~2s to avoid DB spam
+                if time.monotonic() - last_interrupt_check > 2.0:
+                    last_interrupt_check = time.monotonic()
+                    if self._check_interrupt():
+                        self._log("interrupt flag detected — terminating child process")
+                        interrupted = True
+                        proc.terminate()
+                        break
                 continue
 
             if line is None:
@@ -684,7 +747,7 @@ class AgentDaemon:
 
         stream_fp.close()
 
-        if timed_out and proc.poll() is None:
+        if (timed_out or interrupted) and proc.poll() is None:
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
@@ -697,14 +760,17 @@ class AgentDaemon:
             exit_code = proc.wait(timeout=5)
 
         self._print_stream_end(cmd[0], displayed_chars=displayed_chars, hidden_chars=hidden_chars)
-        return AgentRunResult(
+        result = AgentRunResult(
             exit_code=exit_code,
             timed_out=timed_out,
             compaction_detected=compaction_detected,
             command_name=cmd[0],
             input_tokens=total_input_tokens,
             output_tokens=total_output_tokens,
+            interrupted=interrupted,
         )
+        self._finalize_invocation(result)
+        return result
 
     def _render_stream_line(self, line: str) -> Tuple[str, bool]:
         raw = line.rstrip("\n")
@@ -789,6 +855,11 @@ class AgentDaemon:
 
         # Prefer modelUsage from result event — it has contextWindow too
         if data.get("type") == "result":
+            # Capture session ID for resume support
+            sid = data.get("session_id") or data.get("sessionId")
+            if sid and isinstance(sid, str):
+                self._update_session_id(sid)
+
             model_usage = data.get("modelUsage")
             if isinstance(model_usage, dict):
                 for model_info in model_usage.values():
@@ -915,6 +986,161 @@ class AgentDaemon:
         except (OSError, json.JSONDecodeError, TypeError):
             return {}
 
+    def _write_agent_runtime(self, crew: str | None = None) -> None:
+        """Write PID, crew to the agents table. Child PID + RSS written per-invocation."""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                "UPDATE agents SET pid = ?, crew = ? WHERE name = ?",
+                (self._child_pid, crew, self.agent_name),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            self._log(f"WARNING: _write_agent_runtime failed: {exc}")
+
+    def _update_child_pid_in_db(self) -> None:
+        """Write the current child PID + its RSS to agents (current state)."""
+        import sqlite3
+        try:
+            rss = _get_rss_bytes(self._child_pid)
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                "UPDATE agents SET pid = ?, rss_bytes = ? WHERE name = ?",
+                (self._child_pid, rss, self.agent_name),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            self._log(f"WARNING: _update_child_pid_in_db failed: {exc}")
+
+    def _insert_invocation_start(self) -> int | None:
+        """INSERT a row into invocation_log when child spawns. Returns row id."""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            cur = conn.execute(
+                """INSERT INTO invocation_log
+                   (agent_name, pid, model, generation, rss_bytes, started_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    self.agent_name,
+                    self._child_pid,
+                    self.agent_cfg.model,
+                    self._generation,
+                    _get_rss_bytes(self._child_pid),
+                    utc_now_iso(),
+                ),
+            )
+            row_id = cur.lastrowid
+            conn.commit()
+            conn.close()
+            return row_id
+        except Exception as exc:
+            self._log(f"WARNING: _insert_invocation_start failed: {exc}")
+            return None
+
+    def _finalize_invocation(self, result: "AgentRunResult") -> None:
+        """UPDATE the invocation_log row with end-of-run data."""
+        row_id = getattr(self, "_invocation_row_id", None)
+        if not row_id:
+            return
+        import sqlite3
+        try:
+            rss = _get_rss_bytes(self._child_pid)
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                """UPDATE invocation_log SET
+                   rss_bytes = ?, input_tokens = ?, output_tokens = ?,
+                   exit_code = ?, timed_out = ?, interrupted = ?,
+                   compacted = ?, ended_at = ?
+                   WHERE id = ?""",
+                (
+                    rss,
+                    result.input_tokens,
+                    result.output_tokens,
+                    result.exit_code,
+                    int(result.timed_out),
+                    int(result.interrupted),
+                    int(result.compaction_detected),
+                    utc_now_iso(),
+                    row_id,
+                ),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            self._log(f"WARNING: _finalize_invocation failed: {exc}")
+        finally:
+            self._invocation_row_id = None
+
+    def _check_interrupt(self) -> bool:
+        """Check agent_interrupt table. Returns True if flag is set, and clears it."""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=2)
+            conn.execute("PRAGMA busy_timeout=2000")
+            cur = conn.cursor()
+            cur.execute("SELECT agent_name FROM agent_interrupt WHERE agent_name = ?", (self.agent_name,))
+            row = cur.fetchone()
+            if row:
+                cur.execute("DELETE FROM agent_interrupt WHERE agent_name = ?", (self.agent_name,))
+                conn.commit()
+                conn.close()
+                return True
+            conn.close()
+        except Exception:
+            pass
+        return False
+
+    def _log_compaction(self, tokens_pre: int, tokens_post: int) -> None:
+        """INSERT a compaction event into compaction_log."""
+        import sqlite3
+        try:
+            rss = _get_rss_bytes(self._child_pid)
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                """INSERT INTO compaction_log
+                   (agent_name, model, pid, rss_pre_bytes, tokens_pre, tokens_post, generation, compacted_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    self.agent_name,
+                    self.agent_cfg.model,
+                    os.getpid(),
+                    rss,
+                    tokens_pre,
+                    tokens_post,
+                    self._generation,
+                    utc_now_iso(),
+                ),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            self._log(f"WARNING: _log_compaction failed: {exc}")
+
+    def _update_session_id(self, session_id: str) -> None:
+        """Store session_id on provider and in DB."""
+        self._provider.session_id = session_id
+        import sqlite3
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute(
+                "UPDATE agents SET session_id = ? WHERE name = ?",
+                (session_id, self.agent_name),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            self._log(f"WARNING: _update_session_id failed: {exc}")
+
     def _write_state(self, status: str, **extra: Any) -> None:
         payload = {
             "agent": self.agent_name,
@@ -928,6 +1154,22 @@ class AgentDaemon:
         payload.update(extra)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(payload, indent=2))
+
+        # Piggyback RSS update — measure child if alive, else last known
+        if self._child_pid:
+            import sqlite3
+            try:
+                rss = _get_rss_bytes(self._child_pid)
+                conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+                conn.execute("PRAGMA busy_timeout=5000")
+                conn.execute(
+                    "UPDATE agents SET rss_bytes = ? WHERE name = ?",
+                    (rss, self.agent_name),
+                )
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
 
     def _log(self, message: str) -> None:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
