@@ -190,6 +190,7 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "spawn-party":           (VALID_CLASSES, "Spawn daemon workers in tmux panes (auto-registers lead)"),
     "stand-down":            ({"lead"}, "Dismiss the party"),
     "retire-agent":          ({"lead"}, "Signal a single daemon to exit gracefully"),
+    "recruit":               ({"lead"}, "Add an ad-hoc agent into a running crew"),
     "hand-off-zone":         (VALID_CLASSES, "Direct zone handoff between agents"),
     "tools":                 (VALID_CLASSES, "List available tools for your class"),
     "pull-task":             (VALID_CLASSES, "Auto-pull next actionable task from DAG"),
