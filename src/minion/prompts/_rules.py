@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 
 from minion.daemon.contracts import load_contract
+from minion.db import format_trigger_codebook
 
 from .capabilities import load_capability_prompts
 from .roles import load_role_prompt
@@ -39,9 +40,12 @@ def load_rules(docs_dir: Path, agent: str, role: str, capabilities: tuple[str, .
     # Capability-level prompts from capabilities/{cap}/prompt.md
     cap_text = load_capability_prompts(set(capabilities))
 
+    trigger_text = format_trigger_codebook()
+
     sections = [rules_text]
     if role_text:
         sections.append(role_text)
     if cap_text:
         sections.append(cap_text)
+    sections.append(trigger_text)
     return "\n\n".join(sections)
