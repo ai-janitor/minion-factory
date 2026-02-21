@@ -130,7 +130,7 @@ def fenix_down(agent_name: str, files: str, manifest: str = "") -> dict[str, obj
 
 def halt(requesting_agent: str) -> dict[str, object]:
     """Graceful pause — broadcast halt to all agents so they finish work, fenix_down, stand down."""
-    from minion.comms import send_message
+    from minion.comms import send
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -141,7 +141,7 @@ def halt(requesting_agent: str) -> dict[str, object]:
 
         halted = []
         for agent in agents:
-            send_message(
+            send(
                 requesting_agent, agent,
                 "HALT: Finish your current work, then fenix_down and stand down. "
                 "This is a graceful pause — save your state so you can resume later. "
