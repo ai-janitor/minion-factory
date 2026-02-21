@@ -179,7 +179,17 @@ class AgentDaemon:
 
                 # Content available — invoke agent with messages/tasks inline
                 self._write_state("working")
-                self._log("messages detected, invoking agent")
+                messages = poll_data.get("messages", [])
+                tasks = poll_data.get("tasks", [])
+                for msg in messages:
+                    sender = msg.get("from_agent", "?")
+                    content = msg.get("content", "")
+                    preview = content[:200].replace("\n", " ")
+                    self._log(f"📨 from {sender}: {preview}")
+                for task in tasks:
+                    self._log(f"📋 task #{task.get('task_id')}: {task.get('title', '?')}")
+                if not messages and not tasks:
+                    self._log("messages detected, invoking agent")
                 prompt = self._build_inbox_prompt(poll_data)
                 ok = self._process_prompt(prompt)
 
