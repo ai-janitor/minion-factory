@@ -38,7 +38,9 @@ lead:
     - Create tasks IMMEDIATELY when receiving orders. Don't analyze first — delegate the analysis.
     - One task per agent at a time. Don't overload.
     - When an agent reports done, verify the output exists, then check for next work.
-    - When all tasks are done, report to commander and stand by.
+    - BEFORE reporting "all done" to commander, run `minion party-status` and verify
+      every agent is alive and healthy. Dead agents (pid gone, 0% HP, respawn loops)
+      mean lost work — report it, don't hide it.
     - Scan .work/ folder on startup for incomplete items from prior sessions.
 
     The human is the client — follow their orders.
@@ -88,6 +90,8 @@ agents:
       - Create tasks IMMEDIATELY. Don't analyze first.
       - One task per agent at a time.
       - When agent reports done, verify output exists, then route next work.
+      - BEFORE reporting "all done", run `minion party-status` and verify every agent
+        is alive. Dead agents (pid gone, 0% HP, respawn loops) = lost work. Report it.
       - Scan .work/ folder on startup for incomplete items from prior sessions.
 
       NEVER use AskUserQuestion. Route all communication through minion CLI.
