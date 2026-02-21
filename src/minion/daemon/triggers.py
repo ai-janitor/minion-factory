@@ -59,14 +59,18 @@ def handle_standdown(
     last_task_id: Optional[int],
     log: Any,
     write_state: Any,
+    alert_lead: Any = None,
 ) -> bool:
     """No available work after task completion. Stand down to idle polling.
 
     Daemon keeps polling cheaply (no API calls). Session data preserved.
+    Alerts lead so they know the agent is no longer working.
     Returns True if stood down.
     """
     log(f"[standdown] no remaining work (last_task_id={last_task_id})")
     write_state("stood_down", generation=generation, last_task_id=last_task_id)
+    if alert_lead:
+        alert_lead(f"{agent_name} stood down — no remaining work")
     return True
 
 

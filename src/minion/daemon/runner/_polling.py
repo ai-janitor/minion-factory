@@ -84,7 +84,7 @@ class PollingMixin:
         """Agent has no work — preserve session, keep daemon polling cheaply."""
         self._stood_down = handle_standdown(
             self.agent_name, generation, self._last_task_id,
-            self._log, self._write_state,
+            self._log, self._write_state, self._alert_lead_poll,
         )
 
     def _wake_from_standdown(self, poll_data: Dict[str, Any]) -> None:
@@ -110,3 +110,4 @@ class PollingMixin:
     # Defined in other mixins
     def _log(self, message: str) -> None: ...
     def _write_state(self, status: str, **extra: Any) -> None: ...
+    def _alert_lead_poll(self, message: str) -> None: ...
