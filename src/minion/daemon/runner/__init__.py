@@ -33,7 +33,7 @@ from ._watcher_mode import WatcherModeMixin
 
 from ..buffer import RollingBuffer
 from ..config import SwarmConfig
-from ..triggers import handle_signal
+from ..triggers import handle_signal, detect_halt
 
 from minion.providers import get_provider
 
@@ -154,6 +154,11 @@ class AgentDaemon(
 
         self._write_state("idle", generation=generation)
 
+        # Fetch any unconsumed fenix_down records for resume context
+        pending_fenix_records = self._fetch_fenix_records()
+        if pending_fenix_records:
+            self._log(f"found {len(pending_fenix_records)} fenix_down record(s) from prior session")
+
         while not self._stop_event.is_set():
             print(".", end="", flush=True)
             poll_data = self._poll_inbox()
@@ -192,6 +197,13 @@ class AgentDaemon(
             if task_ids:
                 self._last_task_id = task_ids[0]
 
+            # Inject fenix_down records from prior session into first poll cycle
+            if pending_fenix_records:
+                poll_data["fenix_down_records"] = pending_fenix_records
+                pending_fenix_records = []  # only inject once
+
+            halt_requested = detect_halt(poll_data)
+
             prompt = self._build_inbox_prompt(poll_data)
             ok = self._process_prompt(prompt)
 
@@ -202,6 +214,12 @@ class AgentDaemon(
                 state = self._read_state()
                 if state.get("status") == "phoenix_down":
                     return "phoenix_down"
+                # Halt: agent finished its work after seeing halt message — exit cleanly
+                if halt_requested:
+                    self._log("halt complete — agent finished work and saved state. Exiting.")
+                    self._write_state("halted", generation=generation)
+                    self._stop_event.set()
+                    return "halt"
                 # Standdown check: did the agent just finish its last piece of work?
                 if not self._check_available_work():
                     self._standdown(generation)

@@ -128,6 +128,32 @@ def fenix_down(agent_name: str, files: str, manifest: str = "") -> dict[str, obj
         conn.close()
 
 
+def halt(requesting_agent: str) -> dict[str, object]:
+    """Graceful pause — broadcast halt to all agents so they finish work, fenix_down, stand down."""
+    from minion.comms import send_message
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT name FROM agents WHERE name != ?", (requesting_agent,))
+        agents = [row["name"] for row in cursor.fetchall()]
+        if not agents:
+            return {"error": "No other agents registered to halt."}
+
+        halted = []
+        for agent in agents:
+            send_message(
+                requesting_agent, agent,
+                "HALT: Finish your current work, then fenix_down and stand down. "
+                "This is a graceful pause — save your state so you can resume later. "
+                "Update your task progress before stopping.",
+            )
+            halted.append(agent)
+
+        return {"status": "halt_broadcast", "halted": halted, "count": len(halted)}
+    finally:
+        conn.close()
+
+
 def debrief(agent_name: str, debrief_file: str) -> dict[str, object]:
     conn = get_db()
     cursor = conn.cursor()

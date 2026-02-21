@@ -8,6 +8,8 @@ What exists? What surrounds the change? Read the code, understand the patterns, 
 ## Constraints
 What can't change? What's limited? Dependencies, backward compatibility, performance budgets, API contracts, file ownership, deployment targets. Name the constraints before designing the solution. A solution that ignores constraints is not a solution.
 
+**Know the target hardware.** Before writing code that touches hardware (GPU, network, storage, sensors), read the constraints doc — what the hardware CAN and CANNOT do, memory model, API limits, performance boundaries. If no constraints doc exists, research it first and write one to `.work/intel/`. Check the battle plan. Never write code against hardware you haven't profiled. Never draw performance conclusions without proving the code path is correct and actually exercising the hardware.
+
 ## Consequences
 What breaks? What's affected downstream? Who else touches this code? What happens at scale, at failure, at edge cases? Trace the blast radius before committing to an approach. If you can't name the consequences, you don't understand the change.
 

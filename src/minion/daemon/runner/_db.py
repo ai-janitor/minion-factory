@@ -169,5 +169,28 @@ class DBMixin:
         except Exception as exc:
             self._log(f"WARNING: _update_session_id failed: {exc}")
 
+    def _fetch_fenix_records(self) -> list[dict[str, Any]]:
+        """Fetch and consume unconsumed fenix_down records for this agent."""
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=5000")
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT * FROM fenix_down_records WHERE agent_name = ? AND consumed = 0 ORDER BY created_at DESC",
+                (self.agent_name,),
+            )
+            records = [dict(row) for row in cur.fetchall()]
+            if records:
+                ids = [r["id"] for r in records]
+                placeholders = ",".join(["?"] * len(ids))
+                cur.execute(f"UPDATE fenix_down_records SET consumed = 1 WHERE id IN ({placeholders})", ids)
+                conn.commit()
+            conn.close()
+            return records
+        except Exception as exc:
+            self._log(f"WARNING: _fetch_fenix_records failed: {exc}")
+            return []
+
     # Defined in other mixins
     def _log(self, message: str) -> None: ...

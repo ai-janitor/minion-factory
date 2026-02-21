@@ -649,6 +649,17 @@ def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
     _output(_stand_down(agent, crew), ctx.obj["human"])
 
 
+@cli.command("halt")
+@click.option("--agent", required=True, help="Lead agent issuing the halt")
+@click.pass_context
+def halt_cmd(ctx: click.Context, agent: str) -> None:
+    """Graceful pause — agents finish work, fenix_down, stand down."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.lifecycle import halt as _halt
+    _output(_halt(agent), ctx.obj["human"])
+
+
 @cli.command("retire-agent")
 @click.option("--agent", required=True, help="Agent to retire")
 @click.option("--requesting-agent", required=True, help="Lead requesting retirement")

@@ -96,6 +96,15 @@ def handle_wake_from_standdown(
         clear_session()
 
 
+def detect_halt(poll_data: Dict[str, Any]) -> bool:
+    """Check if any message in poll_data contains a HALT trigger."""
+    for msg in poll_data.get("messages", []):
+        content = (msg.get("content") or "").upper()
+        if "HALT:" in content or "HALT " in content:
+            return True
+    return False
+
+
 def handle_signal(
     signum: int,
     log: Any,

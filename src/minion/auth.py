@@ -126,6 +126,7 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 TRIGGER_WORDS: dict[str, str] = {
     "fenix_down": "Dump all knowledge to disk before context death. Revival protocol.",
     "moon_crash": "Emergency shutdown. Everyone fenix_down NOW. No new task assignments.",
+    "halt": "Finish current work, save state (fenix_down), stand down. Graceful pause — not an emergency. You will be resumed later.",
     "sitrep": "Request status report from target agent.",
     "rally": "All agents focus on the specified target/zone.",
     "retreat": "Pull back from current approach, reassess.",
@@ -191,6 +192,7 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "clear-moon-crash":      ({"lead"}, "Clear emergency flag, resume assignments"),
     "list-crews":            ({"lead"}, "List available crew YAML files"),
     "spawn-party":           (VALID_CLASSES, "Spawn daemon workers in tmux panes (auto-registers lead)"),
+    "halt":                  ({"lead"}, "Graceful pause — agents finish work, fenix_down, stand down"),
     "stand-down":            ({"lead"}, "Dismiss the party"),
     "retire-agent":          ({"lead"}, "Signal a single daemon to exit gracefully"),
     "recruit":               ({"lead"}, "Add an ad-hoc agent into a running crew"),

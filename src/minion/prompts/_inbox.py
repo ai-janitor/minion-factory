@@ -55,6 +55,26 @@ def format_inbox(docs_dir: Path, poll_data: Dict[str, Any], agent: str) -> str:
                 inbox_lines.append(dag_fmt.replace("{dag}", dag))
         inbox_lines.append(tmpl["task_footer"] if tmpl else "=== END TASKS ===")
 
+    # Fenix-down records — prior session state for resume
+    fenix_records = poll_data.get("fenix_down_records", [])
+    if fenix_records:
+        inbox_lines.append("")
+        inbox_lines.append("=== PRIOR SESSION STATE (fenix_down) ===")
+        inbox_lines.append("You were halted/died in a previous session. Here is what you saved:")
+        for rec in fenix_records:
+            manifest = rec.get("manifest", "")
+            files = rec.get("files", "[]")
+            if isinstance(files, str):
+                import json as _json
+                try:
+                    files = _json.loads(files)
+                except Exception:
+                    files = [files]
+            inbox_lines.append(f"  Manifest: {manifest}" if manifest else "  (no manifest)")
+            inbox_lines.append(f"  Files written: {', '.join(files)}")
+        inbox_lines.append("Read these files to catch up on where you left off.")
+        inbox_lines.append("=== END PRIOR SESSION STATE ===")
+
     if tmpl:
         inbox_lines.append("")
         for line in tmpl["post_instructions"]:
