@@ -124,6 +124,11 @@ class AgentDaemon(
             generation = self._generation
             exit_reason = self._poll_generation(generation)
             if exit_reason == "phoenix_down":
+                # Check if a halt was broadcast while we were dying — don't respawn into a halt
+                if self._has_pending_halt():
+                    self._log("halt detected during phoenix_down — not respawning")
+                    self._write_state("halted", generation=generation)
+                    break
                 self._log(f"\U0001f504 auto-respawn: generation {generation} died (context exhausted), rebooting as generation {generation + 1}")
                 self._reset_for_respawn()
                 continue

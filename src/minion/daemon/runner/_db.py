@@ -169,6 +169,26 @@ class DBMixin:
         except Exception as exc:
             self._log(f"WARNING: _update_session_id failed: {exc}")
 
+    def _has_pending_halt(self) -> bool:
+        """Check if there's a HALT message waiting in the inbox."""
+        try:
+            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
+            conn.execute("PRAGMA busy_timeout=5000")
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT content FROM messages WHERE to_agent = ? AND read = 0",
+                (self.agent_name,),
+            )
+            for row in cur.fetchall():
+                content = (row[0] or "").upper()
+                if "HALT:" in content or "HALT " in content:
+                    conn.close()
+                    return True
+            conn.close()
+        except Exception:
+            pass
+        return False
+
     def _fetch_fenix_records(self) -> list[dict[str, Any]]:
         """Fetch and consume unconsumed fenix_down records for this agent."""
         try:
