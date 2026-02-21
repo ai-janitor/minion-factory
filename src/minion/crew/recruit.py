@@ -44,20 +44,27 @@ def recruit_agent(
             source_cfg = yaml.safe_load(f)
         char_cfg = source_cfg.get("agents", {}).get(name)
         if not char_cfg:
-            available = sorted(source_cfg.get("agents", {}).keys())
-            return {"error": f"BLOCKED: Character '{name}' not in crew '{from_crew}'. Available: {', '.join(available)}"}
-        # Source crew values are defaults — CLI flags override
-        agent_class = agent_class or char_cfg.get("role", "coder")
-        provider = provider or char_cfg.get("provider", "claude")
-        model = model or char_cfg.get("model", "")
-        transport = transport or char_cfg.get("transport", "daemon")
-        permission_mode = permission_mode or char_cfg.get("permission_mode", "")
-        zone = zone or char_cfg.get("zone", "")
-        system = system or char_cfg.get("system", "")
-        if not capabilities:
-            source_caps = char_cfg.get("capabilities")
-            if isinstance(source_caps, list):
-                capabilities = ",".join(str(c) for c in source_caps)
+            # Name not in source crew — try matching by class for cloning
+            by_class = {
+                n: c for n, c in source_cfg.get("agents", {}).items()
+                if c.get("role") == agent_class
+            }
+            if by_class:
+                char_cfg = next(iter(by_class.values()))
+            # If still nothing, fall through — use CLI flags/defaults
+        if char_cfg:
+            # Source crew values are defaults — CLI flags override
+            agent_class = agent_class or char_cfg.get("role", "coder")
+            provider = provider or char_cfg.get("provider", "claude")
+            model = model or char_cfg.get("model", "")
+            transport = transport or char_cfg.get("transport", "daemon")
+            permission_mode = permission_mode or char_cfg.get("permission_mode", "")
+            zone = zone or char_cfg.get("zone", "")
+            system = system or char_cfg.get("system", "")
+            if not capabilities:
+                source_caps = char_cfg.get("capabilities")
+                if isinstance(source_caps, list):
+                    capabilities = ",".join(str(c) for c in source_caps)
 
     # --- Validate inputs ---
     if agent_class not in VALID_CLASSES:
