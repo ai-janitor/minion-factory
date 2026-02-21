@@ -33,9 +33,12 @@ def set_battle_plan(agent_name: str, plan: str) -> dict[str, object]:
             (now,),
         )
 
-        # Write plan to filesystem
+        # Write plan to filesystem — fail before DB insert if write fails
         plan_file = battle_plan_file_path(agent_name)
-        atomic_write_file(plan_file, plan)
+        try:
+            atomic_write_file(plan_file, plan)
+        except Exception as exc:
+            return {"error": f"BLOCKED: Failed to write battle plan file: {exc}"}
 
         cursor.execute(
             """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
@@ -117,9 +120,12 @@ def log_raid(agent_name: str, entry: str, priority: str = "normal") -> dict[str,
         if not cursor.fetchone():
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
 
-        # Write entry to filesystem
+        # Write entry to filesystem — fail before DB insert if write fails
         entry_file = raid_log_file_path(agent_name, priority)
-        atomic_write_file(entry_file, entry)
+        try:
+            atomic_write_file(entry_file, entry)
+        except Exception as exc:
+            return {"error": f"BLOCKED: Failed to write raid log file: {exc}"}
 
         cursor.execute(
             """INSERT INTO raid_log (agent_name, entry_file, priority, created_at)

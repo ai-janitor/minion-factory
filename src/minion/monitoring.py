@@ -301,6 +301,7 @@ def sitrep() -> dict[str, object]:
 
 def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
     """Check HP thresholds, send alerts to lead, track fired state. Own DB connection."""
+    import sys
     conn = get_db()
     now = now_iso()
     try:
@@ -325,19 +326,30 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
             for threshold, message in thresholds:
                 key = str(threshold)
                 if hp_pct <= threshold and key not in alerts_fired:
-                    content_file = message_file_path(lead, "system")
-                    atomic_write_file(content_file, message)
-                    cursor.execute(
-                        "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
-                        ("system", lead, content_file, now),
-                    )
-                    alerts_fired.append(key)
+                    try:
+                        content_file = message_file_path(lead, "system")
+                        atomic_write_file(content_file, message)
+                        cursor.execute(
+                            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
+                            ("system", lead, content_file, now),
+                        )
+                        alerts_fired.append(key)
+                    except Exception as exc:
+                        print(
+                            f"🚨 HP ALERT FAILED for {agent_name} (hp={hp_pct:.0f}%): {exc} — alert was: {message}",
+                            file=sys.stderr, flush=True,
+                        )
 
         conn.execute(
             "UPDATE agents SET hp_alerts_fired = ? WHERE name = ?",
             (json.dumps(alerts_fired) if alerts_fired else None, agent_name),
         )
         conn.commit()
+    except Exception as exc:
+        print(
+            f"🚨 _fire_hp_alerts CRASHED for {agent_name} (hp={hp_pct:.0f}%): {exc}",
+            file=sys.stderr, flush=True,
+        )
     finally:
         conn.close()
 

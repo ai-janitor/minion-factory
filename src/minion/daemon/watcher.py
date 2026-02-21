@@ -61,9 +61,17 @@ class CommsWatcher:
         self._change_signal = threading.Event()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, timeout=5.0)
-        conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=5.0)
+            conn.row_factory = sqlite3.Row
+            return conn
+        except sqlite3.OperationalError as exc:
+            import sys
+            print(
+                f"🚨 [{self.agent_name}] DB connect failed ({self.db_path}): {exc}",
+                file=sys.stderr, flush=True,
+            )
+            raise
 
     def start(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

@@ -40,7 +40,8 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     log_fp.write(f"[daemon-launch] bin={minion_bin} agent={agent_name} db={resolved_db} config={config_path}\n")
     log_fp.flush()
 
-    subprocess.Popen(
+    import time
+    proc = subprocess.Popen(
         [minion_bin, "daemon-run", "--config", config_path, "--agent", agent_name],
         stdin=subprocess.DEVNULL,
         stdout=log_fp,
@@ -48,6 +49,14 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
         start_new_session=True,
         env=env,
     )
+    # Give the process a moment to crash on startup — catch instant death
+    time.sleep(0.5)
+    if proc.poll() is not None:
+        log_fp.close()
+        raise RuntimeError(
+            f"daemon for {agent_name} died immediately (exit code {proc.returncode}). "
+            f"Check {log_file}"
+        )
     log_fp.close()
 
 
