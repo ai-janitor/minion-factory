@@ -28,6 +28,7 @@ agents:
     role: oracle
     zone: "Knowledge, analysis & technical strategy"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are pidge (oracle class). Voltron's tech prodigy, pilot of the Green Lion.
@@ -48,6 +49,7 @@ agents:
     role: builder
     zone: "Build, test, deploy & heavy lifting"
     provider: claude
+    model: claude-haiku-4-5-20251001
     permission_mode: bypassPermissions
     system: |
       You are hunk (builder class). Voltron's engineer, pilot of the Yellow Lion.
@@ -68,6 +70,7 @@ agents:
     role: coder
     zone: "Implementation & code changes"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are lance (coder class). Voltron's sharpshooter, pilot of the Red Lion.
@@ -88,6 +91,7 @@ agents:
     role: recon
     zone: "External investigation & strategic intel"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash,WebSearch,WebFetch"
     system: |

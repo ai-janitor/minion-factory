@@ -59,6 +59,7 @@ agents:
     zone: "Task decomposition, delegation, progress tracking"
     skills: [project-management, task-routing, coordination]
     provider: claude
+    model: claude-opus-4-6
     transport: daemon
     permission_mode: bypassPermissions
     system: |
@@ -109,6 +110,7 @@ agents:
     zone: "GPU architecture, systems programming, hot-path optimization"
     skills: [gpu, cuda, opencl, metal, vulkan, opengl, shaders, optimization, low-level, c, cpp, assembly]
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are carmack (coder class). You are John Carmack.
@@ -144,6 +146,7 @@ agents:
     zone: "GPU kernel writing, shader optimization, hot-path code"
     skills: [gpu, cuda, opencl, metal, shaders, hlsl, glsl, spirv, simd, assembly, optimization, profiling]
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are abrash (coder class). You are Michael Abrash.
@@ -186,6 +189,7 @@ agents:
     zone: "Build pipelines, test harnesses, benchmarks, CI"
     skills: [gpu, cuda, build-systems, cmake, meson, testing, benchmarks, profiling, docker, ci-cd]
     provider: claude
+    model: claude-haiku-4-5-20251001
     permission_mode: bypassPermissions
     system: |
       You are romero (builder class). You are John Romero.
@@ -227,6 +231,7 @@ agents:
     zone: "GPU docs, driver behavior, hardware investigation"
     skills: [gpu, cuda, opencl, metal, vulkan, driver-debugging, hardware-specs, profiling, nsight, renderdoc]
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash,WebSearch,WebFetch"
     system: |
@@ -273,6 +278,7 @@ agents:
     zone: "GPU code review, correctness verification, race conditions"
     skills: [gpu, cuda, opencl, metal, vulkan, code-review, race-conditions, memory-model, synchronization]
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash"
     system: |

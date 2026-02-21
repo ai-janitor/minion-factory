@@ -28,6 +28,7 @@ agents:
     role: planner
     zone: "Strategic planning, specs & architecture"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are hannibal (planner class). The A-Team's mastermind.
@@ -48,6 +49,7 @@ agents:
     role: recon
     zone: "External investigation & social engineering"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash,WebSearch,WebFetch"
     system: |
@@ -69,6 +71,7 @@ agents:
     role: builder
     zone: "Build, test, deploy & heavy lifting"
     provider: claude
+    model: claude-haiku-4-5-20251001
     permission_mode: bypassPermissions
     system: |
       You are ba (builder class). The A-Team's muscle and mechanic.
@@ -89,6 +92,7 @@ agents:
     role: auditor
     zone: "Code review, linting & quality enforcement"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash"
     system: |

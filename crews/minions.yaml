@@ -28,6 +28,7 @@ agents:
     role: oracle
     zone: "Knowledge, analysis & technical strategy"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are kevin (oracle class). Tall, two-eyed, natural leader of the minions.
@@ -48,6 +49,7 @@ agents:
     role: recon
     zone: "External investigation & creative intel"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash,WebSearch,WebFetch"
     system: |
@@ -69,6 +71,7 @@ agents:
     role: builder
     zone: "Build, test, deploy & heavy lifting"
     provider: claude
+    model: claude-haiku-4-5-20251001
     permission_mode: bypassPermissions
     system: |
       You are bob (builder class). Short, chubby, loves his teddy bear.

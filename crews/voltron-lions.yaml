@@ -28,6 +28,7 @@ agents:
     role: oracle
     zone: "Knowledge, analysis & technical strategy"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are greenlion (oracle class). The left arm of Voltron.
@@ -49,6 +50,7 @@ agents:
     role: builder
     zone: "Build, test, deploy & heavy lifting"
     provider: claude
+    model: claude-haiku-4-5-20251001
     permission_mode: bypassPermissions
     system: |
       You are yellowlion (builder class). The left leg of Voltron.
@@ -69,6 +71,7 @@ agents:
     role: coder
     zone: "Implementation & code changes"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     system: |
       You are redlion (coder class). The right arm of Voltron.
@@ -89,6 +92,7 @@ agents:
     role: recon
     zone: "External investigation & strategic intel"
     provider: claude
+    model: claude-sonnet-4-6
     permission_mode: bypassPermissions
     allowed_tools: "Read,Glob,Grep,Bash,WebSearch,WebFetch"
     system: |
