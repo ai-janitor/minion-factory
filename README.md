@@ -1,8 +1,14 @@
 # minion-factory
 
-Unified multi-agent coordination framework. RPG raid party metaphor over SQLite.
+Run multiple AI agents as a coordinated team on your codebase.
 
-Stateless CLI commands, no persistent server. All state lives in SQLite.
+**The problem:** Directing one AI agent is easy. Directing five on the same codebase — who's editing what file, how do you relay findings between sessions, which one is burning tokens on nothing — the coordination overhead eats you alive.
+
+**The solution:** minion-factory is the logistics layer. File claims prevent conflicts. A message bus lets agents share context. HP tracking shows token burn in real time. Task routing keeps work organized. Crew YAML defines the whole team. One command spins it all up in tmux with a live dashboard.
+
+You're still the commander. The tool handles the plumbing so you can focus on directing, not babysitting.
+
+Works with Claude, Codex, Gemini, and OpenCode. Stateless CLI, no persistent server. All state in SQLite.
 
 ## Install
 
