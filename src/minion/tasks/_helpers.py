@@ -21,8 +21,8 @@ def _get_flow(task_type: str = "bugfix") -> Any:
 
 
 def _log_transition(cursor: sqlite3.Cursor, task_id: int, from_status: str | None, to_status: str, agent: str, timestamp: str) -> None:
-    """Record a status transition in task_history."""
+    """Record a status transition in transition_log."""
     cursor.execute(
-        "INSERT INTO task_history (task_id, from_status, to_status, agent, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) VALUES (?, 'task', ?, ?, ?, ?)",
         (task_id, from_status, to_status, agent, timestamp),
     )

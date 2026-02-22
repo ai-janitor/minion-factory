@@ -248,24 +248,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at      TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS task_history (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id     INTEGER NOT NULL,
-    from_status TEXT,
-    to_status   TEXT NOT NULL,
-    agent       TEXT NOT NULL,
-    timestamp   TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS transitions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id     TEXT NOT NULL,
-    from_status TEXT NOT NULL,
-    to_status   TEXT NOT NULL,
-    agent       TEXT,
-    valid       INTEGER NOT NULL DEFAULT 1,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
 """
 
 
@@ -423,6 +405,85 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v5(conn: sqlite3.Connection) -> None:
+    """Backfill tasks.requirement_id from tasks.requirement_path."""
+    result = conn.execute("""
+        UPDATE tasks SET requirement_id = (
+            SELECT r.id FROM requirements r
+            WHERE r.file_path = tasks.requirement_path
+        )
+        WHERE requirement_path IS NOT NULL
+          AND requirement_id IS NULL
+    """)
+    backfilled = result.rowcount
+
+    # Count orphans: requirement_path set but no matching requirement
+    orphan_row = conn.execute("""
+        SELECT COUNT(*) FROM tasks
+        WHERE requirement_path IS NOT NULL
+          AND requirement_id IS NULL
+    """).fetchone()
+    orphans = orphan_row[0] if orphan_row else 0
+
+    log.info(
+        "v5 backfill: %d rows linked, %d orphans (requirement_path with no matching requirement)",
+        backfilled, orphans,
+    )
+    if orphans > 0:
+        log.warning("v5: %d tasks have requirement_path but no matching requirement row", orphans)
+
+
+def _migrate_v6(conn: sqlite3.Connection) -> None:
+    """Copy task_history and transitions rows into transition_log."""
+    # Check if task_history exists and copy
+    th_count = 0
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+
+    if "task_history" in tables:
+        result = conn.execute("""
+            INSERT INTO transition_log
+                (entity_id, entity_type, from_status, to_status, triggered_by, created_at)
+            SELECT task_id, 'task', from_status, to_status, agent, timestamp
+            FROM task_history
+        """)
+        th_count = result.rowcount
+        log.info("v6: copied %d rows from task_history into transition_log", th_count)
+
+    # Copy from transitions (if it exists and has rows), deduplicating
+    tr_count = 0
+    if "transitions" in tables:
+        result = conn.execute("""
+            INSERT INTO transition_log
+                (entity_id, entity_type, from_status, to_status, triggered_by, created_at)
+            SELECT task_id, 'task', from_status, to_status, agent, created_at
+            FROM transitions
+            WHERE NOT EXISTS (
+                SELECT 1 FROM transition_log tl
+                WHERE tl.entity_id = transitions.task_id
+                  AND tl.entity_type = 'task'
+                  AND tl.from_status IS transitions.from_status
+                  AND tl.to_status = transitions.to_status
+                  AND tl.created_at = transitions.created_at
+            )
+        """)
+        tr_count = result.rowcount
+        log.info("v6: copied %d rows from transitions into transition_log (deduplicated)", tr_count)
+
+    log.info("v6 totals: %d from task_history + %d from transitions", th_count, tr_count)
+
+
+def _migrate_v7(conn: sqlite3.Connection) -> None:
+    """Drop the old task_history and transitions audit tables."""
+    conn.execute("DROP TABLE IF EXISTS task_history")
+    conn.execute("DROP TABLE IF EXISTS transitions")
+    log.info("v7: dropped task_history and transitions tables")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -430,6 +491,9 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (2, "Add parent_id and requirement_id to tasks", _migrate_v2),
     (3, "Rename tasks.task_type to tasks.flow_type", _migrate_v3),
     (4, "Create transition_log table", _migrate_v4),
+    (5, "Backfill requirement_id from requirement_path", _migrate_v5),
+    (6, "Migrate task_history and transitions into transition_log", _migrate_v6),
+    (7, "Drop task_history and transitions tables", _migrate_v7),
 ]
 
 

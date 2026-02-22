@@ -65,15 +65,16 @@ def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Recent task status transitions for the activity feed."""
     cursor = conn.execute("""
         SELECT
-            th.task_id,
+            tl.entity_id   AS task_id,
             SUBSTR(t.title, 1, 25)  AS title,
-            th.from_status,
-            th.to_status,
-            th.agent,
-            th.timestamp
-        FROM task_history th
-        JOIN tasks t ON t.id = th.task_id
-        ORDER BY th.timestamp DESC
+            tl.from_status,
+            tl.to_status,
+            tl.triggered_by AS agent,
+            tl.created_at   AS timestamp
+        FROM transition_log tl
+        JOIN tasks t ON t.id = tl.entity_id
+        WHERE tl.entity_type = 'task'
+        ORDER BY tl.created_at DESC
         LIMIT 8
     """)
     return cursor.fetchall()

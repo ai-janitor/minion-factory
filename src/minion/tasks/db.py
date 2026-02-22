@@ -126,9 +126,9 @@ class TaskDB:
             (to_status, agent, task_id),
         )
         self._conn.execute(
-            "INSERT INTO transitions (task_id, from_status, to_status, agent, valid) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (task_id, from_status, to_status, agent, 1 if is_valid else 0),
+            "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) "
+            "VALUES (?, 'task', ?, ?, ?, datetime('now'))",
+            (task_id, from_status, to_status, agent),
         )
         self._conn.commit()
         return self.get_task(task_id)
@@ -149,8 +149,8 @@ class TaskDB:
             (result.to_status, task_id),
         )
         self._conn.execute(
-            "INSERT INTO transitions (task_id, from_status, to_status, agent, valid) "
-            "VALUES (?, ?, ?, ?, 1)",
+            "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) "
+            "VALUES (?, 'task', ?, ?, ?, datetime('now'))",
             (task_id, task["status"], result.to_status, agent),
         )
         self._conn.commit()
@@ -158,7 +158,7 @@ class TaskDB:
 
     def get_transitions(self, task_id: str) -> list[dict]:
         rows = self._conn.execute(
-            "SELECT * FROM transitions WHERE task_id = ? ORDER BY created_at, id",
+            "SELECT * FROM transition_log WHERE entity_id = ? AND entity_type = 'task' ORDER BY created_at, id",
             (task_id,),
         ).fetchall()
         return [dict(r) for r in rows]

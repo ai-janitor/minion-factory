@@ -77,7 +77,7 @@ def get_task_lineage(task_id: int) -> dict[str, object]:
 
         # History
         cursor.execute(
-            "SELECT from_status, to_status, agent, timestamp FROM task_history WHERE task_id = ? ORDER BY timestamp ASC",
+            "SELECT from_status, to_status, triggered_by AS agent, created_at AS timestamp FROM transition_log WHERE entity_id = ? AND entity_type = 'task' ORDER BY created_at ASC",
             (task_id,),
         )
         history = [dict(r) for r in cursor.fetchall()]
