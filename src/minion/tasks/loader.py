@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from ._schema import REQUIRED_TOP_KEYS
+from ._schema import REQUIRED_TOP_KEYS, VALID_STAGE_KEYS, VALID_TOP_KEYS
 from .dag import Stage, TaskFlow
 
 # Search order: env var, ~/.minion/task-flows/, bundled with package
@@ -71,25 +71,78 @@ def _resolve_inheritance(raw: dict, flows_dir: Path) -> dict:
     return result
 
 
-def _validate(raw: dict, name: str) -> None:
-    """Basic validation — required keys, non-terminal stages need next."""
+def _validate(raw: dict, name: str, flows_dir: Path | None = None) -> None:
+    """Validate flow YAML — hard fail on any structural error."""
+    # Top-level keys
     missing = REQUIRED_TOP_KEYS - set(raw.keys())
     if missing:
         raise ValueError(f"Flow '{name}' missing required keys: {missing}")
+    unknown_top = set(raw.keys()) - VALID_TOP_KEYS
+    if unknown_top:
+        raise ValueError(f"Flow '{name}' has unknown top-level keys: {unknown_top}")
+
     stages = raw.get("stages", {})
     if not stages:
         raise ValueError(f"Flow '{name}' has no stages")
+
+    stage_names = set(stages.keys())
+    resolve_dir = flows_dir or _DEFAULT_FLOWS_DIR
+
     for stage_name, cfg in stages.items():
-        if cfg.get("skip"):
+        _pfx = f"Flow '{name}', stage '{stage_name}'"
+
+        # Every stage must have description
+        if not cfg.get("description"):
+            raise ValueError(f"{_pfx}: missing 'description'")
+
+        # Unknown keys
+        unknown = set(cfg.keys()) - VALID_STAGE_KEYS
+        if unknown:
+            raise ValueError(f"{_pfx}: unknown keys {unknown}")
+
+        # Skip/terminal/parked stages don't need next
+        if cfg.get("skip") or cfg.get("terminal") or cfg.get("parked"):
             continue
-        if cfg.get("terminal"):
-            continue
-        if cfg.get("parked"):
-            continue
+
         if "next" not in cfg:
-            raise ValueError(
-                f"Flow '{name}', stage '{stage_name}': non-terminal stage must have 'next'"
-            )
+            raise ValueError(f"{_pfx}: non-terminal stage must have 'next'")
+
+        # Validate stage references point to existing stages
+        for ref_key in ("next", "fail", "alt_next"):
+            ref = cfg.get(ref_key)
+            if ref and ref not in stage_names:
+                raise ValueError(f"{_pfx}: '{ref_key}' references unknown stage '{ref}'")
+
+        # spawns must reference a loadable flow YAML
+        spawns = cfg.get("spawns")
+        if spawns:
+            spawns_path = resolve_dir / f"{spawns}.yaml"
+            if not spawns_path.exists():
+                # Also check _base pattern
+                spawns_base = resolve_dir / f"_{spawns}.yaml"
+                if not spawns_base.exists():
+                    raise ValueError(
+                        f"{_pfx}: 'spawns' references unknown flow '{spawns}' "
+                        f"(no {spawns_path} found)"
+                    )
+
+        # protocol must reference an existing file
+        protocol = cfg.get("protocol")
+        if protocol:
+            protocol_path = resolve_dir / protocol
+            if not protocol_path.exists():
+                raise ValueError(
+                    f"{_pfx}: 'protocol' file not found: {protocol}"
+                )
+
+        # context_template must reference an existing file
+        ctx_tmpl = cfg.get("context_template")
+        if ctx_tmpl:
+            tmpl_path = resolve_dir / ctx_tmpl
+            if not tmpl_path.exists():
+                raise ValueError(
+                    f"{_pfx}: 'context_template' file not found: {ctx_tmpl}"
+                )
 
 
 def _build_stage(name: str, cfg: dict) -> Stage:
@@ -139,7 +192,7 @@ def _load_flow_from_disk(task_type: str, flows_path: Path) -> TaskFlow:
         raise FileNotFoundError(f"Task flow '{task_type}' not found at {flow_path}")
     raw = _load_yaml(flow_path)
     raw = _resolve_inheritance(raw, flows_path)
-    _validate(raw, task_type)
+    _validate(raw, task_type, flows_dir=flows_path)
     stages = {name: _build_stage(name, cfg) for name, cfg in raw["stages"].items()}
     return TaskFlow(
         name=raw["name"],
