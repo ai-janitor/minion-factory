@@ -98,11 +98,16 @@ def _build_stage(name: str, cfg: dict) -> Stage:
         description=cfg.get("description", ""),
         next=cfg.get("next"),
         fail=cfg.get("fail"),
+        alt_next=cfg.get("alt_next"),
         workers=cfg.get("workers"),
         requires=cfg.get("requires", []),
         terminal=cfg.get("terminal", False),
         skip=cfg.get("skip", False),
         parked=cfg.get("parked", False),
+        spawns=cfg.get("spawns"),
+        protocol=cfg.get("protocol"),
+        context=cfg.get("context"),
+        context_template=cfg.get("context_template"),
     )
 
 

@@ -11,11 +11,16 @@ class Stage:
     description: str
     next: str | None = None
     fail: str | None = None
+    alt_next: str | None = None
     workers: dict[str, list[str]] | list[str] | None = None
     requires: list[str] = field(default_factory=list)
     terminal: bool = False
     skip: bool = False
     parked: bool = False
+    spawns: str | None = None
+    protocol: str | None = None
+    context: str | None = None
+    context_template: str | None = None
 
 
 @dataclass
@@ -73,7 +78,7 @@ class TaskFlow:
         return stage.requires
 
     def valid_transitions(self, current: str) -> set[str]:
-        """All valid next statuses from current (including dead_ends)."""
+        """All valid next statuses from current (including dead_ends and alt_next)."""
         stage = self.stages.get(current)
         if stage is None or stage.terminal:
             return set()
@@ -83,6 +88,10 @@ class TaskFlow:
             result.add(next_resolved)
         if stage.fail:
             result.add(stage.fail)
+        if stage.alt_next:
+            alt_resolved = self._resolve_skip(stage.alt_next)
+            if alt_resolved:
+                result.add(alt_resolved)
         return result
 
     def transition(self, current: str, class_required: str, passed: bool = True) -> Transition | None:
