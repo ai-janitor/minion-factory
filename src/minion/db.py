@@ -281,10 +281,156 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 """
 
+# ---------------------------------------------------------------------------
+# Migration helpers
+# ---------------------------------------------------------------------------
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    """Return the set of column names for *table*."""
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {row[1] if isinstance(row, tuple) else row["name"] for row in rows}
+
+
+# ---------------------------------------------------------------------------
+# Versioned migrations (v1–v4)
+# ---------------------------------------------------------------------------
+
+
+def _migrate_v1(conn: sqlite3.Connection) -> None:
+    """Add parent_id and flow_type to requirements table."""
+    cols = _table_columns(conn, "requirements")
+    if "parent_id" not in cols:
+        conn.execute(
+            "ALTER TABLE requirements ADD COLUMN parent_id INTEGER REFERENCES requirements(id)"
+        )
+    if "flow_type" not in cols:
+        conn.execute(
+            "ALTER TABLE requirements ADD COLUMN flow_type TEXT NOT NULL DEFAULT 'requirement'"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_requirements_parent ON requirements(parent_id)"
+    )
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """Add parent_id and requirement_id to tasks table."""
+    cols = _table_columns(conn, "tasks")
+    if "parent_id" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id)"
+        )
+    if "requirement_id" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN requirement_id INTEGER REFERENCES requirements(id)"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_requirement ON tasks(requirement_id)"
+    )
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """Rename tasks.task_type to tasks.flow_type via table rebuild.
+
+    SQLite doesn't reliably support ALTER TABLE RENAME COLUMN on all versions,
+    so we rebuild: create tasks_new, copy data, drop old, rename new.
+    """
+    cols = _table_columns(conn, "tasks")
+
+    # Already renamed — nothing to do (idempotency guard)
+    if "flow_type" in cols and "task_type" not in cols:
+        return
+
+    # Build tasks_new with flow_type instead of task_type.
+    # Column order and defaults must exactly match the current schema
+    # (original CREATE TABLE + legacy _migrate + v2 additions).
+    conn.execute("""
+        CREATE TABLE tasks_new (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            title           TEXT NOT NULL,
+            task_file       TEXT NOT NULL,
+            project         TEXT DEFAULT NULL,
+            zone            TEXT DEFAULT NULL,
+            status          TEXT NOT NULL DEFAULT 'open',
+            blocked_by      TEXT DEFAULT NULL,
+            assigned_to     TEXT DEFAULT NULL,
+            created_by      TEXT NOT NULL,
+            files           TEXT DEFAULT NULL,
+            progress        TEXT DEFAULT NULL,
+            class_required  TEXT DEFAULT NULL,
+            flow_type       TEXT DEFAULT 'bugfix',
+            activity_count  INTEGER NOT NULL DEFAULT 0,
+            result_file     TEXT DEFAULT NULL,
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL,
+            requirement_path TEXT DEFAULT NULL,
+            parent_id       INTEGER REFERENCES tasks(id),
+            requirement_id  INTEGER REFERENCES requirements(id)
+        )
+    """)
+
+    # Copy data — map task_type -> flow_type
+    conn.execute("""
+        INSERT INTO tasks_new (
+            id, title, task_file, project, zone, status,
+            blocked_by, assigned_to, created_by, files, progress,
+            class_required, flow_type, activity_count, result_file,
+            created_at, updated_at, requirement_path, parent_id, requirement_id
+        )
+        SELECT
+            id, title, task_file, project, zone, status,
+            blocked_by, assigned_to, created_by, files, progress,
+            class_required, task_type, activity_count, result_file,
+            created_at, updated_at, requirement_path, parent_id, requirement_id
+        FROM tasks
+    """)
+
+    conn.execute("DROP TABLE tasks")
+    conn.execute("ALTER TABLE tasks_new RENAME TO tasks")
+
+    # Recreate all indexes (original schema had none, but v2 added two)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_requirement ON tasks(requirement_id)"
+    )
+
+
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    """Create the transition_log table — unified audit log for state transitions."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS transition_log (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity_id     INTEGER NOT NULL,
+            entity_type   TEXT NOT NULL,
+            from_status   TEXT,
+            to_status     TEXT NOT NULL,
+            outcome       TEXT,
+            context_path  TEXT,
+            triggered_by  TEXT,
+            created_at    TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transition_entity ON transition_log(entity_id, entity_type)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transition_created ON transition_log(created_at)"
+    )
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
-# Sibling tasks (011.002–011.008) will append entries here.
-_MIGRATIONS: list[tuple[int, str, Any]] = []
+_MIGRATIONS: list[tuple[int, str, Any]] = [
+    (1, "Add parent_id and flow_type to requirements", _migrate_v1),
+    (2, "Add parent_id and requirement_id to tasks", _migrate_v2),
+    (3, "Rename tasks.task_type to tasks.flow_type", _migrate_v3),
+    (4, "Create transition_log table", _migrate_v4),
+]
 
 
 def _get_current_schema_version(conn: sqlite3.Connection) -> int:
