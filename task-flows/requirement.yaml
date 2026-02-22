@@ -21,12 +21,17 @@ stages:
   seed:
     description: Raw requirement exists (README.md written). Not yet analyzed.
     next: itemizing
+    requires: [README.md]
+    protocol: protocols/requirement/seed.md
     workers: null
 
   itemizing:
     description: Planner extracting numbered sections from raw doc
     next: itemized
     fail: seed
+    requires: [itemized-requirements.md]
+    protocol: protocols/requirement/itemizing.md
+    context: "{req_path}/itemized-requirements.md"
     workers:
       default: [lead, oracle]
 
@@ -34,12 +39,16 @@ stages:
     description: itemized-requirements.md exists. Ready for decomposition or investigation.
     next: investigating
     alt_next: decomposing
+    requires: [itemized-requirements.md]
+    protocol: protocols/requirement/itemized.md
     workers: null
 
   investigating:
     description: Investigation tasks (INV-) created and in progress. Waiting for findings.
     next: findings_ready
     fail: itemized
+    requires: [INV-*/README.md]
+    protocol: protocols/requirement/investigating.md
     spawns: investigation
     workers:
       default: [lead]
@@ -48,6 +57,10 @@ stages:
     description: findings.md written. Root cause proven. Ready to decompose into impl tasks.
     next: decomposing
     fail: investigating
+    requires: [findings.md, all_inv_tasks_closed]
+    protocol: protocols/requirement/findings_ready.md
+    context: "{req_path}/findings.md"
+    context_template: templates/investigation-findings.md
     workers:
       default: [lead, oracle]
 
@@ -55,36 +68,42 @@ stages:
     description: Planner creating child requirement folders and/or implementation tasks
     next: tasked
     fail: itemized
+    requires: [numbered_child_folders, impl_task_readmes]
+    protocol: protocols/requirement/decomposing.md
     workers:
       default: [lead, oracle]
 
   tasked:
     description: All leaf requirements have linked implementation tasks
     next: in_progress
+    requires: [all_leaves_have_tasks]
+    protocol: protocols/requirement/tasked.md
     workers: null
 
   in_progress:
     description: Implementation tasks are being worked (bugfix/feature/hotfix flows)
     next: completed
     fail: tasked
+    requires: [all_impl_tasks_closed]
+    protocol: protocols/requirement/in_progress.md
     workers:
       default: [lead]
 
   completed:
     description: All linked implementation tasks are closed
     terminal: true
+    requires: [all_impl_tasks_closed]
+    protocol: protocols/requirement/completed.md
     workers:
       default: [lead]
 
 # Shortcuts for requirements that don't need investigation
-# itemized → decomposing (skip investigating/findings_ready when root cause is obvious)
 shortcuts:
   skip_investigation:
     from: itemized
     to: decomposing
     condition: Root cause is obvious from the writeup — no investigation needed
 
-  # Simple requirements that don't need itemizing (single-issue bugs, small features)
   skip_itemizing:
     from: seed
     to: decomposing

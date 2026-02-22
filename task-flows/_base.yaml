@@ -25,21 +25,11 @@
 #   - Each key under `stages:` is a task status (a node in the DAG)
 #   - `next:` is the happy-path transition (pass)
 #   - `fail:` is where the task goes on rejection (review/test fail)
-#   - `workers:` defines which agent classes can work this stage, keyed by
-#     the task's class_required. If a class isn't listed, it inherits `default`.
+#   - `workers:` defines which agent classes can work this stage
 #   - `requires:` lists preconditions before entering a stage
-#
-# HOW TO TUNE:
-#   - Add a new task type: copy this file, change what's different
-#   - Skip a stage: set `skip: true` in the type-specific YAML
-#   - Add a new agent class to a stage: add it under `workers:`
-#   - Change who reviews code: edit `workers:` under the `fixed` stage
-#
-# RULES:
-#   - Every stage must have `next:` (except terminal stages)
-#   - `workers: null` means the already-assigned agent continues
-#   - The system warns but doesn't block invalid transitions
-#   - Dead-end statuses (abandoned, stale, obsolete) are always available
+#   - `protocol:` points to the stage protocol file (what the agent does)
+#   - `context:` points to where the agent writes progress
+#   - `context_template:` points to the stub template for the context file
 #
 # =============================================================================
 
@@ -50,11 +40,13 @@ stages:
   open:
     description: Task created, waiting for assignment
     next: assigned
+    protocol: protocols/_base/open.md
     workers: null
 
   assigned:
     description: Agent assigned, hasn't started yet
     next: in_progress
+    protocol: protocols/_base/assigned.md
     workers: null
 
   in_progress:
@@ -62,12 +54,18 @@ stages:
     next: fixed
     fail: blocked
     requires: [submit_result]
+    protocol: protocols/_base/in_progress.md
+    context: results/{task_id}.md
+    context_template: templates/task-result.md
     workers: null
 
   fixed:
     description: Work complete, awaiting code review
     next: verified
     fail: assigned
+    protocol: protocols/_base/fixed.md
+    context: results/{task_id}-review.md
+    context_template: templates/review-verdict.md
     workers:
       default: [oracle, recon, auditor]
       coder: [oracle, recon, auditor]
@@ -78,6 +76,9 @@ stages:
     description: Review passed, awaiting testing
     next: closed
     fail: assigned
+    protocol: protocols/_base/verified.md
+    context: results/{task_id}-test.md
+    context_template: templates/test-results.md
     workers:
       default: [builder, recon, auditor]
       coder: [builder, recon, auditor]
@@ -88,11 +89,15 @@ stages:
     description: Agent hit a wall — parked until lead unblocks
     next: assigned
     parked: true
+    protocol: protocols/_base/blocked.md
+    context: results/{task_id}-blocked.md
+    context_template: templates/block-reason.md
     workers: [lead]
 
   closed:
     description: Done — result accepted
     terminal: true
+    protocol: protocols/_base/closed.md
     workers: [lead]
 
 dead_ends: [abandoned, stale, obsolete]

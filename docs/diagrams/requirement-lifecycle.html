@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Requirement Lifecycle — DAG of DAGs</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  body { background: #1a1a2e; color: #eee; font-family: monospace; margin: 2rem; }
+  h1 { color: #e94560; }
+  h2 { color: #53a8b6; margin-top: 2rem; }
+  .diagram { background: #16213e; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+  table { border-collapse: collapse; margin: 1rem 0; }
+  th, td { border: 1px solid #333; padding: 0.5rem 1rem; text-align: left; }
+  th { background: #0f3460; color: #53a8b6; }
+  td { background: #16213e; }
+  code { color: #e94560; }
+</style>
+</head>
+<body>
+<h1>Requirement Lifecycle — DAG of DAGs</h1>
+
+<div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    subgraph REQ["REQUIREMENT DAG — requirement.yaml"]
+        seed["seed\n<b>requires:</b> README.md"]
+        itemizing["itemizing\n<b>requires:</b> itemized-requirements.md"]
+        itemized["itemized\n<b>gate:</b> itemized-requirements.md exists"]
+        investigating["investigating\n<b>requires:</b> INV-*/README.md"]
+        findings_ready["findings_ready\n<b>requires:</b> findings.md + all INV closed"]
+        decomposing["decomposing\n<b>requires:</b> child folders + impl READMEs"]
+        tasked["tasked\n<b>requires:</b> all leaves have DB tasks"]
+        req_wip["in_progress\n<b>requires:</b> all impl tasks closed"]
+        completed["completed\n<b>gate:</b> all_impl_tasks_closed"]
+
+        seed -->|"produce:\nitemized-requirements.md"| itemizing
+        itemizing -->|pass| itemized
+        itemizing -->|fail| seed
+        itemized -->|"produce:\nINV-*/README.md"| investigating
+        investigating -->|"produce:\nfindings.md"| findings_ready
+        investigating -->|fail| itemized
+        findings_ready -->|"produce:\nnumbered child folders"| decomposing
+        findings_ready -->|fail| investigating
+        decomposing -->|"produce:\ntasks in DB"| tasked
+        decomposing -->|fail| itemized
+        tasked --> req_wip
+        req_wip -->|pass| completed
+        req_wip -->|fail| tasked
+    end
+
+    itemized -.->|"skip_investigation\nroot cause obvious"| decomposing
+    seed -.->|"skip_itemizing\nsingle-issue"| decomposing
+
+    subgraph INV["INVESTIGATION DAG — investigation.yaml"]
+        inv_open["open"] --> inv_assigned["assigned"]
+        inv_assigned --> inv_wip["in_progress\nrecon investigating"]
+        inv_wip -->|"submit:\nfindings"| inv_fixed["fixed\noracle assesses"]
+        inv_wip -->|blocked| inv_blocked["blocked\nlead unblocks"]
+        inv_blocked --> inv_assigned
+        inv_fixed -->|pass| inv_verified["verified\nlead reviews"]
+        inv_fixed -->|fail| inv_assigned
+        inv_verified -->|pass| inv_closed["closed\nfindings accepted"]
+        inv_verified -->|fail| inv_assigned
+    end
+
+    subgraph IMPL["IMPLEMENTATION DAG — bugfix/feature/hotfix.yaml"]
+        impl_open["open"] --> impl_assigned["assigned"]
+        impl_assigned --> impl_wip["in_progress\ncoder working"]
+        impl_wip -->|"submit:\nresult"| impl_fixed["fixed\ncode review"]
+        impl_wip -->|blocked| impl_blocked["blocked\nlead unblocks"]
+        impl_blocked --> impl_assigned
+        impl_fixed -->|pass| impl_verified["verified\ntesting"]
+        impl_fixed -->|fail| impl_assigned
+        impl_verified -->|pass| impl_closed["closed\ndone"]
+        impl_verified -->|fail| impl_assigned
+    end
+
+    investigating ==>|"spawns INV- tasks"| inv_open
+    inv_closed ==>|"writes findings.md"| findings_ready
+    req_wip ==>|"spawns impl tasks"| impl_open
+    impl_closed ==>|"all closed → completed"| completed
+
+    style REQ fill:#1a1a2e,stroke:#e94560,color:#fff
+    style INV fill:#0f3460,stroke:#53a8b6,color:#fff
+    style IMPL fill:#1a3c34,stroke:#2ecc71,color:#fff
+</pre>
+</div>
+
+<h2>Transition Gate Artifacts</h2>
+<table>
+<tr><th>Stage</th><th>requires (gate to enter)</th><th>produces (to advance)</th></tr>
+<tr><td><code>seed</code></td><td><code>README.md</code></td><td><code>itemized-requirements.md</code></td></tr>
+<tr><td><code>itemizing</code></td><td><code>itemized-requirements.md</code></td><td>—</td></tr>
+<tr><td><code>itemized</code></td><td><code>itemized-requirements.md</code></td><td><code>INV-*/README.md</code> or child folders</td></tr>
+<tr><td><code>investigating</code></td><td><code>INV-*/README.md</code></td><td><code>findings.md</code></td></tr>
+<tr><td><code>findings_ready</code></td><td><code>findings.md</code> + all INV tasks closed</td><td>numbered child folders + impl READMEs</td></tr>
+<tr><td><code>decomposing</code></td><td>child folders + impl <code>README.md</code>s</td><td>tasks in DB</td></tr>
+<tr><td><code>tasked</code></td><td>all leaves have linked DB tasks</td><td>—</td></tr>
+<tr><td><code>in_progress</code></td><td>impl tasks assigned</td><td>all impl tasks closed</td></tr>
+<tr><td><code>completed</code></td><td>all impl tasks closed</td><td>— (terminal)</td></tr>
+</table>
+
+</body>
+</html>
