@@ -29,7 +29,6 @@ stages:
     description: Planner extracting numbered sections from raw doc
     next: itemized
     fail: seed
-    requires: [itemized-requirements.md]
     protocol: protocols/requirement/itemizing.md
     context: "{req_path}/itemized-requirements.md"
     workers:
@@ -47,7 +46,6 @@ stages:
     description: Investigation tasks (INV-) created and in progress. Waiting for findings.
     next: findings_ready
     fail: itemized
-    requires: [INV-*/README.md]
     protocol: protocols/requirement/investigating.md
     spawns: investigation
     workers:
@@ -68,7 +66,6 @@ stages:
     description: Planner creating child requirement folders and/or implementation tasks
     next: tasked
     fail: itemized
-    requires: [numbered_child_folders, impl_task_readmes]
     protocol: protocols/requirement/decomposing.md
     workers:
       default: [lead, oracle]
@@ -76,7 +73,7 @@ stages:
   tasked:
     description: All leaf requirements have linked implementation tasks
     next: in_progress
-    requires: [all_leaves_have_tasks]
+    requires: [numbered_child_folders, impl_task_readmes, all_leaves_have_tasks]
     protocol: protocols/requirement/tasked.md
     workers: null
 
