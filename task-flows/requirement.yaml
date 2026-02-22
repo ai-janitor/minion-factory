@@ -1,0 +1,91 @@
+# =============================================================================
+# Requirement Flow DAG — sits ABOVE task flows
+# =============================================================================
+#
+# This is the DAG of DAGs. It orchestrates the lifecycle of a requirement
+# from raw brain dump or bug writeup through to all implementation tasks
+# being closed.
+#
+# Each stage may spawn tasks that use their own task-level DAGs
+# (investigation.yaml, bugfix.yaml, feature.yaml, etc.)
+#
+# The requirement flow does NOT inherit from _base — it has its own stages
+# because it manages requirements, not tasks.
+#
+# =============================================================================
+
+name: requirement
+description: Requirement lifecycle — raw input to completed implementation
+
+stages:
+  seed:
+    description: Raw requirement exists (README.md written). Not yet analyzed.
+    next: itemizing
+    workers: null
+
+  itemizing:
+    description: Planner extracting numbered sections from raw doc
+    next: itemized
+    fail: seed
+    workers:
+      default: [lead, oracle]
+
+  itemized:
+    description: itemized-requirements.md exists. Ready for decomposition or investigation.
+    next: investigating
+    alt_next: decomposing
+    workers: null
+
+  investigating:
+    description: Investigation tasks (INV-) created and in progress. Waiting for findings.
+    next: findings_ready
+    fail: itemized
+    spawns: investigation
+    workers:
+      default: [lead]
+
+  findings_ready:
+    description: findings.md written. Root cause proven. Ready to decompose into impl tasks.
+    next: decomposing
+    fail: investigating
+    workers:
+      default: [lead, oracle]
+
+  decomposing:
+    description: Planner creating child requirement folders and/or implementation tasks
+    next: tasked
+    fail: itemized
+    workers:
+      default: [lead, oracle]
+
+  tasked:
+    description: All leaf requirements have linked implementation tasks
+    next: in_progress
+    workers: null
+
+  in_progress:
+    description: Implementation tasks are being worked (bugfix/feature/hotfix flows)
+    next: completed
+    fail: tasked
+    workers:
+      default: [lead]
+
+  completed:
+    description: All linked implementation tasks are closed
+    terminal: true
+    workers:
+      default: [lead]
+
+# Shortcuts for requirements that don't need investigation
+# itemized → decomposing (skip investigating/findings_ready when root cause is obvious)
+shortcuts:
+  skip_investigation:
+    from: itemized
+    to: decomposing
+    condition: Root cause is obvious from the writeup — no investigation needed
+
+  # Simple requirements that don't need itemizing (single-issue bugs, small features)
+  skip_itemizing:
+    from: seed
+    to: decomposing
+    condition: Requirement is small enough to decompose directly without itemizing

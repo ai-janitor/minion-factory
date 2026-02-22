@@ -1,0 +1,10 @@
+# Investigation — research triggered by a bug or unknown
+# Purpose: produce findings that decompose into implementation tasks.
+# Same lifecycle as research. The difference is origin (bugs/unknowns vs features)
+# and the expected output (findings.md → itemized-requirements.md → impl tasks).
+#
+# Use this flow for INV- prefixed tasks in the requirements tree.
+# The lead creates implementation tasks from proven findings after close.
+name: investigation
+inherits: research
+description: Bug/unknown investigation — findings become implementation tasks

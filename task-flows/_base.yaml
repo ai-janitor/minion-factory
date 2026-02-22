@@ -6,6 +6,21 @@
 # (bugfix.yaml, hotfix.yaml, etc.) inherits from this base and overrides
 # only what's different.
 #
+# FLOW TYPES:
+#
+#   requirement.yaml — the DAG of DAGs. Manages the lifecycle of a requirement
+#     from seed through investigation, decomposition, and implementation.
+#     Each stage may spawn tasks that use the flows below.
+#
+#   Task-level flows (this file is the base):
+#   - bugfix/hotfix/feature/chore: implementation flows (code changes)
+#   - research: open-ended exploration, findings assessed by oracle
+#   - investigation: research triggered by a bug/unknown — findings become
+#     implementation tasks. Lead creates impl tasks after close.
+#   - build: packaging and distribution
+#
+# See protocol-common.md for filesystem conventions and the full pipeline.
+#
 # HOW TO READ THIS FILE:
 #   - Each key under `stages:` is a task status (a node in the DAG)
 #   - `next:` is the happy-path transition (pass)

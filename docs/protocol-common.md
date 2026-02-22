@@ -200,6 +200,45 @@ Filenames encode section number and slug. You never have to open a file to know 
 4. **Resumability** — planner dies after decomposing 8 of 20 sections? Next planner reads `itemized-requirements.md` (20 sections), runs `ls` (8 folders), and picks up sections 9-20. The filesystem diff IS the progress tracker.
 5. **Leaf requirements become tasks** — when a requirement is small enough to implement in one session, it gets converted to a task. The task's `requirement_path` column points back to the requirement folder.
 
+### Investigation Stage (Bugs and Unknowns)
+
+Not all requirements can be decomposed immediately. Bugs and unknowns often need investigation before you know enough to write implementation tasks. The pipeline becomes:
+
+```
+README.md (bug writeup) → investigation tasks → findings → itemized-requirements.md → implementation tasks
+```
+
+**When a requirement can't be decomposed into implementation tasks yet**, create investigation tasks instead. These are tasks whose deliverable is understanding, not code.
+
+#### Investigation Task Convention
+
+Investigation tasks live as children of the requirement, prefixed with `INV-`:
+
+```
+bugs/session-sorting/
+├── README.md                              ← bug writeup (what was observed)
+├── INV-001-map-code-paths/
+│   └── README.md                          ← task: trace all session selection logic
+├── INV-002-document-filter-behavior/
+│   └── README.md                          ← task: document active session filter
+├── INV-003-enumerate-use-cases/
+│   └── README.md                          ← task: build test matrix
+├── findings.md                            ← investigation output (proven root cause)
+├── itemized-requirements.md               ← written AFTER findings prove the cause
+├── 001-unify-selection-logic/
+│   └── README.md                          ← implementation task (from proven findings)
+└── 002-write-test-matrix/
+    └── README.md                          ← implementation task
+```
+
+#### Rules
+
+1. **Investigation tasks produce findings, not code.** The deliverable is a `findings.md` in the parent requirement folder documenting what was proven.
+2. **Do not write implementation tasks from unproven theories.** Investigate first, prove the root cause, then decompose into implementation tasks.
+3. **Findings become the basis for itemized-requirements.md.** Once investigation is complete and findings are written, the standard decomposition pipeline resumes.
+4. **Investigation tasks are still tracked in the DB** like any other task — assigned, closed, traced back to the requirement.
+5. **Not every bug needs investigation.** If the root cause is obvious from the writeup, skip straight to itemized-requirements.md. Investigation is for when you don't yet know enough to write implementation tasks.
+
 ### Requirement → Task Traceability
 
 Every task has a `requirement_path` column pointing to the requirement folder it came from. This enables:
