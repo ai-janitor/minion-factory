@@ -1,0 +1,67 @@
+# Agent class registry — single source of truth for class definitions.
+# Adding a new class = add an entry here. No Python changes needed.
+#
+# capabilities: semantic tags for what this class can do
+# models: allowed model IDs (empty list = any model)
+
+capabilities:
+  - manage
+  - code
+  - build
+  - review
+  - test
+  - investigate
+  - plan
+  - monitor
+  - memory
+  - engineer
+
+classes:
+  lead:
+    capabilities: [manage, review, engineer, monitor, memory]
+    models:
+      - claude-opus-4-6
+      - claude-opus-4-5
+      - claude-sonnet-4-6
+      - claude-sonnet-4-5
+      - gemini-pro
+      - gemini-1.5-pro
+      - gemini-2.0-pro
+
+  coder:
+    capabilities: [code, engineer, monitor, memory]
+    models:
+      - claude-opus-4-6
+      - claude-opus-4-5
+      - claude-sonnet-4-6
+      - claude-sonnet-4-5
+      - gemini-pro
+      - gemini-1.5-pro
+      - gemini-2.0-pro
+
+  builder:
+    capabilities: [code, test, build, engineer, monitor, memory]
+    models: []
+
+  oracle:
+    capabilities: [review, monitor, memory]
+    models: []
+
+  recon:
+    capabilities: [review, test, investigate, monitor, memory]
+    models: []
+
+  planner:
+    capabilities: [plan, engineer, monitor, memory]
+    models:
+      - claude-opus-4-6
+      - claude-opus-4-5
+      - claude-sonnet-4-6
+      - claude-sonnet-4-5
+      - gemini-pro
+      - gemini-1.5-pro
+      - gemini-2.0-pro
+
+  auditor:
+    capabilities: [review, test, monitor, memory]
+    models: []

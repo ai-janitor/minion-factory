@@ -144,6 +144,27 @@ def _validate(raw: dict, name: str, flows_dir: Path | None = None) -> None:
                     f"{_pfx}: 'context_template' file not found: {ctx_tmpl}"
                 )
 
+        # workers class names must exist in agent class registry
+        workers = cfg.get("workers")
+        if workers:
+            from .agent_classes import get_valid_classes
+
+            valid_classes = get_valid_classes()
+            if isinstance(workers, list):
+                unknown_cls = set(workers) - valid_classes
+                if unknown_cls:
+                    raise ValueError(f"{_pfx}: unknown agent classes in 'workers': {unknown_cls}")
+            elif isinstance(workers, dict):
+                for key, class_list in workers.items():
+                    if key != "default" and key not in valid_classes:
+                        raise ValueError(f"{_pfx}: unknown class_required key '{key}' in 'workers'")
+                    if isinstance(class_list, list):
+                        unknown_cls = set(class_list) - valid_classes
+                        if unknown_cls:
+                            raise ValueError(
+                                f"{_pfx}: unknown agent classes in 'workers.{key}': {unknown_cls}"
+                            )
+
 
 def _build_stage(name: str, cfg: dict) -> Stage:
     return Stage(

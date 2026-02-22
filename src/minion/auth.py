@@ -9,15 +9,40 @@ from typing import Callable, TypeVar
 import click
 
 # ---------------------------------------------------------------------------
-# Agent classes
+# Agent classes — loaded from task-flows/agent-classes.yaml
+# Lazy-loaded to avoid circular imports (auth ↔ tasks ↔ comms ↔ auth)
 # ---------------------------------------------------------------------------
 
-VALID_CLASSES = {"lead", "coder", "builder", "oracle", "recon", "planner", "auditor"}
+def _agent_classes():
+    from minion.tasks.agent_classes import (
+        get_valid_classes,
+        get_valid_capabilities,
+        get_class_capabilities,
+        get_class_models,
+    )
+    return get_valid_classes, get_valid_capabilities, get_class_capabilities, get_class_models
 
-# ---------------------------------------------------------------------------
-# Capability constants — the only valid capability strings
-# ---------------------------------------------------------------------------
 
+def _load_valid_classes() -> set[str]:
+    return _agent_classes()[0]()
+
+
+def _load_class_capabilities() -> dict[str, set[str]]:
+    return _agent_classes()[2]()
+
+
+def _load_class_models() -> dict[str, set[str]]:
+    return _agent_classes()[3]()
+
+
+# Hardcoded fallback — kept in sync with agent-classes.yaml
+# Used at module level by TOOL_CATALOG before lazy load fires
+VALID_CLASSES: set[str] = {"lead", "coder", "builder", "oracle", "recon", "planner", "auditor"}
+VALID_CAPABILITIES: set[str] = set()
+CLASS_CAPABILITIES: dict[str, set[str]] = {}
+CLASS_MODEL_WHITELIST: dict[str, set[str]] = {}
+
+# Capability constants kept as string aliases for existing code
 CAP_MANAGE = "manage"
 CAP_CODE = "code"
 CAP_BUILD = "build"
@@ -29,59 +54,28 @@ CAP_MONITOR = "monitor"
 CAP_MEMORY = "memory"
 CAP_ENGINEER = "engineer"
 
-VALID_CAPABILITIES = {
-    CAP_MANAGE, CAP_CODE, CAP_BUILD, CAP_REVIEW,
-    CAP_TEST, CAP_INVESTIGATE, CAP_PLAN, CAP_MONITOR,
-    CAP_MEMORY, CAP_ENGINEER,
-}
 
-# ---------------------------------------------------------------------------
-# Class capabilities — semantic tags for what each class does
-# ---------------------------------------------------------------------------
+_REGISTRY_LOADED = False
 
-CLASS_CAPABILITIES: dict[str, set[str]] = {
-    "lead":    {CAP_MANAGE, CAP_REVIEW, CAP_ENGINEER, CAP_MONITOR, CAP_MEMORY},
-    "coder":   {CAP_CODE, CAP_ENGINEER, CAP_MONITOR, CAP_MEMORY},
-    "builder": {CAP_CODE, CAP_TEST, CAP_BUILD, CAP_ENGINEER, CAP_MONITOR, CAP_MEMORY},
-    "oracle":  {CAP_REVIEW, CAP_MONITOR, CAP_MEMORY},
-    "recon":   {CAP_REVIEW, CAP_TEST, CAP_INVESTIGATE, CAP_MONITOR, CAP_MEMORY},
-    "planner": {CAP_PLAN, CAP_ENGINEER, CAP_MONITOR, CAP_MEMORY},
-    "auditor": {CAP_REVIEW, CAP_TEST, CAP_MONITOR, CAP_MEMORY},
-}
+def _ensure_loaded() -> None:
+    """Populate module-level dicts from YAML on first use."""
+    global VALID_CLASSES, VALID_CAPABILITIES, CLASS_CAPABILITIES, CLASS_MODEL_WHITELIST, _REGISTRY_LOADED
+    if _REGISTRY_LOADED:
+        return
+    fns = _agent_classes()
+    VALID_CLASSES = fns[0]()
+    VALID_CAPABILITIES = fns[1]()
+    CLASS_CAPABILITIES = fns[2]()
+    CLASS_MODEL_WHITELIST = fns[3]()
+    _REGISTRY_LOADED = True
 
 
 def classes_with(capability: str) -> set[str]:
     """Return all classes that have a given capability."""
+    _ensure_loaded()
     if capability not in VALID_CAPABILITIES:
         raise ValueError(f"Unknown capability {capability!r}. Valid: {sorted(VALID_CAPABILITIES)}")
     return {cls for cls, caps in CLASS_CAPABILITIES.items() if capability in caps}
-
-
-# ---------------------------------------------------------------------------
-# Model whitelist per class (empty set = any model allowed)
-# ---------------------------------------------------------------------------
-
-CLASS_MODEL_WHITELIST: dict[str, set[str]] = {
-    "lead": {
-        "claude-opus-4-6", "claude-opus-4-5",
-        "claude-sonnet-4-6", "claude-sonnet-4-5",
-        "gemini-pro", "gemini-1.5-pro", "gemini-2.0-pro",
-    },
-    "coder": {
-        "claude-opus-4-6", "claude-opus-4-5",
-        "claude-sonnet-4-6", "claude-sonnet-4-5",
-        "gemini-pro", "gemini-1.5-pro", "gemini-2.0-pro",
-    },
-    "oracle": set(),
-    "recon": set(),
-    "builder": set(),
-    "planner": {
-        "claude-opus-4-6", "claude-opus-4-5",
-        "claude-sonnet-4-6", "claude-sonnet-4-5",
-        "gemini-pro", "gemini-1.5-pro", "gemini-2.0-pro",
-    },
-    "auditor": set(),
-}
 
 # ---------------------------------------------------------------------------
 # Staleness thresholds (seconds) — enforced on send()
