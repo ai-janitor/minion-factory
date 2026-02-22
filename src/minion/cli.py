@@ -38,22 +38,17 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
 
 
 # =========================================================================
-# Core Comms
+# Agent group
 # =========================================================================
 
-@cli.command("daemon-run", hidden=True)
-@click.option("--config", required=True, help="Path to crew YAML config")
-@click.option("--agent", required=True, help="Agent name to run")
-def daemon_run(config: str, agent: str) -> None:
-    """Run a single agent daemon (internal — called by spawn-party)."""
-    from minion.daemon.config import load_config
-    from minion.daemon.runner import AgentDaemon
-    cfg = load_config(config)
-    daemon = AgentDaemon(cfg, agent)
-    daemon.run()
+@cli.group("agent")
+@click.pass_context
+def agent_group(ctx: click.Context) -> None:
+    """Agent lifecycle — register, status, context, HP."""
+    pass
 
 
-@cli.command()
+@agent_group.command("register")
 @click.option("--name", required=True)
 @click.option("--class", "agent_class", required=True)
 @click.option("--model", default="")
@@ -66,28 +61,7 @@ def register(ctx: click.Context, name: str, agent_class: str, model: str, descri
     _output(_register(name, agent_class, model, description, transport), ctx.obj["human"], ctx.obj["compact"])
 
 
-@cli.command()
-@click.option("--name", required=True)
-@click.pass_context
-def deregister(ctx: click.Context, name: str) -> None:
-    """Remove an agent from the registry."""
-    from minion.comms import deregister as _deregister
-    _output(_deregister(name), ctx.obj["human"])
-
-
-@cli.command()
-@click.option("--old", required=True)
-@click.option("--new", required=True)
-@click.pass_context
-def rename(ctx: click.Context, old: str, new: str) -> None:
-    """Rename an agent. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.comms import rename as _rename
-    _output(_rename(old, new), ctx.obj["human"])
-
-
-@cli.command("set-status")
+@agent_group.command("set-status")
 @click.option("--agent", required=True)
 @click.option("--status", required=True)
 @click.pass_context
@@ -97,7 +71,7 @@ def set_status(ctx: click.Context, agent: str, status: str) -> None:
     _output(_set_status(agent, status), ctx.obj["human"])
 
 
-@cli.command("set-context")
+@agent_group.command("set-context")
 @click.option("--agent", required=True)
 @click.option("--context", required=True)
 @click.option("--tokens-used", default=0, type=int)
@@ -111,7 +85,7 @@ def set_context(ctx: click.Context, agent: str, context: str, tokens_used: int, 
     _output(_set_context(agent, context, tokens_used, tokens_limit, hp, files_modified), ctx.obj["human"])
 
 
-@cli.command()
+@agent_group.command("who")
 @click.pass_context
 def who(ctx: click.Context) -> None:
     """List all registered agents."""
@@ -119,7 +93,85 @@ def who(ctx: click.Context) -> None:
     _output(_who(), ctx.obj["human"])
 
 
-@cli.command()
+@agent_group.command("update-hp")
+@click.option("--agent", required=True)
+@click.option("--input-tokens", required=True, type=int)
+@click.option("--output-tokens", required=True, type=int)
+@click.option("--limit", required=True, type=int)
+@click.option("--turn-input", default=None, type=int, help="Per-turn input tokens (current context pressure)")
+@click.option("--turn-output", default=None, type=int, help="Per-turn output tokens (current context pressure)")
+@click.pass_context
+def update_hp(ctx: click.Context, agent: str, input_tokens: int, output_tokens: int, limit: int, turn_input: int | None, turn_output: int | None) -> None:
+    """Daemon-only: write observed HP to SQLite."""
+    from minion.monitoring import update_hp as _update_hp
+    _output(_update_hp(agent, input_tokens, output_tokens, limit, turn_input, turn_output), ctx.obj["human"])
+
+
+@agent_group.command("cold-start")
+@click.option("--agent", required=True)
+@click.pass_context
+def cold_start(ctx: click.Context, agent: str) -> None:
+    """Bootstrap an agent into (or back into) a session."""
+    from minion.lifecycle import cold_start as _cold_start
+    _output(_cold_start(agent), ctx.obj["human"], ctx.obj["compact"])
+
+
+@agent_group.command("fenix-down")
+@click.option("--agent", required=True)
+@click.option("--files", required=True)
+@click.option("--manifest", default="")
+@click.pass_context
+def fenix_down(ctx: click.Context, agent: str, files: str, manifest: str) -> None:
+    """Dump session knowledge to disk before context death."""
+    from minion.lifecycle import fenix_down as _fenix_down
+    _output(_fenix_down(agent, files, manifest), ctx.obj["human"])
+
+
+@agent_group.command("retire")
+@click.option("--agent", required=True, help="Agent to retire")
+@click.option("--requesting-agent", required=True, help="Lead requesting retirement")
+@click.pass_context
+def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> None:
+    """Signal a single daemon agent to exit gracefully. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.crew import retire_agent as _retire_agent
+    _output(_retire_agent(agent, requesting_agent), ctx.obj["human"])
+
+
+@agent_group.command("check-activity")
+@click.option("--agent", required=True)
+@click.pass_context
+def check_activity(ctx: click.Context, agent: str) -> None:
+    """Check an agent's activity level."""
+    from minion.monitoring import check_activity as _check_activity
+    _output(_check_activity(agent), ctx.obj["human"])
+
+
+@agent_group.command("check-freshness")
+@click.option("--agent", required=True)
+@click.option("--files", required=True)
+@click.pass_context
+def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
+    """Check file freshness relative to agent's last set-context. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.monitoring import check_freshness as _check_freshness
+    _output(_check_freshness(agent, files), ctx.obj["human"])
+
+
+# =========================================================================
+# Comms group
+# =========================================================================
+
+@cli.group("comms")
+@click.pass_context
+def comms_group(ctx: click.Context) -> None:
+    """Agent messaging — send, inbox, history."""
+    pass
+
+
+@comms_group.command("send")
 @click.option("--from", "from_agent", required=True)
 @click.option("--to", "to_agent", required=True)
 @click.option("--message", required=True)
@@ -131,7 +183,7 @@ def send(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: s
     _output(_send(from_agent, to_agent, message, cc), ctx.obj["human"])
 
 
-@cli.command("check-inbox")
+@comms_group.command("check-inbox")
 @click.option("--agent", required=True)
 @click.pass_context
 def check_inbox(ctx: click.Context, agent: str) -> None:
@@ -140,16 +192,7 @@ def check_inbox(ctx: click.Context, agent: str) -> None:
     _output(_check_inbox(agent), ctx.obj["human"])
 
 
-@cli.command("list-history")
-@click.option("--count", default=20, type=int)
-@click.pass_context
-def list_history(ctx: click.Context, count: int) -> None:
-    """Return the last N messages across all agents."""
-    from minion.comms import get_history as _get_history
-    _output(_get_history(count), ctx.obj["human"])
-
-
-@cli.command("purge-inbox")
+@comms_group.command("purge-inbox")
 @click.option("--agent", required=True)
 @click.option("--older-than-hours", default=2, type=int)
 @click.pass_context
@@ -159,71 +202,27 @@ def purge_inbox(ctx: click.Context, agent: str, older_than_hours: int) -> None:
     _output(_purge_inbox(agent, older_than_hours), ctx.obj["human"])
 
 
-# =========================================================================
-# War Room
-# =========================================================================
-
-@cli.command("set-battle-plan")
-@click.option("--agent", required=True)
-@click.option("--plan", required=True)
-@click.pass_context
-def set_battle_plan(ctx: click.Context, agent: str, plan: str) -> None:
-    """Set the active battle plan. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.warroom import set_battle_plan as _set_battle_plan
-    _output(_set_battle_plan(agent, plan), ctx.obj["human"])
-
-
-@cli.command("get-battle-plan")
-@click.option("--status", default="active")
-@click.pass_context
-def get_battle_plan(ctx: click.Context, status: str) -> None:
-    """Get battle plan by status."""
-    from minion.warroom import get_battle_plan as _get_battle_plan
-    _output(_get_battle_plan(status), ctx.obj["human"])
-
-
-@cli.command("update-battle-plan-status")
-@click.option("--agent", required=True)
-@click.option("--plan-id", required=True, type=int)
-@click.option("--status", required=True)
-@click.pass_context
-def update_battle_plan_status(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
-    """Update a battle plan's status. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.warroom import update_battle_plan_status as _update
-    _output(_update(agent, plan_id, status), ctx.obj["human"])
-
-
-@cli.command("log-raid")
-@click.option("--agent", required=True)
-@click.option("--entry", required=True)
-@click.option("--priority", default="normal")
-@click.pass_context
-def log_raid(ctx: click.Context, agent: str, entry: str, priority: str) -> None:
-    """Append an entry to the raid log."""
-    from minion.warroom import log_raid as _log_raid
-    _output(_log_raid(agent, entry, priority), ctx.obj["human"])
-
-
-@cli.command("list-raid-log")
-@click.option("--priority", default="")
+@comms_group.command("list-history")
 @click.option("--count", default=20, type=int)
-@click.option("--agent", default="")
 @click.pass_context
-def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
-    """Read the raid log."""
-    from minion.warroom import get_raid_log as _get_raid_log
-    _output(_get_raid_log(priority, count, agent), ctx.obj["human"])
+def list_history(ctx: click.Context, count: int) -> None:
+    """Return the last N messages across all agents."""
+    from minion.comms import get_history as _get_history
+    _output(_get_history(count), ctx.obj["human"])
 
 
 # =========================================================================
-# Task System
+# Task group
 # =========================================================================
 
-@cli.command("create-task")
+@cli.group("task")
+@click.pass_context
+def task_group(ctx: click.Context) -> None:
+    """Task management — create, assign, update, track."""
+    pass
+
+
+@task_group.command("create")
 @click.option("--agent", required=True)
 @click.option("--title", required=True)
 @click.option("--task-file", required=True)
@@ -241,7 +240,7 @@ def create_task(ctx: click.Context, agent: str, title: str, task_file: str, proj
     _output(_create_task(agent, title, task_file, project, zone, blocked_by, class_required, task_type), ctx.obj["human"])
 
 
-@cli.command("assign-task")
+@task_group.command("assign")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--assigned-to", required=True)
@@ -254,7 +253,7 @@ def assign_task(ctx: click.Context, agent: str, task_id: int, assigned_to: str) 
     _output(_assign_task(agent, task_id, assigned_to), ctx.obj["human"])
 
 
-@cli.command("update-task")
+@task_group.command("update")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--status", default="")
@@ -267,7 +266,7 @@ def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progr
     _output(_update_task(agent, task_id, status, progress, files), ctx.obj["human"])
 
 
-@cli.command("list-tasks")
+@task_group.command("list")
 @click.option("--status", default="")
 @click.option("--project", default="")
 @click.option("--zone", default="")
@@ -281,7 +280,7 @@ def list_tasks(ctx: click.Context, status: str, project: str, zone: str, assigne
     _output(_get_tasks(status, project, zone, assigned_to, class_required, count), ctx.obj["human"])
 
 
-@cli.command("get-task")
+@task_group.command("get")
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
 def get_task(ctx: click.Context, task_id: int) -> None:
@@ -290,7 +289,7 @@ def get_task(ctx: click.Context, task_id: int) -> None:
     _output(_get_task(task_id), ctx.obj["human"])
 
 
-@cli.command("task-lineage")
+@task_group.command("lineage")
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
 def task_lineage(ctx: click.Context, task_id: int) -> None:
@@ -299,7 +298,7 @@ def task_lineage(ctx: click.Context, task_id: int) -> None:
     _output(_get_lineage(task_id), ctx.obj["human"])
 
 
-@cli.command("submit-result")
+@task_group.command("submit-result")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--result-file", required=True)
@@ -310,7 +309,7 @@ def submit_result(ctx: click.Context, agent: str, task_id: int, result_file: str
     _output(_submit_result(agent, task_id, result_file), ctx.obj["human"])
 
 
-@cli.command("close-task")
+@task_group.command("close")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
@@ -322,7 +321,7 @@ def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
     _output(_close_task(agent, task_id), ctx.obj["human"])
 
 
-@cli.command("reopen-task")
+@task_group.command("reopen")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--to-status", default="assigned", help="Target status (default: assigned)")
@@ -333,7 +332,7 @@ def reopen_task_cmd(ctx: click.Context, agent: str, task_id: int, to_status: str
     _output(_reopen_task(agent, task_id, to_status), ctx.obj["human"])
 
 
-@cli.command("pull-task")
+@task_group.command("pull")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
@@ -343,7 +342,7 @@ def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
     _output(_pull_task(agent, task_id), ctx.obj["human"])
 
 
-@cli.command("complete-phase")
+@task_group.command("complete-phase")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--failed", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
@@ -355,22 +354,7 @@ def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: boo
     _output(_complete_phase(agent, task_id, passed=not failed, reason=reason), ctx.obj["human"])
 
 
-@cli.command()
-@click.option("--agent", required=True)
-@click.option("--interval", default=5, type=int, help="Poll interval in seconds")
-@click.option("--timeout", default=0, type=int, help="Timeout in seconds (0 = forever)")
-@click.pass_context
-def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
-    """Poll for messages and tasks. Returns content when available."""
-    from minion.polling import poll_loop
-    result = poll_loop(agent, interval, timeout)
-    exit_code = result.pop("exit_code", 1)
-    if result:
-        _output(result, ctx.obj["human"])
-    sys.exit(exit_code)
-
-
-@cli.command("check-work")
+@task_group.command("check-work")
 @click.option("--agent", required=True)
 @click.pass_context
 def check_work_cmd(ctx: click.Context, agent: str) -> None:
@@ -381,7 +365,18 @@ def check_work_cmd(ctx: click.Context, agent: str) -> None:
     sys.exit(0 if tasks else 1)
 
 
-@cli.command("list-flows")
+# =========================================================================
+# Flow group
+# =========================================================================
+
+@cli.group("flow")
+@click.pass_context
+def flow_group(ctx: click.Context) -> None:
+    """Task flow inspection — list, show, routing."""
+    pass
+
+
+@flow_group.command("list")
 @click.pass_context
 def list_flows_cmd(ctx: click.Context) -> None:
     """List available task flow types."""
@@ -389,11 +384,140 @@ def list_flows_cmd(ctx: click.Context) -> None:
     _output({"flows": list_flows()}, ctx.obj["human"])
 
 
+@flow_group.command("show")
+@click.argument("type_name")
+@click.pass_context
+def show_flow(ctx: click.Context, type_name: str) -> None:
+    """Show a flow's stages and transitions."""
+    from minion.tasks.loader import load_flow
+    try:
+        flow = load_flow(type_name)
+    except FileNotFoundError as e:
+        _output({"error": str(e)})
+        return
+    stages = []
+    for name, stage in flow.stages.items():
+        stages.append({
+            "name": name,
+            "description": stage.description,
+            "next": stage.next,
+            "fail": stage.fail,
+            "workers": stage.workers,
+            "requires": stage.requires,
+            "terminal": stage.terminal,
+            "skip": stage.skip,
+        })
+    _output({"name": flow.name, "description": flow.description, "stages": stages, "dead_ends": flow.dead_ends}, ctx.obj["human"], ctx.obj["compact"])
+
+
+@flow_group.command("next-status")
+@click.argument("type_name")
+@click.argument("current")
+@click.option("--failed", is_flag=True, help="Query fail path instead of happy path")
+@click.pass_context
+def next_status(ctx: click.Context, type_name: str, current: str, failed: bool) -> None:
+    """Query routing: what status comes next?"""
+    from minion.tasks.loader import load_flow
+    try:
+        flow = load_flow(type_name)
+    except FileNotFoundError as e:
+        _output({"error": str(e)})
+        return
+    result = flow.next_status(current, passed=not failed)
+    _output({"type": type_name, "current": current, "next": result}, ctx.obj["human"], ctx.obj["compact"])
+
+
+@flow_group.command("transition")
+@click.argument("task_id", type=int)
+@click.argument("to_status")
+@click.option("--agent", required=True, help="Agent triggering transition")
+@click.pass_context
+def transition(ctx: click.Context, task_id: int, to_status: str, agent: str) -> None:
+    """Manually transition a task to a new status."""
+    from minion.tasks import update_task
+    result = update_task(agent, task_id, status=to_status)
+    _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+
 # =========================================================================
-# File Safety
+# War group
 # =========================================================================
 
-@cli.command("claim-file")
+@cli.group("war")
+@click.pass_context
+def war_group(ctx: click.Context) -> None:
+    """War room — battle plans, raid log."""
+    pass
+
+
+@war_group.command("set-plan")
+@click.option("--agent", required=True)
+@click.option("--plan", required=True)
+@click.pass_context
+def set_battle_plan(ctx: click.Context, agent: str, plan: str) -> None:
+    """Set the active battle plan. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.warroom import set_battle_plan as _set_battle_plan
+    _output(_set_battle_plan(agent, plan), ctx.obj["human"])
+
+
+@war_group.command("get-plan")
+@click.option("--status", default="active")
+@click.pass_context
+def get_battle_plan(ctx: click.Context, status: str) -> None:
+    """Get battle plan by status."""
+    from minion.warroom import get_battle_plan as _get_battle_plan
+    _output(_get_battle_plan(status), ctx.obj["human"])
+
+
+@war_group.command("update-status")
+@click.option("--agent", required=True)
+@click.option("--plan-id", required=True, type=int)
+@click.option("--status", required=True)
+@click.pass_context
+def update_battle_plan_status(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
+    """Update a battle plan's status. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.warroom import update_battle_plan_status as _update
+    _output(_update(agent, plan_id, status), ctx.obj["human"])
+
+
+@war_group.command("log")
+@click.option("--agent", required=True)
+@click.option("--entry", required=True)
+@click.option("--priority", default="normal")
+@click.pass_context
+def log_raid(ctx: click.Context, agent: str, entry: str, priority: str) -> None:
+    """Append an entry to the raid log."""
+    from minion.warroom import log_raid as _log_raid
+    _output(_log_raid(agent, entry, priority), ctx.obj["human"])
+
+
+@war_group.command("list-log")
+@click.option("--priority", default="")
+@click.option("--count", default=20, type=int)
+@click.option("--agent", default="")
+@click.pass_context
+def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
+    """Read the raid log."""
+    from minion.warroom import get_raid_log as _get_raid_log
+    _output(_get_raid_log(priority, count, agent), ctx.obj["human"])
+
+
+# =========================================================================
+# File group
+# =========================================================================
+
+@cli.group("file")
+@click.pass_context
+def file_group(ctx: click.Context) -> None:
+    """File safety — claim, release, list."""
+    pass
+
+
+@file_group.command("claim")
 @click.option("--agent", required=True)
 @click.option("--file", "file_path", required=True)
 @click.pass_context
@@ -405,7 +529,7 @@ def claim_file(ctx: click.Context, agent: str, file_path: str) -> None:
     _output(_claim_file(agent, file_path), ctx.obj["human"])
 
 
-@cli.command("release-file")
+@file_group.command("release")
 @click.option("--agent", required=True)
 @click.option("--file", "file_path", required=True)
 @click.option("--force", is_flag=True)
@@ -418,7 +542,7 @@ def release_file(ctx: click.Context, agent: str, file_path: str, force: bool) ->
     _output(_release_file(agent, file_path, force), ctx.obj["human"])
 
 
-@cli.command("list-claims")
+@file_group.command("list")
 @click.option("--agent", default="")
 @click.pass_context
 def list_claims(ctx: click.Context, agent: str) -> None:
@@ -428,145 +552,17 @@ def list_claims(ctx: click.Context, agent: str) -> None:
 
 
 # =========================================================================
-# Monitoring
+# Crew group
 # =========================================================================
 
-@cli.command("party-status")
+@cli.group("crew")
 @click.pass_context
-def party_status_cmd(ctx: click.Context) -> None:
-    """Full raid health dashboard. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.monitoring import party_status
-    _output(party_status(), ctx.obj["human"])
+def crew_group(ctx: click.Context) -> None:
+    """Crew management — spawn, stand down, recruit."""
+    pass
 
 
-@cli.command("check-activity")
-@click.option("--agent", required=True)
-@click.pass_context
-def check_activity(ctx: click.Context, agent: str) -> None:
-    """Check an agent's activity level."""
-    from minion.monitoring import check_activity as _check_activity
-    _output(_check_activity(agent), ctx.obj["human"])
-
-
-@cli.command("check-freshness")
-@click.option("--agent", required=True)
-@click.option("--files", required=True)
-@click.pass_context
-def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
-    """Check file freshness relative to agent's last set-context. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.monitoring import check_freshness as _check_freshness
-    _output(_check_freshness(agent, files), ctx.obj["human"])
-
-
-@cli.command()
-@click.pass_context
-def sitrep(ctx: click.Context) -> None:
-    """Fused COP: agents + tasks + zones + claims + flags + recent comms."""
-    from minion.monitoring import sitrep as _sitrep
-    _output(_sitrep(), ctx.obj["human"])
-
-
-@cli.command("update-hp")
-@click.option("--agent", required=True)
-@click.option("--input-tokens", required=True, type=int)
-@click.option("--output-tokens", required=True, type=int)
-@click.option("--limit", required=True, type=int)
-@click.option("--turn-input", default=None, type=int, help="Per-turn input tokens (current context pressure)")
-@click.option("--turn-output", default=None, type=int, help="Per-turn output tokens (current context pressure)")
-@click.pass_context
-def update_hp(ctx: click.Context, agent: str, input_tokens: int, output_tokens: int, limit: int, turn_input: int | None, turn_output: int | None) -> None:
-    """Daemon-only: write observed HP to SQLite."""
-    from minion.monitoring import update_hp as _update_hp
-    _output(_update_hp(agent, input_tokens, output_tokens, limit, turn_input, turn_output), ctx.obj["human"])
-
-
-# =========================================================================
-# Lifecycle
-# =========================================================================
-
-@cli.command("cold-start")
-@click.option("--agent", required=True)
-@click.pass_context
-def cold_start(ctx: click.Context, agent: str) -> None:
-    """Bootstrap an agent into (or back into) a session."""
-    from minion.lifecycle import cold_start as _cold_start
-    _output(_cold_start(agent), ctx.obj["human"], ctx.obj["compact"])
-
-
-@cli.command("fenix-down")
-@click.option("--agent", required=True)
-@click.option("--files", required=True)
-@click.option("--manifest", default="")
-@click.pass_context
-def fenix_down(ctx: click.Context, agent: str, files: str, manifest: str) -> None:
-    """Dump session knowledge to disk before context death."""
-    from minion.lifecycle import fenix_down as _fenix_down
-    _output(_fenix_down(agent, files, manifest), ctx.obj["human"])
-
-
-@cli.command()
-@click.option("--agent", required=True)
-@click.option("--debrief-file", required=True)
-@click.pass_context
-def debrief(ctx: click.Context, agent: str, debrief_file: str) -> None:
-    """File a session debrief. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.lifecycle import debrief as _debrief
-    _output(_debrief(agent, debrief_file), ctx.obj["human"])
-
-
-@cli.command("end-session")
-@click.option("--agent", required=True)
-@click.pass_context
-def end_session(ctx: click.Context, agent: str) -> None:
-    """End the current session. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.lifecycle import end_session as _end_session
-    _output(_end_session(agent), ctx.obj["human"])
-
-
-# =========================================================================
-# Triggers
-# =========================================================================
-
-@cli.command("list-triggers")
-@click.pass_context
-def list_triggers(ctx: click.Context) -> None:
-    """Return the trigger word codebook."""
-    from minion.triggers import get_triggers as _get_triggers
-    _output(_get_triggers(), ctx.obj["human"])
-
-
-@cli.command("clear-moon-crash")
-@click.option("--agent", required=True)
-@click.pass_context
-def clear_moon_crash(ctx: click.Context, agent: str) -> None:
-    """Clear the moon_crash emergency flag. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.triggers import clear_moon_crash as _clear
-    _output(_clear(agent), ctx.obj["human"])
-
-
-# =========================================================================
-# Crew
-# =========================================================================
-
-@cli.command("install-docs")
-@click.pass_context
-def install_docs(ctx: click.Context) -> None:
-    """Copy protocol + contract docs to ~/.minion_work/docs/."""
-    from minion.crew.spawn import install_docs as _install_docs
-    _output(_install_docs(), ctx.obj["human"])
-
-
-@cli.command("list-crews")
+@crew_group.command("list")
 @click.pass_context
 def list_crews(ctx: click.Context) -> None:
     """List available crews. Lead only."""
@@ -576,7 +572,7 @@ def list_crews(ctx: click.Context) -> None:
     _output(_list_crews(), ctx.obj["human"])
 
 
-@cli.command("spawn-party")
+@crew_group.command("spawn")
 @click.option("--crew", required=True)
 @click.option("--project-dir", default=".")
 @click.option("--agents", default="")
@@ -592,7 +588,30 @@ def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, ru
     _output(_spawn_party(crew, project_dir, agents, runtime=runtime), ctx.obj["human"])
 
 
-@cli.command()
+@crew_group.command("stand-down")
+@click.option("--agent", required=True)
+@click.option("--crew", default="")
+@click.pass_context
+def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
+    """Dismiss the party. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.crew import stand_down as _stand_down
+    _output(_stand_down(agent, crew), ctx.obj["human"])
+
+
+@crew_group.command("halt")
+@click.option("--agent", required=True, help="Lead agent issuing the halt")
+@click.pass_context
+def halt_cmd(ctx: click.Context, agent: str) -> None:
+    """Graceful pause — agents finish work, fenix_down, stand down."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.lifecycle import halt as _halt
+    _output(_halt(agent), ctx.obj["human"])
+
+
+@crew_group.command("recruit")
 @click.option("--name", required=True, help="Agent name")
 @click.option("--class", "agent_class", default="", help="Agent class (lead, coder, builder, ...)")
 @click.option("--crew", required=True, help="Running crew to join (tmux session crew-<name>)")
@@ -637,67 +656,7 @@ def recruit(ctx: click.Context, name: str, agent_class: str, crew: str,
     ), ctx.obj["human"], ctx.obj["compact"])
 
 
-@cli.command("stand-down")
-@click.option("--agent", required=True)
-@click.option("--crew", default="")
-@click.pass_context
-def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
-    """Dismiss the party. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.crew import stand_down as _stand_down
-    _output(_stand_down(agent, crew), ctx.obj["human"])
-
-
-@cli.command("halt")
-@click.option("--agent", required=True, help="Lead agent issuing the halt")
-@click.pass_context
-def halt_cmd(ctx: click.Context, agent: str) -> None:
-    """Graceful pause — agents finish work, fenix_down, stand down."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.lifecycle import halt as _halt
-    _output(_halt(agent), ctx.obj["human"])
-
-
-@cli.command("retire-agent")
-@click.option("--agent", required=True, help="Agent to retire")
-@click.option("--requesting-agent", required=True, help="Lead requesting retirement")
-@click.pass_context
-def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> None:
-    """Signal a single daemon agent to exit gracefully. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.crew import retire_agent as _retire_agent
-    _output(_retire_agent(agent, requesting_agent), ctx.obj["human"])
-
-
-@cli.command()
-@click.option("--agent", required=True, help="Agent to interrupt")
-@click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
-@click.pass_context
-def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
-    """Interrupt an agent's current invocation. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.crew import interrupt_agent as _interrupt
-    _output(_interrupt(agent, requesting_agent), ctx.obj["human"])
-
-
-@cli.command()
-@click.option("--agent", required=True, help="Agent to resume")
-@click.option("--message", required=True, help="Message to send on resume")
-@click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
-@click.pass_context
-def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
-    """Send a resume message to an interrupted agent. Lead only."""
-    from minion.auth import require_class
-    require_class("lead")(lambda: None)()
-    from minion.comms import send as _send
-    _output(_send(from_agent, agent, message), ctx.obj["human"])
-
-
-@cli.command("hand-off-zone")
+@crew_group.command("hand-off-zone")
 @click.option("--from", "from_agent", required=True)
 @click.option("--to", "to_agents", required=True, help="Comma-separated agent names")
 @click.option("--zone", required=True)
@@ -708,32 +667,102 @@ def hand_off_zone(ctx: click.Context, from_agent: str, to_agents: str, zone: str
     _output(_hand_off(from_agent, to_agents, zone), ctx.obj["human"])
 
 
+@crew_group.command("status")
+@click.pass_context
+def party_status_cmd(ctx: click.Context) -> None:
+    """Full raid health dashboard. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.monitoring import party_status
+    _output(party_status(), ctx.obj["human"])
+
+
 # =========================================================================
-# Discovery
+# Trigger group
 # =========================================================================
 
-@cli.command()
-@click.option("--class", "agent_class", default="", help="Class to list tools for (default: MINION_CLASS env)")
+@cli.group("trigger")
 @click.pass_context
-def tools(ctx: click.Context, agent_class: str) -> None:
-    """List available tools for your class."""
-    from minion.auth import get_agent_class, get_tools_for_class
-    from minion.db import DOCS_DIR
-    cls = agent_class or get_agent_class()
-    docs_dir = DOCS_DIR
-    protocol_file = f"protocol-{cls}.md"
-    result: dict[str, object] = {
-        "class": cls,
-        "tools": get_tools_for_class(cls),
-        "protocol_doc": os.path.join(docs_dir, protocol_file) if os.path.isfile(os.path.join(docs_dir, protocol_file)) else None,
-    }
+def trigger_group(ctx: click.Context) -> None:
+    """Trigger word management."""
+    pass
+
+
+@trigger_group.command("list")
+@click.pass_context
+def list_triggers(ctx: click.Context) -> None:
+    """Return the trigger word codebook."""
+    from minion.triggers import get_triggers as _get_triggers
+    _output(_get_triggers(), ctx.obj["human"])
+
+
+@trigger_group.command("clear-moon-crash")
+@click.option("--agent", required=True)
+@click.pass_context
+def clear_moon_crash(ctx: click.Context, agent: str) -> None:
+    """Clear the moon_crash emergency flag. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.triggers import clear_moon_crash as _clear
+    _output(_clear(agent), ctx.obj["human"])
+
+
+# =========================================================================
+# Daemon group
+# =========================================================================
+
+@cli.group("daemon")
+@click.pass_context
+def daemon_group(ctx: click.Context) -> None:
+    """Daemon process management — run, start, stop, logs."""
+    pass
+
+
+@daemon_group.command("run", hidden=True)
+@click.option("--config", required=True, help="Path to crew YAML config")
+@click.option("--agent", required=True, help="Agent name to run")
+def daemon_run(config: str, agent: str) -> None:
+    """Run a single agent daemon (internal — called by spawn-party)."""
+    from minion.daemon.config import load_config
+    from minion.daemon.runner import AgentDaemon
+    cfg = load_config(config)
+    daemon = AgentDaemon(cfg, agent)
+    daemon.run()
+
+
+@daemon_group.command("start")
+@click.argument("agent")
+@click.option("--crew", required=True, help="Crew YAML name (e.g. ff1)")
+@click.option("--project-dir", default=".", help="Project directory")
+@click.pass_context
+def start_agent(ctx: click.Context, agent: str, crew: str, project_dir: str) -> None:
+    """Start a single daemon agent from a crew."""
+    from minion.crew.spawn import spawn_party
+    result = spawn_party(crew, project_dir, agents=agent, runtime="python")
     _output(result, ctx.obj["human"], ctx.obj["compact"])
 
 
-# --- Flow inspection commands ---
+@daemon_group.command("stop")
+@click.argument("agent")
+@click.pass_context
+def stop_agent(ctx: click.Context, agent: str) -> None:
+    """Stop a single daemon agent (SIGTERM → SIGKILL)."""
+    from minion.crew.lifecycle import stop_agent_process
+    _output(stop_agent_process(agent), ctx.obj["human"], ctx.obj["compact"])
+
+
+@daemon_group.command("logs")
+@click.argument("agent")
+@click.option("--lines", default=80, type=int)
+@click.option("--follow/--no-follow", default=False)
+def logs_agent(agent: str, lines: int, follow: bool) -> None:
+    """Show (and optionally follow) one agent's log."""
+    from minion.crew.logs import tail_agent_log
+    tail_agent_log(agent, lines, follow)
+
 
 # =========================================================================
-# Missions
+# Missions (already grouped — unchanged)
 # =========================================================================
 
 @cli.group("mission")
@@ -804,102 +833,140 @@ def mission_spawn(ctx: click.Context, mission_type: str, party_str: str, crew: s
 
 
 # =========================================================================
-# Flow Inspection
+# Requirements (already grouped — unchanged)
 # =========================================================================
 
-@cli.command("show-flow")
-@click.argument("type_name")
+@cli.group("req")
 @click.pass_context
-def show_flow(ctx, type_name):
-    """Show a flow's stages and transitions."""
-    from minion.tasks.loader import load_flow
-    try:
-        flow = load_flow(type_name)
-    except FileNotFoundError as e:
-        _output({"error": str(e)})
-        return
-    stages = []
-    for name, stage in flow.stages.items():
-        stages.append({
-            "name": name,
-            "description": stage.description,
-            "next": stage.next,
-            "fail": stage.fail,
-            "workers": stage.workers,
-            "requires": stage.requires,
-            "terminal": stage.terminal,
-            "skip": stage.skip,
-        })
-    _output({"name": flow.name, "description": flow.description, "stages": stages, "dead_ends": flow.dead_ends}, ctx.obj["human"], ctx.obj["compact"])
+def req_group(ctx: click.Context) -> None:
+    """Requirements index — register, query, and advance decomposition stages."""
+    pass
 
 
-@cli.command("next-status")
-@click.argument("type_name")
-@click.argument("current")
-@click.option("--failed", is_flag=True, help="Query fail path instead of happy path")
+@req_group.command("register")
+@click.option("--path", required=True, help="Path relative to .work/requirements/")
+@click.option("--by", "created_by", default="human", help="Who is registering (agent name or 'human')")
 @click.pass_context
-def next_status(ctx, type_name, current, failed):
-    """Query routing: what status comes next?"""
-    from minion.tasks.loader import load_flow
-    try:
-        flow = load_flow(type_name)
-    except FileNotFoundError as e:
-        _output({"error": str(e)})
-        return
-    result = flow.next_status(current, passed=not failed)
-    _output({"type": type_name, "current": current, "next": result}, ctx.obj["human"], ctx.obj["compact"])
+def req_register(ctx: click.Context, path: str, created_by: str) -> None:
+    """Register a requirement folder in the index."""
+    from minion.requirements import register as _register
+    _output(_register(path, created_by), ctx.obj["human"], ctx.obj["compact"])
 
 
-# --- Task transition commands ---
-
-@cli.command("transition")
-@click.argument("task_id", type=int)
-@click.argument("to_status")
-@click.option("--agent", required=True, help="Agent triggering transition")
+@req_group.command("reindex")
+@click.option("--work-dir", default="", help="Path to .work/ directory (default: cwd/.work or -C project-dir/.work)")
 @click.pass_context
-def transition(ctx, task_id, to_status, agent):
-    """Manually transition a task to a new status."""
-    from minion.tasks.crud import update_task
-    result = update_task(agent, task_id, status=to_status)
-    _output(result, ctx.obj["human"], ctx.obj["compact"])
+def req_reindex(ctx: click.Context, work_dir: str) -> None:
+    """Rebuild the requirements index by scanning the filesystem."""
+    from minion.defaults import resolve_work_dir
+    from minion.requirements import reindex as _reindex
+    if work_dir:
+        wd = work_dir
+    else:
+        # Prefer the project dir set by -C flag over raw cwd
+        project_dir = ctx.obj.get("project_dir")
+        wd = str(resolve_work_dir(project_dir))
+    _output(_reindex(wd), ctx.obj["human"], ctx.obj["compact"])
 
 
-# --- Daemon management commands ---
-
-@cli.command("start")
-@click.argument("agent")
-@click.option("--crew", required=True, help="Crew YAML name (e.g. ff1)")
-@click.option("--project-dir", default=".", help="Project directory")
+@req_group.command("list")
+@click.option("--stage", default="", help="Filter by stage")
+@click.option("--origin", default="", help="Filter by origin (feature, bug, ...)")
 @click.pass_context
-def start_agent(ctx, agent, crew, project_dir):
-    """Start a single daemon agent from a crew."""
-    from minion.crew.spawn import spawn_party
-    result = spawn_party(crew, project_dir, agents=agent, runtime="python")
-    _output(result, ctx.obj["human"], ctx.obj["compact"])
+def req_list(ctx: click.Context, stage: str, origin: str) -> None:
+    """List all requirements with optional filters."""
+    from minion.requirements import list_requirements as _list
+    _output(_list(stage, origin), ctx.obj["human"], ctx.obj["compact"])
 
 
-@cli.command("stop")
-@click.argument("agent")
+@req_group.command("tree")
+@click.argument("path")
 @click.pass_context
-def stop_agent(ctx, agent):
-    """Stop a single daemon agent (SIGTERM → SIGKILL)."""
-    from minion.crew.lifecycle import stop_agent_process
-    _output(stop_agent_process(agent), ctx.obj["human"], ctx.obj["compact"])
+def req_tree(ctx: click.Context, path: str) -> None:
+    """Show the decomposition tree rooted at PATH."""
+    from minion.requirements import get_tree as _tree
+    _output(_tree(path), ctx.obj["human"], ctx.obj["compact"])
 
 
-@cli.command("logs")
-@click.argument("agent")
-@click.option("--lines", default=80, type=int)
-@click.option("--follow/--no-follow", default=False)
-def logs_agent(agent, lines, follow):
-    """Show (and optionally follow) one agent's log."""
-    from minion.crew.logs import tail_agent_log
-    tail_agent_log(agent, lines, follow)
+@req_group.command("status")
+@click.argument("path")
+@click.pass_context
+def req_status(ctx: click.Context, path: str) -> None:
+    """Show a requirement, its linked tasks, and completion percentage."""
+    from minion.requirements import get_status as _status
+    _output(_status(path), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("update")
+@click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
+@click.option("--stage", required=True, help="Target stage")
+@click.pass_context
+def req_update(ctx: click.Context, path: str, stage: str) -> None:
+    """Advance a requirement's stage."""
+    from minion.requirements import update_stage as _update
+    _output(_update(path, stage), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("link")
+@click.option("--task", "task_id", required=True, type=int, help="Task ID to link")
+@click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
+@click.pass_context
+def req_link(ctx: click.Context, task_id: int, path: str) -> None:
+    """Link a task to its source requirement."""
+    from minion.requirements import link_task as _link
+    _output(_link(task_id, path), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("unlinked")
+@click.pass_context
+def req_unlinked(ctx: click.Context) -> None:
+    """List tasks with no requirement_path (orphan tasks)."""
+    from minion.requirements import get_unlinked_tasks as _unlinked
+    _output(_unlinked(), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("orphans")
+@click.pass_context
+def req_orphans(ctx: click.Context) -> None:
+    """List leaf requirements with no linked tasks (work never started)."""
+    from minion.requirements import get_orphans as _orphans
+    _output(_orphans(), ctx.obj["human"], ctx.obj["compact"])
 
 
 # =========================================================================
-# Dashboard
+# Top-level commands (stay ungrouped)
 # =========================================================================
+
+@cli.command()
+@click.option("--agent", required=True)
+@click.option("--interval", default=5, type=int, help="Poll interval in seconds")
+@click.option("--timeout", default=0, type=int, help="Timeout in seconds (0 = forever)")
+@click.pass_context
+def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
+    """Poll for messages and tasks. Returns content when available."""
+    from minion.polling import poll_loop
+    result = poll_loop(agent, interval, timeout)
+    exit_code = result.pop("exit_code", 1)
+    if result:
+        _output(result, ctx.obj["human"])
+    sys.exit(exit_code)
+
+
+@cli.command()
+@click.pass_context
+def sitrep(ctx: click.Context) -> None:
+    """Fused COP: agents + tasks + zones + claims + flags + recent comms."""
+    from minion.monitoring import sitrep as _sitrep
+    _output(_sitrep(), ctx.obj["human"])
+
+
+@cli.command("install-docs")
+@click.pass_context
+def install_docs(ctx: click.Context) -> None:
+    """Copy protocol + contract docs to ~/.minion_work/docs/."""
+    from minion.crew.spawn import install_docs as _install_docs
+    _output(_install_docs(), ctx.obj["human"])
+
 
 @cli.command("dashboard")
 @click.pass_context
@@ -909,10 +976,167 @@ def dashboard_cmd(ctx: click.Context) -> None:
     run()
 
 
+@cli.command("end-session")
+@click.option("--agent", required=True)
+@click.pass_context
+def end_session(ctx: click.Context, agent: str) -> None:
+    """End the current session. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.lifecycle import end_session as _end_session
+    _output(_end_session(agent), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--class", "agent_class", default="", help="Class to list tools for (default: MINION_CLASS env)")
+@click.pass_context
+def tools(ctx: click.Context, agent_class: str) -> None:
+    """List available tools for your class."""
+    from minion.auth import get_agent_class, get_tools_for_class
+    from minion.db import DOCS_DIR
+    cls = agent_class or get_agent_class()
+    docs_dir = DOCS_DIR
+    protocol_file = f"protocol-{cls}.md"
+    result: dict[str, object] = {
+        "class": cls,
+        "tools": get_tools_for_class(cls),
+        "protocol_doc": os.path.join(docs_dir, protocol_file) if os.path.isfile(os.path.join(docs_dir, protocol_file)) else None,
+    }
+    _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+
+@cli.command()
+@click.option("--agent", required=True)
+@click.option("--debrief-file", required=True)
+@click.pass_context
+def debrief(ctx: click.Context, agent: str, debrief_file: str) -> None:
+    """File a session debrief. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.lifecycle import debrief as _debrief
+    _output(_debrief(agent, debrief_file), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--name", required=True)
+@click.pass_context
+def deregister(ctx: click.Context, name: str) -> None:
+    """Remove an agent from the registry."""
+    from minion.comms import deregister as _deregister
+    _output(_deregister(name), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--old", required=True)
+@click.option("--new", required=True)
+@click.pass_context
+def rename(ctx: click.Context, old: str, new: str) -> None:
+    """Rename an agent. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.comms import rename as _rename
+    _output(_rename(old, new), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--agent", required=True, help="Agent to interrupt")
+@click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
+@click.pass_context
+def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
+    """Interrupt an agent's current invocation. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.crew import interrupt_agent as _interrupt
+    _output(_interrupt(agent, requesting_agent), ctx.obj["human"])
+
+
+@cli.command()
+@click.option("--agent", required=True, help="Agent to resume")
+@click.option("--message", required=True, help="Message to send on resume")
+@click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
+@click.pass_context
+def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
+    """Send a resume message to an interrupted agent. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.comms import send as _send
+    _output(_send(from_agent, agent, message), ctx.obj["human"])
+
+
 # =========================================================================
-# Hidden aliases — backwards compat for old `get-*` collection names
+# Hidden aliases — backwards compat for all old flat command names
 # =========================================================================
 
+# Agent group aliases
+cli.add_command(register, "register")
+cli.add_command(set_status, "set-status")
+cli.add_command(set_context, "set-context")
+cli.add_command(who, "who")
+cli.add_command(update_hp, "update-hp")
+cli.add_command(cold_start, "cold-start")
+cli.add_command(fenix_down, "fenix-down")
+cli.add_command(retire_agent_cmd, "retire-agent")
+cli.add_command(check_activity, "check-activity")
+cli.add_command(check_freshness, "check-freshness")
+
+# Comms group aliases
+cli.add_command(send, "send")
+cli.add_command(check_inbox, "check-inbox")
+cli.add_command(purge_inbox, "purge-inbox")
+cli.add_command(list_history, "list-history")
+
+# Task group aliases
+cli.add_command(create_task, "create-task")
+cli.add_command(assign_task, "assign-task")
+cli.add_command(update_task, "update-task")
+cli.add_command(list_tasks, "list-tasks")
+cli.add_command(get_task, "get-task")
+cli.add_command(task_lineage, "task-lineage")
+cli.add_command(submit_result, "submit-result")
+cli.add_command(close_task, "close-task")
+cli.add_command(reopen_task_cmd, "reopen-task")
+cli.add_command(pull_task_cmd, "pull-task")
+cli.add_command(complete_phase_cmd, "complete-phase")
+cli.add_command(check_work_cmd, "check-work")
+
+# Flow group aliases
+cli.add_command(list_flows_cmd, "list-flows")
+cli.add_command(show_flow, "show-flow")
+cli.add_command(next_status, "next-status")
+cli.add_command(transition, "transition")
+
+# War group aliases
+cli.add_command(set_battle_plan, "set-battle-plan")
+cli.add_command(get_battle_plan, "get-battle-plan")
+cli.add_command(update_battle_plan_status, "update-battle-plan-status")
+cli.add_command(log_raid, "log-raid")
+cli.add_command(list_raid_log, "list-raid-log")
+
+# File group aliases
+cli.add_command(claim_file, "claim-file")
+cli.add_command(release_file, "release-file")
+cli.add_command(list_claims, "list-claims")
+
+# Crew group aliases
+cli.add_command(list_crews, "list-crews")
+cli.add_command(spawn_party, "spawn-party")
+cli.add_command(stand_down, "stand-down")
+cli.add_command(halt_cmd, "halt")
+cli.add_command(recruit, "recruit")
+cli.add_command(hand_off_zone, "hand-off-zone")
+cli.add_command(party_status_cmd, "party-status")
+
+# Trigger group aliases
+cli.add_command(list_triggers, "list-triggers")
+cli.add_command(clear_moon_crash, "clear-moon-crash")
+
+# Daemon group aliases
+cli.add_command(daemon_run, "daemon-run")
+cli.add_command(start_agent, "start")
+cli.add_command(stop_agent, "stop")
+cli.add_command(logs_agent, "logs")
+
+# Legacy get-* collection name aliases
 cli.add_command(list_tasks, "get-tasks")
 cli.add_command(list_history, "get-history")
 cli.add_command(list_raid_log, "get-raid-log")
