@@ -3,31 +3,12 @@
 from __future__ import annotations
 
 import os
-from typing import Any
-
 import sqlite3
 
 from minion.db import get_db, now_iso, staleness_check
 from minion.crew._tmux import update_pane_task
-from .loader import load_flow, list_flows as _list_flows
-
-# Cache loaded flows
-_flow_cache: dict[str, Any] = {}
-
-def _get_flow(task_type: str = "bugfix") -> Any:
-    """Load and cache a TaskFlow. Hard fail if unavailable."""
-    if task_type in _flow_cache:
-        return _flow_cache[task_type]
-    flow = load_flow(task_type)
-    _flow_cache[task_type] = flow
-    return flow
-
-def _log_transition(cursor: sqlite3.Cursor, task_id: int, from_status: str | None, to_status: str, agent: str, timestamp: str) -> None:
-    """Record a status transition in task_history."""
-    cursor.execute(
-        "INSERT INTO task_history (task_id, from_status, to_status, agent, timestamp) VALUES (?, ?, ?, ?, ?)",
-        (task_id, from_status, to_status, agent, timestamp),
-    )
+from .loader import list_flows as _list_flows
+from ._helpers import _get_flow, _log_transition
 
 def create_task(
     agent_name: str,
