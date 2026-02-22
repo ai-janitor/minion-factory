@@ -7,9 +7,12 @@ into a single schema. One DB file, one connection helper.
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import sqlite3
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 from minion.defaults import resolve_db_path, resolve_docs_dir
 
@@ -205,6 +208,18 @@ CREATE TABLE IF NOT EXISTS agent_interrupt (
 # Schema — task tables (unified from commsv2 + minion-tasks)
 # ---------------------------------------------------------------------------
 
+_REQUIREMENTS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS requirements (
+    id          INTEGER PRIMARY KEY,
+    file_path   TEXT UNIQUE NOT NULL,
+    origin      TEXT NOT NULL,
+    stage       TEXT NOT NULL DEFAULT 'seed',
+    created_by  TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 _TASKS_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS projects (
     id          TEXT PRIMARY KEY,
@@ -255,16 +270,77 @@ CREATE TABLE IF NOT EXISTS transitions (
 
 
 # ---------------------------------------------------------------------------
+# Schema versioning — tracks which migrations have been applied
+# ---------------------------------------------------------------------------
+
+_SCHEMA_VERSION_SQL = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version     INTEGER PRIMARY KEY,
+    applied_at  TEXT NOT NULL,
+    description TEXT
+);
+"""
+
+# Ordered list of (version, description, callable) tuples.
+# Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
+# Sibling tasks (011.002–011.008) will append entries here.
+_MIGRATIONS: list[tuple[int, str, Any]] = []
+
+
+def _get_current_schema_version(conn: sqlite3.Connection) -> int:
+    """Return the highest applied schema version, or 0 if no migrations yet."""
+    row = conn.execute(
+        "SELECT MAX(version) FROM schema_version"
+    ).fetchone()
+    return row[0] if row[0] is not None else 0
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply all pending versioned migrations in order.
+
+    Each migration runs in its own transaction. On failure the single
+    migration is rolled back and the error propagates — later migrations
+    are skipped so the DB stays at the last successful version.
+    """
+    if not _MIGRATIONS:
+        return
+
+    current = _get_current_schema_version(conn)
+
+    for version, description, migrate_fn in sorted(_MIGRATIONS):
+        if version <= current:
+            continue
+        try:
+            # Each migration gets its own transaction
+            conn.execute("BEGIN")
+            migrate_fn(conn)
+            conn.execute(
+                "INSERT INTO schema_version (version, applied_at, description) "
+                "VALUES (?, ?, ?)",
+                (version, now_iso(), description),
+            )
+            conn.execute("COMMIT")
+            log.info("Applied schema migration v%d: %s", version, description)
+        except Exception:
+            conn.execute("ROLLBACK")
+            log.exception("Schema migration v%d failed, rolled back", version)
+            raise
+
+
+# ---------------------------------------------------------------------------
 # Init
 # ---------------------------------------------------------------------------
 
 
 def init_db() -> None:
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist, then run pending migrations."""
     conn = get_db()
     conn.executescript(_COMMS_SCHEMA_SQL)
     conn.executescript(_TASKS_SCHEMA_SQL)
+    conn.executescript(_REQUIREMENTS_SCHEMA_SQL)
+    conn.executescript(_SCHEMA_VERSION_SQL)
     _migrate(conn)
+    _run_migrations(conn)
     conn.close()
 
 
@@ -291,6 +367,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col, typedef in [
         ("class_required", "TEXT DEFAULT NULL"),
         ("task_type", "TEXT DEFAULT 'bugfix'"),
+        ("requirement_path", "TEXT DEFAULT NULL"),
     ]:
         if col not in task_cols:
             conn.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
