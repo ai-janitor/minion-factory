@@ -103,15 +103,7 @@ TASK_STATUSES = {
     "open", "assigned", "in_progress", "fixed", "verified",
     "closed", "abandoned", "stale", "obsolete",
 }
-
-# Valid state transitions — warn (don't block) when skipped
-VALID_TRANSITIONS: dict[str, set[str]] = {
-    "open": {"assigned", "abandoned", "stale", "obsolete"},
-    "assigned": {"in_progress", "abandoned", "stale", "obsolete"},
-    "in_progress": {"fixed", "abandoned", "stale", "obsolete"},
-    "fixed": {"verified", "assigned", "abandoned", "stale", "obsolete"},
-    "verified": {"closed", "assigned", "abandoned", "stale", "obsolete"},
-}
+# VALID_TRANSITIONS removed — all transition logic lives in DAG YAML flows
 
 # ---------------------------------------------------------------------------
 # Trigger words (brevity codes)

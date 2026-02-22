@@ -14,19 +14,13 @@ from .loader import load_flow, list_flows as _list_flows
 # Cache loaded flows
 _flow_cache: dict[str, Any] = {}
 
-def _get_flow(task_type: str = "bugfix") -> Any | None:
-    """Load and cache a TaskFlow, or return None if unavailable."""
+def _get_flow(task_type: str = "bugfix") -> Any:
+    """Load and cache a TaskFlow. Hard fail if unavailable."""
     if task_type in _flow_cache:
         return _flow_cache[task_type]
-    try:
-        flow = load_flow(task_type)
-        _flow_cache[task_type] = flow
-        return flow
-    except (FileNotFoundError, ValueError) as exc:
-        import sys
-        print(f"WARNING: task flow '{task_type}' failed to load: {exc}", file=sys.stderr)
-        _flow_cache[task_type] = None
-        return None
+    flow = load_flow(task_type)
+    _flow_cache[task_type] = flow
+    return flow
 
 def _log_transition(cursor: sqlite3.Cursor, task_id: int, from_status: str | None, to_status: str, agent: str, timestamp: str) -> None:
     """Record a status transition in task_history."""
@@ -557,25 +551,11 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
         class_required = task_row["class_required"] or ""
 
         flow = _get_flow(task_type)
-        if flow and flow.is_terminal(current):
+        if flow.is_terminal(current):
             return {"error": f"Task #{task_id} is already in terminal status '{current}'."}
 
-        # DAG decides next status
-        if flow:
-            new_status = flow.next_status(current, passed)
-        else:
-            # Fallback linear pipeline
-            _linear = {
-                "open": "assigned",
-                "assigned": "in_progress",
-                "in_progress": "fixed",
-                "fixed": "verified",
-                "verified": "closed",
-            }
-            if not passed:
-                new_status = "assigned" if current in ("fixed", "verified") else None
-            else:
-                new_status = _linear.get(current)
+        # DAG decides next status — no fallback
+        new_status = flow.next_status(current, passed)
 
         if new_status is None:
             return {"error": f"No transition from '{current}' (passed={passed}) in flow '{task_type}'."}
@@ -585,7 +565,7 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
             return {"error": "BLOCKED transition requires --reason explaining why you're stuck."}
 
         # Who works on the next stage?
-        eligible = flow.workers_for(new_status, class_required) if flow else None
+        eligible = flow.workers_for(new_status, class_required)
 
         # Update task
         fields = ["status = ?", "updated_at = ?", "activity_count = activity_count + 1"]
@@ -650,7 +630,7 @@ def get_task_lineage(task_id: int) -> dict[str, object]:
 
         # Flow stages for this task type
         flow = _get_flow(task_type)
-        stages = sorted(flow.stages.keys()) if flow else ["open", "assigned", "in_progress", "fixed", "verified", "closed"]
+        stages = sorted(flow.stages.keys())
 
         return {
             "task": task,

@@ -1,142 +1,77 @@
-"""Bridge to task DAG engine with hardcoded fallback.
+"""Bridge to task DAG engine — all queries route through YAML-defined flows.
 
-All DAG queries route through here. If minion.tasks is available, uses
-YAML-defined flows. Otherwise falls back to auth.VALID_TRANSITIONS constants.
+No fallbacks. Missing YAML = hard failure.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from minion.auth import CAP_REVIEW, TASK_STATUSES, VALID_TRANSITIONS, classes_with
+from minion.tasks import TaskFlow, list_flows as _mt_list_flows, load_flow as _mt_load_flow
 
 # Cache loaded flows so we don't re-parse YAML every call
 _flow_cache: dict[str, Any] = {}
 
-_HAS_DAG = False
-try:
-    from minion.tasks import TaskFlow, list_flows as _mt_list_flows, load_flow as _mt_load_flow
-    _HAS_DAG = True
-except ImportError:
-    pass
 
-
-def _get_flow(task_type: str = "bugfix") -> Any | None:
-    """Load and cache a TaskFlow, or return None if unavailable."""
-    if not _HAS_DAG:
-        return None
+def _get_flow(task_type: str = "bugfix") -> TaskFlow:
+    """Load and cache a TaskFlow. Hard fail if unavailable."""
     if task_type in _flow_cache:
         return _flow_cache[task_type]
-    try:
-        flow = _mt_load_flow(task_type)
-        _flow_cache[task_type] = flow
-        return flow
-    except (FileNotFoundError, ValueError) as exc:
-        import sys
-        print(f"WARNING: flow '{task_type}' failed to load: {exc}", file=sys.stderr)
-        _flow_cache[task_type] = None
-        return None
+    flow = _mt_load_flow(task_type)
+    _flow_cache[task_type] = flow
+    return flow
 
 
 # -- Terminal statuses (closed, abandoned, etc.) --
 
-_FALLBACK_TERMINAL = {"closed"}
-_FALLBACK_DEAD_ENDS = {"abandoned", "stale", "obsolete"}
-
-
 def is_terminal(status: str, task_type: str = "bugfix") -> bool:
     """Is this status terminal (no further transitions)?"""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        return flow.is_terminal(status)
-    return status in _FALLBACK_TERMINAL
+    return _get_flow(task_type).is_terminal(status)
 
 
 def is_dead_end(status: str, task_type: str = "bugfix") -> bool:
     """Is this a dead-end status (abandoned/stale/obsolete)?"""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        return status in flow.dead_ends
-    return status in _FALLBACK_DEAD_ENDS
+    return status in _get_flow(task_type).dead_ends
 
 
 # -- Status sets --
 
 def all_statuses(task_type: str = "bugfix") -> set[str]:
     """All known statuses for this flow type."""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        return set(flow.stages.keys())
-    return TASK_STATUSES
+    return set(_get_flow(task_type).stages.keys())
 
 
 def active_statuses(task_type: str = "bugfix") -> tuple[str, ...]:
     """Non-terminal, non-dead-end statuses (what agents actively work on)."""
     flow = _get_flow(task_type)
-    if flow is not None:
-        return tuple(
-            name for name, stage in flow.stages.items()
-            if not stage.terminal and not stage.parked and name not in flow.dead_ends
-        )
-    return ("open", "assigned", "in_progress", "fixed", "verified")
+    return tuple(
+        name for name, stage in flow.stages.items()
+        if not stage.terminal and not stage.parked and name not in flow.dead_ends
+    )
 
 
 # -- Transitions --
 
 def valid_transitions(current: str, task_type: str = "bugfix") -> set[str] | None:
     """Valid next statuses from current. None if current is unknown/terminal."""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        result = flow.valid_transitions(current)
-        return result if result else None
-    return VALID_TRANSITIONS.get(current)
+    result = _get_flow(task_type).valid_transitions(current)
+    return result if result else None
 
 
 def next_status(current: str, task_type: str = "bugfix", passed: bool = True) -> str | None:
     """DAG-driven next status. Returns None if terminal/unknown."""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        return flow.next_status(current, passed)
-    # Fallback: simple linear pipeline
-    _linear = {
-        "open": "assigned",
-        "assigned": "in_progress",
-        "in_progress": "fixed",
-        "fixed": "verified",
-        "verified": "closed",
-    }
-    if not passed:
-        return "assigned" if current in ("fixed", "verified") else None
-    return _linear.get(current)
+    return _get_flow(task_type).next_status(current, passed)
 
 
 # -- Worker routing --
 
 def workers_for(status: str, class_required: str, task_type: str = "bugfix") -> list[str] | None:
     """Which agent classes can work on this stage? None = current assignee continues."""
-    flow = _get_flow(task_type)
-    if flow is not None:
-        return flow.workers_for(status, class_required)
-    # Fallback: derive from capabilities
-    _reviewers = sorted(classes_with(CAP_REVIEW))
-    _stage_workers: dict[str, list[str] | None] = {
-        "open": None,
-        "assigned": None,
-        "in_progress": None,
-        "fixed": _reviewers,
-        "verified": _reviewers,
-    }
-    return _stage_workers.get(status)
+    return _get_flow(task_type).workers_for(status, class_required)
 
 
 # -- Flow discovery --
 
 def available_flows() -> list[str]:
     """List available flow type names."""
-    if _HAS_DAG:
-        try:
-            return _mt_list_flows()
-        except Exception as exc:
-            import sys
-            print(f"WARNING: list_flows failed: {exc}", file=sys.stderr)
-    return ["bugfix"]
+    return _mt_list_flows()
