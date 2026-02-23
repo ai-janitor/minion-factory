@@ -180,12 +180,54 @@ def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
         if not result.success:
             return {"error": f"Transition blocked: {result.error}"}
 
+        # Auto-advance: keep moving forward while gates pass and no workers needed.
+        # Only auto-advance on forward transitions (not fail-backs).
+        from minion.tasks.engine import check_transition_gates
+        from minion.tasks.gates import all_gates_pass
+        is_forward = False
+        walk = from_stage
+        for _ in range(20):
+            s = flow.stages.get(walk)
+            if s is None:
+                break
+            if s.next == to_stage or (s.alt_next and s.alt_next == to_stage):
+                is_forward = True
+                break
+            walk = s.next  # type: ignore[assignment]
+            if walk is None:
+                break
+
+        final_stage = to_stage
+        skipped: list[str] = []
+        seen: set[str] = {final_stage}
+        while is_forward:
+            stage_obj = flow.stages.get(final_stage)
+            if stage_obj is None or stage_obj.terminal:
+                break
+            if stage_obj.workers is not None:
+                break
+            next_stage = stage_obj.next
+            if next_stage is None or next_stage in seen:
+                break
+            seen.add(next_stage)
+            gate_results = check_transition_gates(
+                flow, next_stage,
+                context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
+            )
+            if gate_results and not all_gates_pass(gate_results):
+                break
+            skipped.append(final_stage)
+            final_stage = next_stage
+
         cursor.execute(
             "UPDATE requirements SET stage = ?, updated_at = ? WHERE file_path = ?",
-            (to_stage, now, file_path),
+            (final_stage, now, file_path),
         )
         conn.commit()
-        return {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": to_stage}
+        resp: dict[str, Any] = {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": final_stage}
+        if skipped:
+            resp["auto_advanced_through"] = skipped
+        return resp
     finally:
         conn.close()
 

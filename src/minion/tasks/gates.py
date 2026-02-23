@@ -172,15 +172,30 @@ def _check_structural(gate: str, *, context_dir: Path | None = None) -> GateResu
 # ---------------------------------------------------------------------------
 
 def _db_all_child_tasks_closed(db, entity_id: int, entity_type: str, flow_type: str | None) -> GateResult:
-    """Check all child tasks of an entity are in a terminal state."""
+    """Check all child tasks of an entity are in a terminal state.
+
+    For requirements: also finds tasks linked to descendant requirements
+    (prefix match on file_path) so parent requirements see their children's tasks.
+    """
     gate = f"all_{'inv' if flow_type == 'investigation' else 'impl'}_tasks_closed"
-    # Query depends on whether parent_id/requirement_id columns exist (task 011)
-    # For now: look for tasks linked to this entity
-    query = "SELECT id, status FROM tasks WHERE requirement_id = ?"
-    if flow_type:
-        query += f" AND task_type = '{flow_type}'"
     try:
-        rows = db.execute(query, (entity_id,)).fetchall()
+        # Collect this entity's requirement IDs + all descendant requirement IDs
+        req_ids = [entity_id]
+        if entity_type == "requirement":
+            row = db.execute("SELECT file_path FROM requirements WHERE id = ?", (entity_id,)).fetchone()
+            if row:
+                parent_path = row[0]
+                descendants = db.execute(
+                    "SELECT id FROM requirements WHERE file_path LIKE ?",
+                    (parent_path + "/%",),
+                ).fetchall()
+                req_ids.extend(r[0] for r in descendants)
+
+        placeholders = ",".join("?" for _ in req_ids)
+        query = f"SELECT id, status FROM tasks WHERE requirement_id IN ({placeholders})"
+        if flow_type:
+            query += f" AND task_type = '{flow_type}'"
+        rows = db.execute(query, req_ids).fetchall()
     except Exception:
         # Column doesn't exist yet — gate passes vacuously until schema migration
         return GateResult(passed=True, gate=gate, message="requirement_id column not yet available")
