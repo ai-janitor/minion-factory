@@ -198,8 +198,10 @@ def link_task(task_id: int, file_path: str) -> dict[str, Any]:
     now = now_iso()
     try:
         cursor.execute("SELECT id FROM requirements WHERE file_path = ?", (file_path,))
-        if not cursor.fetchone():
+        req_row = cursor.fetchone()
+        if not req_row:
             return {"error": f"Requirement '{file_path}' not registered."}
+        req_id = req_row[0]
 
         cursor.execute("SELECT id, requirement_path FROM tasks WHERE id = ?", (task_id,))
         task_row = cursor.fetchone()
@@ -207,8 +209,8 @@ def link_task(task_id: int, file_path: str) -> dict[str, Any]:
             return {"error": f"Task #{task_id} not found."}
 
         cursor.execute(
-            "UPDATE tasks SET requirement_path = ?, updated_at = ? WHERE id = ?",
-            (file_path, now, task_id),
+            "UPDATE tasks SET requirement_path = ?, requirement_id = ?, updated_at = ? WHERE id = ?",
+            (file_path, req_id, now, task_id),
         )
         conn.commit()
         return {"status": "linked", "task_id": task_id, "requirement_path": file_path}

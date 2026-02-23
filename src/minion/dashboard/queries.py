@@ -21,7 +21,7 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             t.status,
             COALESCE(t.assigned_to, '—')    AS assignee,
             COALESCE(t.class_required, '')  AS class_req,
-            t.task_type,
+            t.flow_type,
             t.blocked_by,
             t.activity_count,
             t.result_file IS NOT NULL       AS has_result

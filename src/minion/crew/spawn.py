@@ -342,6 +342,8 @@ def spawn_party(
         if not raw_cmd:
             continue
         cmd = raw_cmd.format(project_dir=project_dir)
+        pane_title = pcfg.get("title", pane_name)
+        pane_role = pcfg.get("role", "")
         wrapped = f"{cmd}; echo '[pane exited — press enter]'; read"
         # Rebalance before split so tmux has room
         subprocess.run(
@@ -364,6 +366,7 @@ def spawn_party(
              "-s", f"{tmux_session}:0.{new_pane_idx}"],
             capture_output=True, text=True,
         )
+        style_pane(tmux_session, 0, pane_title, pane_role, model="", provider="")
         pane_idx += 1
 
     finalize_layout(tmux_session, is_new, pane_count=pane_idx)
