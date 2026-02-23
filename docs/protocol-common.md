@@ -25,14 +25,18 @@ When you finish a request from anyone (orders, questions, tasks), **always messa
 
 All commands: `minion <command> [options]`. JSON output by default, `--human` for tables.
 
+Common quick-reference:
+
 ```bash
-minion register --name <name> --class <class>
-minion check-inbox --agent <name>
-minion send --from <name> --to <target> --message "..."
-minion set-context --agent <name> --context "what you have loaded"
-minion who
+minion agent register --name <name> --class <class>
+minion comms check-inbox --agent <name>
+minion comms send --from <name> --to <target> --message "..."
+minion agent set-context --agent <name> --context "what you have loaded"
+minion agent who
 minion sitrep                    # fused view of everything
 ```
+
+Full reference: `minion docs` or see [`docs/cli-reference.md`](cli-reference.md).
 
 ## Trigger Words
 
@@ -156,19 +160,21 @@ Sections are **append-over-time** — never rewrite, only add. Git tracks the de
 ### CLI
 
 ```bash
-minion backlog add --type <type> --slug <slug> --title "..."
-minion backlog list [--type <type>] [--status <status>]
-minion backlog show <slug>
-minion backlog update <slug> --note "..."
-minion backlog promote <slug>          # creates requirement folder, hands off to DAG
-minion backlog kill <slug> --reason "..."
-minion backlog defer <slug>
-minion backlog reindex                 # rebuild DB from filesystem
+minion backlog add --type <type> --title "..." [--source human] [--description "..."] [--priority medium]
+minion backlog list [--type <type>] [--priority <priority>] [--status <status>]
+minion backlog show <path>
+minion backlog update <path> [--priority <priority>] [--status <status>]
+minion backlog promote <path> [--origin bug|feature]   # creates requirement folder, hands off to DAG
+minion backlog kill <path> --reason "..."
+minion backlog defer <path> --until "..."
+minion backlog reindex                                 # rebuild DB from filesystem
 ```
+
+`<path>` is relative to `.work/backlog/` — e.g. `bugs/preview-word-loss`, `ideas/multi-device-audio`.
 
 ### Promotion
 
-`minion backlog promote <slug>` converts a backlog item into a formal requirement:
+`minion backlog promote <path>` converts a backlog item into a formal requirement:
 
 1. Creates the appropriate folder under `requirements/features/` or `requirements/bugs/`
 2. Copies backlog `README.md` as the raw doc (never modified after promotion)

@@ -616,11 +616,10 @@ class TestBacklogCLI:
         data = json.loads(res.output)
         assert data["type"] == "idea"
 
-    def test_add_invalid_type_does_not_crash(self, runner, project_dir):
+    def test_add_invalid_type_rejected(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "invalid", "--title", "X")
-        assert res.exit_code == 0, res.output  # CLI exits 0, returns error JSON
-        data = json.loads(res.output)
-        assert "error" in data
+        assert res.exit_code != 0  # click.Choice rejects at CLI level
+        assert "invalid" in res.output
 
     def test_list_returns_json_array(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Bug One")
