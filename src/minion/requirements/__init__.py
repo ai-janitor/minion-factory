@@ -2,6 +2,7 @@ from .crud import (
     create,
     register,
     reindex,
+    resolve_path,
     update_stage,
     link_task,
     list_requirements,
@@ -13,11 +14,13 @@ from .crud import (
 from .decompose import decompose
 from .findings import findings
 from .itemize import itemize
+from .report import report, format_report
 
 __all__ = [
     "create",
     "register",
     "reindex",
+    "resolve_path",
     "update_stage",
     "link_task",
     "list_requirements",
@@ -28,4 +31,6 @@ __all__ = [
     "decompose",
     "findings",
     "itemize",
+    "report",
+    "format_report",
 ]

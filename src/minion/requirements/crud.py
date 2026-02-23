@@ -10,9 +10,32 @@ from __future__ import annotations
 import os
 from typing import Any
 
+import click
+
 from minion.db import get_db, now_iso
 from minion.tasks.engine import apply_transition
 from minion.tasks.loader import load_flow
+
+
+def resolve_path(ref: str) -> str:
+    """Resolve a requirement reference to its file_path.
+
+    Accepts either an integer ID (looked up in DB) or a path string
+    (returned as-is after stripping trailing slash).
+    """
+    ref = ref.strip().rstrip("/")
+    if ref.isdigit():
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT file_path FROM requirements WHERE id = ?", (int(ref),))
+            row = cursor.fetchone()
+            if not row:
+                raise click.ClickException(f"No requirement with id={ref}")
+            return row["file_path"]
+        finally:
+            conn.close()
+    return ref
 
 
 def _infer_origin(file_path: str) -> str:

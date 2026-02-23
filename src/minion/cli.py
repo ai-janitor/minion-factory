@@ -1154,8 +1154,9 @@ def req_list(ctx: click.Context, stage: str, origin: str) -> None:
 @click.argument("path")
 @click.pass_context
 def req_tree(ctx: click.Context, path: str) -> None:
-    """Show the decomposition tree rooted at PATH."""
-    from minion.requirements import get_tree as _tree
+    """Show the decomposition tree rooted at PATH (accepts ID or path)."""
+    from minion.requirements import resolve_path, get_tree as _tree
+    path = resolve_path(path)
     _output(_tree(path), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1163,8 +1164,9 @@ def req_tree(ctx: click.Context, path: str) -> None:
 @click.argument("path")
 @click.pass_context
 def req_status(ctx: click.Context, path: str) -> None:
-    """Show a requirement, its linked tasks, and completion percentage."""
-    from minion.requirements import get_status as _status
+    """Show a requirement, its linked tasks, and completion percentage (accepts ID or path)."""
+    from minion.requirements import resolve_path, get_status as _status
+    path = resolve_path(path)
     _output(_status(path), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1175,8 +1177,9 @@ def req_status(ctx: click.Context, path: str) -> None:
 @click.option("--agent", default="", help="Caller agent name; must be 'lead' to use --skip.")
 @click.pass_context
 def req_update(ctx: click.Context, path: str, stage: str, skip_stages: bool, agent: str) -> None:
-    """Advance a requirement's stage. Use --skip --agent lead to jump multiple stages at once."""
-    from minion.requirements import update_stage as _update
+    """Advance a requirement's stage (accepts ID or path). Use --skip --agent lead to jump multiple stages at once."""
+    from minion.requirements import resolve_path, update_stage as _update
+    path = resolve_path(path)
     _output(_update(path, stage, skip=skip_stages, agent=agent), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1185,8 +1188,9 @@ def req_update(ctx: click.Context, path: str, stage: str, skip_stages: bool, age
 @click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
 @click.pass_context
 def req_link(ctx: click.Context, task_id: int, path: str) -> None:
-    """Link a task to its source requirement."""
-    from minion.requirements import link_task as _link
+    """Link a task to its source requirement (accepts ID or path)."""
+    from minion.requirements import resolve_path, link_task as _link
+    path = resolve_path(path)
     _output(_link(task_id, path), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1268,6 +1272,8 @@ def req_decompose(ctx: click.Context, path: str, spec: str | None, inline: str |
         ctx.exit(1)
         return
 
+    from minion.requirements import resolve_path
+    path = resolve_path(path)
     _output(_decompose(path, spec_data, agent_name), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1277,11 +1283,12 @@ def req_decompose(ctx: click.Context, path: str, spec: str | None, inline: str |
 @click.option("--by", "created_by", default="lead")
 @click.pass_context
 def req_itemize(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
-    """Write itemized-requirements.md from a spec file."""
+    """Write itemized-requirements.md from a spec file (accepts ID or path)."""
     import yaml
     with open(spec) as f:
         spec_data = yaml.safe_load(f)
-    from minion.requirements import itemize as _itemize
+    from minion.requirements import resolve_path, itemize as _itemize
+    path = resolve_path(path)
     _output(_itemize(path, spec_data, created_by), ctx.obj["human"], ctx.obj["compact"])
 
 
@@ -1291,12 +1298,28 @@ def req_itemize(ctx: click.Context, path: str, spec: str, created_by: str) -> No
 @click.option("--by", "created_by", default="lead")
 @click.pass_context
 def req_findings(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
-    """Write findings.md from a spec file."""
+    """Write findings.md from a spec file (accepts ID or path)."""
     import yaml
     with open(spec) as f:
         spec_data = yaml.safe_load(f)
-    from minion.requirements import findings as _findings
+    from minion.requirements import resolve_path, findings as _findings
+    path = resolve_path(path)
     _output(_findings(path, spec_data, created_by), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("report")
+@click.argument("path")
+@click.option("--raw", is_flag=True, default=False, help="Output raw JSON instead of formatted markdown.")
+@click.pass_context
+def req_report(ctx: click.Context, path: str, raw: bool) -> None:
+    """Roll up the full requirement lineage (accepts ID or path)."""
+    from minion.requirements import resolve_path, report as _report, format_report as _fmt
+    path = resolve_path(path)
+    data = _report(path)
+    if raw:
+        _output(data, ctx.obj["human"], ctx.obj["compact"])
+    else:
+        click.echo(_fmt(data))
 
 
 # =========================================================================
