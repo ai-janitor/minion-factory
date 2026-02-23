@@ -833,6 +833,150 @@ def mission_spawn(ctx: click.Context, mission_type: str, party_str: str, crew: s
 
 
 # =========================================================================
+# Backlog group
+# =========================================================================
+
+@cli.group("backlog")
+@click.pass_context
+def backlog_group(ctx: click.Context) -> None:
+    """Backlog — capture ideas, bugs, requests, smells, and debt."""
+    pass
+
+
+@backlog_group.command("add")
+@click.option("--type", "item_type", required=True, help="Item type (idea, bug, request, smell, debt)")
+@click.option("--title", required=True, help="Short descriptive title")
+@click.option("--source", default="human", help="Who captured this (default: human)")
+@click.option("--description", default="", help="Longer description of the item")
+@click.option("--priority", default="unset", help="Priority level (unset, low, medium, high, critical)")
+@click.pass_context
+def backlog_add(ctx: click.Context, item_type: str, title: str, source: str, description: str, priority: str) -> None:
+    """Add a new item to the backlog."""
+    import json
+    from minion.backlog import add as _add
+    try:
+        result = _add(item_type, title, source, description, priority)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("list")
+@click.option("--type", "item_type", default=None, help="Filter by type")
+@click.option("--priority", default=None, help="Filter by priority")
+@click.option("--status", default="open", help="Filter by status (default: open)")
+@click.pass_context
+def backlog_list(ctx: click.Context, item_type: str | None, priority: str | None, status: str | None) -> None:
+    """List backlog items with optional filters."""
+    import json
+    from minion.backlog import list_items as _list_items
+    try:
+        result = _list_items(item_type, priority, status)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("show")
+@click.argument("path")
+@click.pass_context
+def backlog_show(ctx: click.Context, path: str) -> None:
+    """Show a single backlog item by file path."""
+    import json
+    from minion.backlog import get_item as _get_item
+    try:
+        result = _get_item(file_path=path)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    if result is None:
+        click.echo(json.dumps({"error": f"Backlog item '{path}' not found."}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("update")
+@click.argument("path")
+@click.option("--priority", default=None, help="New priority level")
+@click.option("--status", default=None, help="New status")
+@click.pass_context
+def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None) -> None:
+    """Update priority and/or status of a backlog item."""
+    import json
+    from minion.backlog import update_item as _update_item
+    try:
+        result = _update_item(path, priority, status)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("promote")
+@click.argument("path")
+@click.option("--origin", default=None, help="Requirement origin override (bug or feature)")
+@click.pass_context
+def backlog_promote(ctx: click.Context, path: str, origin: str | None) -> None:
+    """Promote a backlog item into the requirement pipeline."""
+    import json
+    from minion.backlog import promote as _promote
+    try:
+        result = _promote(path, origin)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("kill")
+@click.argument("path")
+@click.option("--reason", required=True, help="Why this item is being killed")
+@click.pass_context
+def backlog_kill(ctx: click.Context, path: str, reason: str) -> None:
+    """Mark a backlog item as killed."""
+    import json
+    from minion.backlog import kill as _kill
+    try:
+        result = _kill(path, reason)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("defer")
+@click.argument("path")
+@click.option("--until", required=True, help="Date or milestone to defer until")
+@click.pass_context
+def backlog_defer(ctx: click.Context, path: str, until: str) -> None:
+    """Defer a backlog item until a later date or milestone."""
+    import json
+    from minion.backlog import defer as _defer
+    try:
+        result = _defer(path, until)
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@backlog_group.command("reindex")
+@click.pass_context
+def backlog_reindex(ctx: click.Context) -> None:
+    """Rebuild the backlog DB index by scanning the filesystem."""
+    import json
+    from minion.backlog import reindex as _reindex
+    try:
+        result = _reindex()
+    except ValueError as e:
+        click.echo(json.dumps({"error": str(e)}, indent=2))
+        sys.exit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+# =========================================================================
 # Requirements (already grouped — unchanged)
 # =========================================================================
 

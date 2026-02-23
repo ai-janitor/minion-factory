@@ -484,6 +484,26 @@ def _migrate_v7(conn: sqlite3.Connection) -> None:
     log.info("v7: dropped task_history and transitions tables")
 
 
+def _migrate_v8(conn: sqlite3.Connection) -> None:
+    """Create the backlog table — pre-triage items before they become requirements or tasks."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS backlog (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_path   TEXT UNIQUE NOT NULL,
+            type        TEXT NOT NULL,
+            title       TEXT NOT NULL,
+            priority    TEXT DEFAULT 'unset',
+            status      TEXT DEFAULT 'open',
+            source      TEXT,
+            promoted_to TEXT,
+            created_by  TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+    """)
+    log.info("v8: created backlog table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -494,6 +514,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (5, "Backfill requirement_id from requirement_path", _migrate_v5),
     (6, "Migrate task_history and transitions into transition_log", _migrate_v6),
     (7, "Drop task_history and transitions tables", _migrate_v7),
+    (8, "Create backlog table", _migrate_v8),
 ]
 
 

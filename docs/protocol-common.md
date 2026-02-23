@@ -60,6 +60,12 @@ Use in messages for fast coordination. Server detects automatically.
 ```
 .work/                                 ← its own git repo
 ├── .git/
+├── backlog/                           ← pre-requirements incubator (see Backlog section below)
+│   ├── ideas/
+│   ├── bugs/
+│   ├── requests/
+│   ├── smells/
+│   └── debt/
 ├── requirements/                      ← requirements tree (see Requirements section below)
 │   ├── features/                      ← ideas, brain dumps, new functionality
 │   └── bugs/                          ← discoveries from running systems
@@ -86,6 +92,7 @@ Use in messages for fast coordination. Server detects automatically.
 
 | Content | Location | Naming |
 |---------|----------|--------|
+| Backlog item (any type) | `backlog/{type}s/<slug>/` | `README.md` |
 | Feature requirement | `requirements/features/<slug>/` | `README.md` |
 | Bug requirement | `requirements/bugs/<slug>/` | `README.md` |
 | Design doc | `intel/design/` | `DESIGN-<slug>.md` |
@@ -99,6 +106,76 @@ Use in messages for fast coordination. Server detects automatically.
 - No floating files at `intel/` root — always use a subdirectory
 - Group tasks and results by mission (bench, tests, migration, etc.)
 - Bug reports go into `requirements/bugs/` — they enter the same decomposition pipeline as features
+
+## Backlog Convention
+
+The backlog is a **pre-requirements incubator** — a parking lot for items that aren't ready to enter the requirements DAG. It captures raw signal before it's structured.
+
+### Pipeline Position
+
+```
+backlog/ (incubator) → requirements/ → requirement.yaml → task flows
+```
+
+### Types
+
+| Type | Folder | When to use |
+|------|--------|-------------|
+| `idea` | `backlog/ideas/` | New functionality worth considering |
+| `bug` | `backlog/bugs/` | Observed misbehavior not yet reproduced or scoped |
+| `request` | `backlog/requests/` | External asks (users, stakeholders) |
+| `smell` | `backlog/smells/` | Code quality or design concerns |
+| `debt` | `backlog/debt/` | Known shortcuts that will cost later |
+
+### Filesystem Convention
+
+Each backlog item is a folder with `README.md` — same convention as requirements.
+
+```
+.work/backlog/
+├── ideas/<slug>/README.md
+├── bugs/<slug>/README.md
+├── requests/<slug>/README.md
+├── smells/<slug>/README.md
+└── debt/<slug>/README.md
+```
+
+Template: `task-flows/templates/backlog.md`
+
+### README.md Structure
+
+Sections are **append-over-time** — never rewrite, only add. Git tracks the delta.
+
+- **Origin** — who surfaced it, when, in what context
+- **Description** — what was observed or requested
+- **Context** — surrounding system state, related components
+- **Evidence** — logs, screenshots, reproduction steps
+- **Notes** — running commentary as understanding develops
+- **Outcome** — final disposition (promoted, killed, deferred)
+
+### CLI
+
+```bash
+minion backlog add --type <type> --slug <slug> --title "..."
+minion backlog list [--type <type>] [--status <status>]
+minion backlog show <slug>
+minion backlog update <slug> --note "..."
+minion backlog promote <slug>          # creates requirement folder, hands off to DAG
+minion backlog kill <slug> --reason "..."
+minion backlog defer <slug>
+minion backlog reindex                 # rebuild DB from filesystem
+```
+
+### Promotion
+
+`minion backlog promote <slug>` converts a backlog item into a formal requirement:
+
+1. Creates the appropriate folder under `requirements/features/` or `requirements/bugs/`
+2. Copies backlog `README.md` as the raw doc (never modified after promotion)
+3. Marks backlog item as promoted with a link to the new requirement path
+4. Requirement DAG takes over from here
+
+The DB is a rebuildable index — `minion backlog reindex` scans `backlog/` and reconstructs it.
 
 ## Requirements Tree
 
