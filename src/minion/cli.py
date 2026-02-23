@@ -1077,13 +1077,15 @@ def backlog_update(ctx: click.Context, path: str, priority: str | None, status: 
 @click.argument("path")
 @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
 @click.option("--slug", default=None, help="Override the auto-derived requirement slug")
+@click.option("--flow", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
+              help="Lifecycle flow: 'requirement' (full 9-stage, default) or 'requirement-lite' (4-stage shortcut)")
 @click.pass_context
-def backlog_promote(ctx: click.Context, path: str, origin: str | None, slug: str | None) -> None:
+def backlog_promote(ctx: click.Context, path: str, origin: str | None, slug: str | None, flow: str) -> None:
     """Promote a backlog item into the requirement pipeline."""
     import json
     from minion.backlog import promote as _promote
     try:
-        result = _promote(path, origin, slug=slug)
+        result = _promote(path, origin, slug=slug, flow=flow)
     except ValueError as e:
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)

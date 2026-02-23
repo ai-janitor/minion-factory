@@ -1,0 +1,44 @@
+# =============================================================================
+# Requirement Lite Flow — simplified lifecycle for small features (1-2 tasks)
+# =============================================================================
+#
+# Skips investigation and itemization. Use when the requirement is small enough
+# to decompose directly without any upfront analysis phase.
+#
+# Stages: seed → decomposing → tasked → completed
+#
+# =============================================================================
+
+name: requirement-lite
+description: Simplified requirement lifecycle for small features — skip investigation and review
+
+stages:
+  seed:
+    description: Raw requirement exists (README.md written). Ready to decompose directly.
+    next: decomposing
+    requires: [README.md]
+    protocol: protocols/requirement/seed.md
+    workers: null
+
+  decomposing:
+    description: Planner creating implementation tasks directly from the seed README
+    next: tasked
+    fail: seed
+    protocol: protocols/requirement/decomposing.md
+    workers:
+      default: [lead, oracle]
+
+  tasked:
+    description: All implementation tasks created and linked
+    next: completed
+    requires: [impl_task_readmes, all_leaves_have_tasks]
+    protocol: protocols/requirement/tasked.md
+    workers: null
+
+  completed:
+    description: All linked implementation tasks are closed
+    terminal: true
+    requires: [all_impl_tasks_closed]
+    protocol: protocols/requirement/completed.md
+    workers:
+      default: [lead]

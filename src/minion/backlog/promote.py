@@ -24,10 +24,13 @@ def promote(
     origin: str | None = None,
     db: str | None = None,
     slug: str | None = None,
+    flow: str = "requirement",
 ) -> dict[str, Any]:
     """Promote an open backlog item to a requirement.
 
     file_path is relative to .work/backlog/ (e.g. 'bugs/preview-final-word-loss').
+    flow selects the requirement lifecycle DAG — 'requirement' (default, 9 stages)
+    or 'requirement-lite' (4 stages: seed → decomposing → tasked → completed).
 
     Steps:
     1. Verify backlog item exists and status=open.
@@ -35,7 +38,7 @@ def promote(
     3. Determine requirement target path: {origin}s/{slug} under .work/requirements/.
     4. Create the requirement folder.
     5. Copy the backlog README.md into the requirement folder.
-    6. Register the requirement in the DB.
+    6. Register the requirement in the DB with the selected flow_type.
     7. Update backlog row: status=promoted, promoted_to=requirement_path, updated_at.
     8. Append to the backlog README.md Outcome section.
     9. Return summary dict.
@@ -104,7 +107,7 @@ def promote(
             shutil.copy2(backlog_readme, os.path.join(req_abs_path, "README.md"))
 
         # --- Register requirement in DB ---
-        reg_result = register(file_path=req_rel_path, created_by="backlog-promote")
+        reg_result = register(file_path=req_rel_path, created_by="backlog-promote", flow_type=flow)
         if "error" in reg_result:
             # Rollback: remove the folder we just created
             shutil.rmtree(req_abs_path, ignore_errors=True)

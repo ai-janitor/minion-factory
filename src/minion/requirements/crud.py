@@ -83,11 +83,12 @@ def create(file_path: str, title: str, description: str = "", created_by: str = 
     return result
 
 
-def register(file_path: str, created_by: str = "human") -> dict[str, Any]:
+def register(file_path: str, created_by: str = "human", flow_type: str = "requirement") -> dict[str, Any]:
     """Register a requirement folder path in the index.
 
     file_path is relative to .work/requirements/. The folder must contain
-    a README.md to be valid.
+    a README.md to be valid. flow_type selects the lifecycle DAG — 'requirement'
+    (default, full 9-stage flow) or 'requirement-lite' (4-stage shortcut).
     """
     file_path = file_path.rstrip("/")
     conn = get_db()
@@ -102,13 +103,13 @@ def register(file_path: str, created_by: str = "human") -> dict[str, Any]:
 
         origin = _infer_origin(file_path)
         cursor.execute(
-            """INSERT INTO requirements (file_path, origin, stage, created_by, created_at, updated_at)
-               VALUES (?, ?, 'seed', ?, ?, ?)""",
-            (file_path, origin, created_by, now, now),
+            """INSERT INTO requirements (file_path, origin, stage, flow_type, created_by, created_at, updated_at)
+               VALUES (?, ?, 'seed', ?, ?, ?, ?)""",
+            (file_path, origin, flow_type, created_by, now, now),
         )
         req_id = cursor.lastrowid
         conn.commit()
-        return {"status": "registered", "id": req_id, "file_path": file_path, "origin": origin, "stage": "seed"}
+        return {"status": "registered", "id": req_id, "file_path": file_path, "origin": origin, "stage": "seed", "flow_type": flow_type}
     finally:
         conn.close()
 
@@ -178,22 +179,23 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
     """
     file_path = file_path.rstrip("/")
 
-    # Validate stage exists in requirement flow
-    try:
-        flow = load_flow("requirement")
-    except FileNotFoundError:
-        return {"error": "requirement.yaml flow not found"}
-    if to_stage not in flow.stages:
-        return {"error": f"Unknown stage '{to_stage}'. Valid: {', '.join(sorted(flow.stages.keys()))}"}
-
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute("SELECT id, stage FROM requirements WHERE file_path = ?", (file_path,))
+        cursor.execute("SELECT id, stage, flow_type FROM requirements WHERE file_path = ?", (file_path,))
         row = cursor.fetchone()
         if not row:
             return {"error": f"Requirement '{file_path}' not found. Register it first."}
+
+        # Use the flow_type stored at registration time (defaults to 'requirement')
+        flow_name = row["flow_type"] if row["flow_type"] else "requirement"
+        try:
+            flow = load_flow(flow_name)
+        except FileNotFoundError:
+            return {"error": f"{flow_name}.yaml flow not found"}
+        if to_stage not in flow.stages:
+            return {"error": f"Unknown stage '{to_stage}'. Valid: {', '.join(sorted(flow.stages.keys()))}"}
 
         from_stage = row["stage"]
         req_id = row["id"]
@@ -219,7 +221,7 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
                     break
                 # Try direct hop to target first (already valid transition)
                 direct = apply_transition(
-                    "requirement", current, explicit_target=to_stage,
+                    flow_name, current, explicit_target=to_stage,
                     context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
                 )
                 if direct.success:
@@ -228,7 +230,7 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
                     break
                 # Otherwise advance one step along the happy path
                 step = apply_transition(
-                    "requirement", current,
+                    flow_name, current,
                     context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
                 )
                 if not step.success:
@@ -259,7 +261,7 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
 
         # Normal path: single transition with full gate validation
         result = apply_transition(
-            "requirement", from_stage, explicit_target=to_stage,
+            flow_name, from_stage, explicit_target=to_stage,
             context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
         )
         if not result.success:
