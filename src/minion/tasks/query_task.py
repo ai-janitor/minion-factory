@@ -126,7 +126,7 @@ def get_task(task_id: int) -> dict[str, object]:
         result["history"] = [dict(r) for r in cursor.fetchall()]
 
         # Flow position — DAG render with current stage marked
-        task_type = task.get("task_type") or "bugfix"
+        task_type = task.get("flow_type") or "bugfix"
         flow = _get_flow(task_type)
         if flow:
             result["flow_position"] = flow.render_dag(task.get("status"))
@@ -167,7 +167,7 @@ def get_task_lineage(task_id: int) -> dict[str, object]:
             return {"error": f"Task #{task_id} not found."}
 
         task = dict(row)
-        task_type = task.get("task_type") or "bugfix"
+        task_type = task.get("flow_type") or "bugfix"
 
         # History
         cursor.execute(

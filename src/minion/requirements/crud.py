@@ -206,6 +206,10 @@ def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
                 break
             if stage_obj.workers is not None:
                 break
+            # Don't auto-advance past stages with gate requirements
+            # (e.g. itemized, tasked) — they are real checkpoints
+            if stage_obj.requires:
+                break
             next_stage = stage_obj.next
             if next_stage is None or next_stage in seen:
                 break

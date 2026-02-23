@@ -23,6 +23,7 @@ def promote(
     file_path: str,
     origin: str | None = None,
     db: str | None = None,
+    slug: str | None = None,
 ) -> dict[str, Any]:
     """Promote an open backlog item to a requirement.
 
@@ -84,8 +85,8 @@ def promote(
             origin = "bug" if backlog_type in _BUG_TYPES else "feature"
 
         # --- Determine requirement target path ---
-        # file_path is like 'bugs/preview-final-word-loss' — extract just the slug
-        slug = file_path.split("/")[-1]
+        # Use explicit slug override, otherwise derive from file_path
+        slug = slug or file_path.split("/")[-1]
         req_folder_name = f"{origin}s"  # bugs/ or features/
         req_rel_path = f"{req_folder_name}/{slug}"
 

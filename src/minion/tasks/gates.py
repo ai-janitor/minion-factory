@@ -194,7 +194,7 @@ def _db_all_child_tasks_closed(db, entity_id: int, entity_type: str, flow_type: 
         placeholders = ",".join("?" for _ in req_ids)
         query = f"SELECT id, status FROM tasks WHERE requirement_id IN ({placeholders})"
         if flow_type:
-            query += f" AND task_type = '{flow_type}'"
+            query += f" AND flow_type = '{flow_type}'"
         rows = db.execute(query, req_ids).fetchall()
     except Exception:
         # Column doesn't exist yet — gate passes vacuously until schema migration

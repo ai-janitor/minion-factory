@@ -63,7 +63,7 @@ class TaskDB:
         class_required: str | None = None,
     ) -> dict:
         self._conn.execute(
-            """INSERT INTO tasks (id, project_id, task_type, description, file_path, class_required)
+            """INSERT INTO tasks (id, project_id, flow_type, description, file_path, class_required)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (id, project_id, task_type, description, file_path, class_required),
         )
@@ -109,13 +109,13 @@ class TaskDB:
             raise ValueError(f"Task '{task_id}' not found")
 
         from_status = task["status"]
-        flow = self._load_flow(task["task_type"])
+        flow = self._load_flow(task["flow_type"])
         valid_targets = flow.valid_transitions(from_status)
         is_valid = to_status in valid_targets
 
         if not is_valid:
             warnings.warn(
-                f"Transition {from_status} → {to_status} not valid for flow '{task['task_type']}'. "
+                f"Transition {from_status} → {to_status} not valid for flow '{task['flow_type']}'. "
                 f"Valid: {valid_targets}. Logging with valid=0.",
                 stacklevel=2,
             )
@@ -139,7 +139,7 @@ class TaskDB:
         if task is None:
             raise ValueError(f"Task '{task_id}' not found")
 
-        flow = self._load_flow(task["task_type"])
+        flow = self._load_flow(task["flow_type"])
         result = flow.transition(task["status"], task["class_required"] or "", passed)
         if result is None:
             return None

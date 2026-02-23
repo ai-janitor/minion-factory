@@ -16,12 +16,12 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
         row = cursor.fetchone()
         if not row:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
-        cursor.execute("SELECT id, status, result_file, title, task_type, assigned_to FROM tasks WHERE id = ?", (task_id,))
+        cursor.execute("SELECT id, status, result_file, title, flow_type, assigned_to FROM tasks WHERE id = ?", (task_id,))
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
 
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         # Non-leads can close tasks assigned to them (their own phase)
         is_own_task = task_row["assigned_to"] == agent_name
         if row["agent_class"] != "lead" and not is_own_task:
@@ -61,14 +61,14 @@ def reopen_task(agent_name: str, task_id: int, to_status: str = "assigned") -> d
             return {"error": f"BLOCKED: Only lead can reopen tasks. '{agent_name}' is '{row['agent_class']}'."}
 
         cursor.execute(
-            "SELECT id, status, task_type, title, assigned_to FROM tasks WHERE id = ?",
+            "SELECT id, status, flow_type, title, assigned_to FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
 
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         flow = _get_flow(task_type)
 
         if flow and to_status not in flow.stages:

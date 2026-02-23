@@ -321,6 +321,19 @@ def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
     _output(_close_task(agent, task_id), ctx.obj["human"])
 
 
+@task_group.command("done")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--summary", default="", help="Optional summary of externally completed work")
+@click.pass_context
+def done_task_cmd(ctx: click.Context, agent: str, task_id: int, summary: str) -> None:
+    """Fast-close a task completed outside the DAG. Lead only."""
+    from minion.auth import require_class
+    require_class("lead")(lambda: None)()
+    from minion.tasks import done_task as _done_task
+    _output(_done_task(agent, task_id, summary), ctx.obj["human"])
+
+
 @task_group.command("reopen")
 @click.option("--agent", required=True)
 @click.option("--task-id", required=True, type=int)
@@ -939,13 +952,14 @@ def backlog_update(ctx: click.Context, path: str, priority: str | None, status: 
 @backlog_group.command("promote")
 @click.argument("path")
 @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
+@click.option("--slug", default=None, help="Override the auto-derived requirement slug")
 @click.pass_context
-def backlog_promote(ctx: click.Context, path: str, origin: str | None) -> None:
+def backlog_promote(ctx: click.Context, path: str, origin: str | None, slug: str | None) -> None:
     """Promote a backlog item into the requirement pipeline."""
     import json
     from minion.backlog import promote as _promote
     try:
-        result = _promote(path, origin)
+        result = _promote(path, origin, slug=slug)
     except ValueError as e:
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)

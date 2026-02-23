@@ -28,7 +28,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
 
         cursor.execute(
-            "SELECT id, title, task_file, status, assigned_to, blocked_by, task_type FROM tasks WHERE id = ?",
+            "SELECT id, title, task_file, status, assigned_to, blocked_by, flow_type FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
@@ -36,7 +36,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             return {"error": f"Task #{task_id} not found."}
 
         task_status = task_row["status"]
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         flow = _get_flow(task_type)
 
         if flow and flow.is_terminal(task_status):
@@ -119,7 +119,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         result["history"] = [dict(r) for r in cursor.fetchall()]
 
         # Flow position
-        task_type = full_task.get("task_type") or "bugfix"
+        task_type = full_task.get("flow_type") or "bugfix"
         flow = _get_flow(task_type)
         if flow:
             result["flow_position"] = flow.render_dag(full_task.get("status"))

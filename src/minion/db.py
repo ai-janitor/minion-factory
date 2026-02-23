@@ -521,6 +521,16 @@ def _migrate_v9(conn: sqlite3.Connection) -> None:
     log.info("v9: created task_comments table")
 
 
+def _migrate_v10(conn: sqlite3.Connection) -> None:
+    """Mark task_type→flow_type migration complete.
+
+    The actual fix is in application code: all INSERT/SELECT now reference
+    flow_type instead of task_type. The orphan task_type column is harmless
+    and SQLite can't DROP COLUMN inside a transaction with FK constraints.
+    """
+    log.info("v10: task_type→flow_type references fixed in application code")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -533,6 +543,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (7, "Drop task_history and transitions tables", _migrate_v7),
     (8, "Create backlog table", _migrate_v8),
     (9, "Create task_comments table", _migrate_v9),
+    (10, "Drop orphan task_type column from tasks", _migrate_v10),
 ]
 
 
@@ -615,10 +626,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     task_cols = {row["name"] for row in cursor.fetchall()}
     for col, typedef in [
         ("class_required", "TEXT DEFAULT NULL"),
+        # task_type was renamed to flow_type in v3; only add task_type on
+        # pre-v3 databases where flow_type doesn't exist yet.
         ("task_type", "TEXT DEFAULT 'bugfix'"),
         ("requirement_path", "TEXT DEFAULT NULL"),
     ]:
         if col not in task_cols:
+            # Skip re-adding task_type if v3 already renamed it to flow_type
+            if col == "task_type" and "flow_type" in task_cols:
+                continue
             conn.execute(f"ALTER TABLE tasks ADD COLUMN {col} {typedef}")
 
     conn.commit()

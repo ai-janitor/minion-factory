@@ -57,7 +57,7 @@ def create_task(
         cursor.execute(
             """INSERT INTO tasks
                (title, task_file, project, zone, status, blocked_by,
-                class_required, task_type, created_by, activity_count, created_at, updated_at)
+                class_required, flow_type, created_by, activity_count, created_at, updated_at)
                VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?)""",
             (title, task_file, project or None, zone or None, blocked_by_str,
              class_required or None, task_type, agent_name, now, now),
@@ -98,12 +98,12 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
         if not cursor.fetchone():
             return {"error": f"BLOCKED: Agent '{assigned_to}' not registered."}
 
-        cursor.execute("SELECT id, status, task_type FROM tasks WHERE id = ?", (task_id,))
+        cursor.execute("SELECT id, status, flow_type FROM tasks WHERE id = ?", (task_id,))
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
 
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         flow = _get_flow(task_type)
         if flow and flow.is_terminal(task_row["status"]):
             return {"error": f"BLOCKED: Task #{task_id} is in terminal status '{task_row['status']}'."}

@@ -133,6 +133,31 @@ class TestSlugify:
         # tabs and multiple spaces both become single hyphen
         assert _slugify("a\t b") == "a-b"
 
+    def test_long_title_slug_within_max_length(self):
+        from minion.backlog._helpers import _slugify
+        # 60-char title — slug must be <= 50 chars
+        title = "This is a very long title that exceeds fifty characters total"
+        slug = _slugify(title)
+        assert len(slug) <= 50
+
+    def test_truncation_at_word_boundary(self):
+        from minion.backlog._helpers import _slugify
+        # "word-" at position 50 would land mid-word; verify no trailing or mid-word hyphen cut
+        title = "one two three four five six seven eight nine ten eleven twelve"
+        slug = _slugify(title)
+        assert len(slug) <= 50
+        # A word-boundary cut means the slug must not end with a hyphen
+        assert not slug.endswith("-")
+        # And no mid-word fragment: the slug must be a prefix of the full slug up to a hyphen
+        full_slug = "one-two-three-four-five-six-seven-eight-nine-ten-eleven-twelve"
+        assert full_slug.startswith(slug)
+
+    def test_custom_max_length(self):
+        from minion.backlog._helpers import _slugify
+        slug = _slugify("alpha beta gamma delta epsilon zeta eta theta", max_length=20)
+        assert len(slug) <= 20
+        assert not slug.endswith("-")
+
 
 class TestParseReadme:
     def test_parses_title(self, tmp_path):
@@ -493,6 +518,20 @@ class TestPromote:
         assert res.exit_code == 0, res.output
         data = json.loads(res.output)
         assert data["requirement"]["file_path"].startswith("features/")
+
+    def test_slug_override_used_for_requirement_path(self, runner, project_dir):
+        """--slug overrides the auto-derived requirement folder name."""
+        _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Slug Override Bug")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "bugs/slug-override-bug",
+            "--slug", "my-custom-slug",
+        )
+        assert res.exit_code == 0, res.output
+        data = json.loads(res.output)
+        assert data["requirement"]["file_path"] == "bugs/my-custom-slug"
+        req_folder = project_dir / ".work" / "requirements" / "bugs" / "my-custom-slug"
+        assert req_folder.is_dir()
 
 
 # ---------------------------------------------------------------------------

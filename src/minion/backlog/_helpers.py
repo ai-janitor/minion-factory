@@ -99,14 +99,24 @@ def _now_iso() -> str:
     return datetime.datetime.now().isoformat()
 
 
-def _slugify(title: str) -> str:
+def _slugify(title: str, max_length: int = 50) -> str:
     """Convert a title to a URL-safe slug.
 
     Lowercases, replaces whitespace with hyphens, strips non-alphanumeric
-    characters (except hyphens), and collapses repeated hyphens.
+    characters (except hyphens), collapses repeated hyphens, then truncates
+    at the last hyphen before *max_length* so words stay whole.
     """
     slug = title.lower()
     slug = re.sub(r"\s+", "-", slug)
     slug = re.sub(r"[^a-z0-9\-]", "", slug)
     slug = re.sub(r"-{2,}", "-", slug)
-    return slug.strip("-")
+    slug = slug.strip("-")
+
+    if max_length and len(slug) > max_length:
+        truncated = slug[:max_length]
+        last_hyphen = truncated.rfind("-")
+        if last_hyphen > 0:
+            truncated = truncated[:last_hyphen]
+        slug = truncated.rstrip("-")
+
+    return slug

@@ -23,14 +23,14 @@ def update_task(
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
 
         cursor.execute(
-            "SELECT id, status, activity_count, title, assigned_to, result_file, task_type, files FROM tasks WHERE id = ?",
+            "SELECT id, status, activity_count, title, assigned_to, result_file, flow_type, files FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
 
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         flow = _get_flow(task_type)
 
         if flow and flow.is_terminal(task_row["status"]):
@@ -132,14 +132,14 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
 
         cursor.execute(
-            "SELECT id, status, task_type, class_required, assigned_to, title FROM tasks WHERE id = ?",
+            "SELECT id, status, flow_type, class_required, assigned_to, title FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
         if not task_row:
             return {"error": f"Task #{task_id} not found."}
 
-        task_type = task_row["task_type"] or "bugfix"
+        task_type = task_row["flow_type"] or "bugfix"
         current = task_row["status"]
         class_required = task_row["class_required"] or ""
 

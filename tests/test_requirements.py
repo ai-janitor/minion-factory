@@ -306,3 +306,67 @@ def test_list_filter_by_stage(runner, project_dir):
     res = _run(runner, project_dir, "req", "list", "--stage", "seed")
     data = json.loads(res.output)
     assert all(r["stage"] == "seed" for r in data["requirements"])
+
+
+# ---------------------------------------------------------------------------
+# Auto-advance checkpoint tests
+# ---------------------------------------------------------------------------
+
+def test_itemized_is_a_checkpoint_not_auto_advanced(runner, project_dir):
+    """Advancing to itemized must stop there — not auto-advance to investigating.
+
+    itemized.requires = [itemized-requirements.md] triggers the `if stage_obj.requires: break`
+    guard added to update_stage(). Without the fix, the engine would auto-advance
+    to `investigating` whenever the next-stage gate happened to pass.
+    """
+    import json
+
+    # genesis/ has itemized-requirements.md, satisfying the gate to enter itemized
+    _run(runner, project_dir, "req", "register", "--path", "features/genesis/")
+    _run(runner, project_dir, "req", "update", "--path", "features/genesis/", "--stage", "itemizing")
+
+    res = _run(runner, project_dir, "req", "update", "--path", "features/genesis/", "--stage", "itemized")
+    assert res.exit_code == 0, res.output
+
+    data = json.loads(res.output)
+    assert data["to_stage"] == "itemized", (
+        f"Expected stage to stop at 'itemized', got '{data['to_stage']}'"
+    )
+    # Confirm auto-advance did NOT push past this checkpoint
+    assert data["to_stage"] != "investigating"
+    # auto_advanced_through should be absent or empty — itemized is where we land
+    assert "auto_advanced_through" not in data or "itemized" not in data.get("auto_advanced_through", [])
+
+
+def test_tasked_is_a_checkpoint_not_auto_advanced(runner, project_dir):
+    """Advancing to tasked must stop there — not auto-advance to in_progress.
+
+    tasked.requires = [numbered_child_folders, impl_task_readmes, all_leaves_have_tasks]
+    triggers the `if stage_obj.requires: break` guard. Without the fix the engine
+    would auto-advance into in_progress once all gate conditions vacuously pass.
+
+    The fixture already contains features/genesis/001-auth-flow/ (a numbered folder
+    with a README.md), satisfying the structural filesystem gates for tasked.
+    all_leaves_have_tasks passes vacuously because the parent_id column does not
+    exist in the current schema.
+    """
+    import json
+
+    # genesis/ has 001-auth-flow/ (numbered child with README.md) — gates for
+    # tasked pass: numbered_child_folders, impl_task_readmes, all_leaves_have_tasks
+    _run(runner, project_dir, "req", "register", "--path", "features/genesis/")
+
+    # Advance seed → decomposing via alt_next (skip itemizing for a small requirement)
+    res = _run(runner, project_dir, "req", "update", "--path", "features/genesis/", "--stage", "decomposing")
+    assert res.exit_code == 0, res.output
+
+    # Now advance decomposing → tasked; the auto-advance loop must halt at tasked
+    res = _run(runner, project_dir, "req", "update", "--path", "features/genesis/", "--stage", "tasked")
+    assert res.exit_code == 0, res.output
+
+    data = json.loads(res.output)
+    assert data["to_stage"] == "tasked", (
+        f"Expected stage to stop at 'tasked', got '{data['to_stage']}'"
+    )
+    # Confirm auto-advance did NOT push past this checkpoint into in_progress
+    assert data["to_stage"] != "in_progress"

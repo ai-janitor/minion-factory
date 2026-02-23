@@ -7,6 +7,7 @@ from .submit_result import submit_result
 from .create_task import create_task, assign_task
 from .update_task import update_task, complete_phase
 from .close_task import close_task, reopen_task
+from .done import done_task
 
 __all__ = [
     "Stage", "TaskFlow", "Transition",
@@ -14,6 +15,6 @@ __all__ = [
     "load_flow", "list_flows",
     "create_task", "assign_task", "update_task",
     "get_tasks", "get_task", "submit_result",
-    "close_task", "reopen_task", "pull_task", "complete_phase",
+    "close_task", "reopen_task", "done_task", "pull_task", "complete_phase",
     "get_task_lineage",
 ]
