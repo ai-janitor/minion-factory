@@ -112,11 +112,25 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
         title_row = cursor.fetchone()
         task_title = title_row["title"] if title_row else f"T{task_id}"
 
-        cursor.execute(
-            "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
-            (assigned_to, now, task_id),
-        )
-        _log_transition(cursor, task_id, task_row["status"], "assigned", assigned_to, now)
+        current_status = task_row["status"]
+        # At review stages (workers defined = handoff point), only reassign — don't reset status
+        review_stage = False
+        if flow:
+            workers = flow.workers_for(current_status, "")
+            if workers is not None:
+                review_stage = True
+
+        if review_stage:
+            cursor.execute(
+                "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
+                (assigned_to, now, task_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
+                (assigned_to, now, task_id),
+            )
+            _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
         conn.commit()
         update_pane_task(assigned_to, f"T{task_id}: {task_title}")
         return {"status": "assigned", "task_id": task_id, "assigned_to": assigned_to}

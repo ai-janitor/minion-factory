@@ -21,6 +21,7 @@ stages:
   seed:
     description: Raw requirement exists (README.md written). Not yet analyzed.
     next: itemizing
+    alt_next: decomposing
     requires: [README.md]
     protocol: protocols/requirement/seed.md
     workers: null
@@ -29,6 +30,7 @@ stages:
     description: Planner extracting numbered sections from raw doc
     next: itemized
     fail: seed
+    alt_next: decomposing
     protocol: protocols/requirement/itemizing.md
     context: "{req_path}/itemized-requirements.md"
     workers:
@@ -46,6 +48,7 @@ stages:
     description: Investigation tasks (INV-) created and in progress. Waiting for findings.
     next: findings_ready
     fail: itemized
+    alt_next: decomposing
     protocol: protocols/requirement/investigating.md
     spawns: investigation
     workers:
@@ -81,7 +84,6 @@ stages:
     description: Implementation tasks are being worked (bugfix/feature/hotfix flows)
     next: completed
     fail: tasked
-    requires: [all_impl_tasks_closed]
     protocol: protocols/requirement/in_progress.md
     workers:
       default: [lead]
