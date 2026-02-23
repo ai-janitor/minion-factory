@@ -1168,11 +1168,13 @@ def req_status(ctx: click.Context, path: str) -> None:
 @req_group.command("update")
 @click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
 @click.option("--stage", required=True, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
+@click.option("--skip", "skip_stages", is_flag=True, default=False, help="Walk through all intermediate stages to reach target (lead only).")
+@click.option("--agent", default="", help="Caller agent name; must be 'lead' to use --skip.")
 @click.pass_context
-def req_update(ctx: click.Context, path: str, stage: str) -> None:
-    """Advance a requirement's stage."""
+def req_update(ctx: click.Context, path: str, stage: str, skip_stages: bool, agent: str) -> None:
+    """Advance a requirement's stage. Use --skip --agent lead to jump multiple stages at once."""
     from minion.requirements import update_stage as _update
-    _output(_update(path, stage), ctx.obj["human"], ctx.obj["compact"])
+    _output(_update(path, stage, skip=skip_stages, agent=agent), ctx.obj["human"], ctx.obj["compact"])
 
 
 @req_group.command("link")
@@ -1215,13 +1217,54 @@ def req_create(ctx: click.Context, path: str, title: str, description: str, crea
 
 @req_group.command("decompose")
 @click.option("--path", required=True, help="Parent requirement path")
-@click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file for children")
+@click.option("--spec", default=None, help="YAML spec file for children. Use '-' to read from stdin.")
+@click.option("--inline", default=None, help="Inline YAML string (alternative to --spec file).")
 @click.option("--by", "agent_name", default="lead")
 @click.pass_context
-def req_decompose(ctx: click.Context, path: str, spec: str, agent_name: str) -> None:
-    """Decompose a requirement into children from a spec file."""
+def req_decompose(ctx: click.Context, path: str, spec: str | None, inline: str | None, agent_name: str) -> None:
+    """Decompose a requirement into children from a spec file or inline YAML.
+
+    Accepts a spec in three ways:
+      --spec <file>       YAML file on disk
+      --spec -            Read YAML from stdin
+      --inline '<yaml>'   Pass YAML directly as a string argument
+    """
+    import sys
+    import yaml as _yaml
     from minion.requirements.decompose import decompose as _decompose, _load_spec
-    spec_data = _load_spec(spec)
+
+    if inline is not None:
+        # Parse the inline YAML string directly — no filesystem read
+        try:
+            spec_data = _yaml.safe_load(inline)
+        except _yaml.YAMLError as exc:
+            _output({"error": f"Invalid inline YAML: {exc}"}, ctx.obj["human"], ctx.obj["compact"])
+            ctx.exit(1)
+            return
+        if not isinstance(spec_data, dict) or "children" not in spec_data:
+            _output({"error": "Inline YAML must contain a 'children' key."}, ctx.obj["human"], ctx.obj["compact"])
+            ctx.exit(1)
+            return
+    elif spec == "-":
+        # Read spec YAML from stdin
+        try:
+            spec_data = _yaml.safe_load(sys.stdin.read())
+        except _yaml.YAMLError as exc:
+            _output({"error": f"Invalid YAML from stdin: {exc}"}, ctx.obj["human"], ctx.obj["compact"])
+            ctx.exit(1)
+            return
+    elif spec is not None:
+        import os as _os
+        if not _os.path.exists(spec):
+            _output({"error": f"Spec file not found: {spec}"}, ctx.obj["human"], ctx.obj["compact"])
+            ctx.exit(1)
+            return
+        spec_data = _load_spec(spec)
+    else:
+        _output({"error": "One of --spec or --inline is required."}, ctx.obj["human"], ctx.obj["compact"])
+        ctx.exit(1)
+        return
+
     _output(_decompose(path, spec_data, agent_name), ctx.obj["human"], ctx.obj["compact"])
 
 

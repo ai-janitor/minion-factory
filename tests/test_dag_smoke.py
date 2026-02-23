@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from minion.db import init_db, reset_db_path
+from minion.db import init_db, register_agent_db, reset_db_path
 
 
 # ---------------------------------------------------------------------------
@@ -51,19 +51,6 @@ def isolated_db(tmp_path, monkeypatch):
 # Helpers
 # ---------------------------------------------------------------------------
 
-
-def _insert_agent(db_path: str, name: str, agent_class: str = "lead") -> None:
-    """Insert a minimal agent row directly (avoids fs.py import-time RUNTIME_DIR)."""
-    from minion.db import now_iso
-    now = now_iso()
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "INSERT OR REPLACE INTO agents "
-        "(name, agent_class, registered_at, last_seen) VALUES (?, ?, ?, ?)",
-        (name, agent_class, now, now),
-    )
-    conn.commit()
-    conn.close()
 
 
 def _insert_battle_plan(db_path: str, agent_name: str, plan_text: str = "# Plan\n") -> None:
@@ -124,12 +111,12 @@ def test_dag_smoke(isolated_db):
     # 1. Register lead agent and set active battle plan
     # -----------------------------------------------------------------------
     lead = "lead-smoke"
-    _insert_agent(db_path, lead, "lead")
+    register_agent_db(lead, "lead")
     _insert_battle_plan(db_path, lead, plan_text="# Smoke-test plan\n")
 
     # Register extra agents needed for review (oracle) and test (builder)
-    _insert_agent(db_path, "oracle-1", "oracle")
-    _insert_agent(db_path, "builder-1", "builder")
+    register_agent_db("oracle-1", "oracle")
+    register_agent_db("builder-1", "builder")
 
     # -----------------------------------------------------------------------
     # 2. Create parent requirement
@@ -225,8 +212,8 @@ def test_dag_smoke(isolated_db):
     from minion.tasks.done import done_task
 
     # Register coder-class agents for the pull step
-    _insert_agent(db_path, "coder-1", "coder")
-    _insert_agent(db_path, "coder-2", "coder")
+    register_agent_db("coder-1", "coder")
+    register_agent_db("coder-2", "coder")
     coders = ["coder-1", "coder-2"]
 
     for i, task_id in enumerate(task_ids):

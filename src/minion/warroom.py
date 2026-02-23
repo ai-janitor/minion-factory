@@ -15,6 +15,55 @@ from minion.fs import (
 )
 
 
+def create_battle_plan(
+    set_by: str,
+    plan_file: str,
+    status: str = "active",
+    supersede: bool = True,
+) -> dict[str, object]:
+    """Insert a battle_plan row without filesystem side effects.
+
+    Pure DB operation — no agent class check, no file writes.
+    Intended for test fixtures and programmatic seeding where callers
+    manage their own file paths (e.g., tmp_path in tests).
+
+    If supersede=True (default), marks any existing 'active' plans as
+    'superseded' before inserting, matching set_battle_plan() semantics.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    now = now_iso()
+    try:
+        if supersede and status == "active":
+            cursor.execute(
+                "UPDATE battle_plan SET status = 'superseded', updated_at = ? WHERE status = 'active'",
+                (now,),
+            )
+        cursor.execute(
+            """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (set_by, plan_file, status, now, now),
+        )
+        plan_id = cursor.lastrowid
+        conn.commit()
+        return {"status": status, "plan_id": plan_id, "set_by": set_by, "plan_file": plan_file}
+    finally:
+        conn.close()
+
+
+def make_test_battle_plan(
+    set_by: str = "lead",
+    plan_file: str = "/tmp/test-plan.md",
+    status: str = "active",
+) -> dict[str, object]:
+    """Create a minimal battle_plan row for test fixtures.
+
+    Wraps create_battle_plan() with test-friendly defaults so fixtures
+    can seed the table in one line without constructing arguments.
+    """
+    return create_battle_plan(set_by=set_by, plan_file=plan_file, status=status)
+
+
 def set_battle_plan(agent_name: str, plan: str) -> dict[str, object]:
     conn = get_db()
     cursor = conn.cursor()

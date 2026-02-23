@@ -166,8 +166,12 @@ def reindex(work_dir: str) -> dict[str, Any]:
     return {"status": "reindexed", "added": len(added), "skipped": len(skipped), "paths_added": added}
 
 
-def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
+def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str = "") -> dict[str, Any]:
     """Advance a requirement to a new stage with transition validation.
+
+    When skip=True and agent is lead-class, automatically walks all intermediate
+    stages to reach to_stage. Each step passes through gate checks; the walk
+    halts at the first gate failure or invalid transition.
 
     tasked requires at least one task linked to this path before it can be set.
     rejected always returns to decomposing.
@@ -201,7 +205,59 @@ def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
         work_dir = Path(_get_db_path()).parent
         context_dir = work_dir / "requirements" / file_path
 
-        # Use engine for transition validation + gate checking
+        from minion.tasks.engine import check_transition_gates
+        from minion.tasks.gates import all_gates_pass
+
+        # skip=True: lead agent walks through all intermediate stages to reach target.
+        # Bypasses the single-hop restriction so leads don't manually step each stage.
+        _LEAD_CLASSES = {"lead"}
+        if skip and agent in _LEAD_CLASSES:
+            walked: list[str] = []
+            current = from_stage
+            for _ in range(30):
+                if current == to_stage:
+                    break
+                # Try direct hop to target first (already valid transition)
+                direct = apply_transition(
+                    "requirement", current, explicit_target=to_stage,
+                    context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
+                )
+                if direct.success:
+                    walked.append(current)
+                    current = to_stage
+                    break
+                # Otherwise advance one step along the happy path
+                step = apply_transition(
+                    "requirement", current,
+                    context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
+                )
+                if not step.success:
+                    break
+                assert step.to_status is not None
+                walked.append(current)
+                current = step.to_status
+            else:
+                pass  # loop exhausted
+
+            final_stage = current
+            cursor.execute(
+                "UPDATE requirements SET stage = ?, updated_at = ? WHERE file_path = ?",
+                (final_stage, now, file_path),
+            )
+            conn.commit()
+            resp: dict[str, Any] = {
+                "status": "updated",
+                "file_path": file_path,
+                "from_stage": from_stage,
+                "to_stage": final_stage,
+            }
+            if walked:
+                resp["skipped_through"] = walked
+            if final_stage != to_stage:
+                resp["warning"] = f"halted at '{final_stage}' — could not reach '{to_stage}' (gate failure or invalid path)"
+            return resp
+
+        # Normal path: single transition with full gate validation
         result = apply_transition(
             "requirement", from_stage, explicit_target=to_stage,
             context_dir=context_dir, db=conn, entity_id=req_id, entity_type="requirement",
@@ -211,8 +267,6 @@ def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
 
         # Auto-advance: keep moving forward while gates pass and no workers needed.
         # Only auto-advance on forward transitions (not fail-backs).
-        from minion.tasks.engine import check_transition_gates
-        from minion.tasks.gates import all_gates_pass
         is_forward = False
         walk = from_stage
         for _ in range(20):
@@ -257,7 +311,7 @@ def update_stage(file_path: str, to_stage: str) -> dict[str, Any]:
             (final_stage, now, file_path),
         )
         conn.commit()
-        resp: dict[str, Any] = {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": final_stage}
+        resp = {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": final_stage}
         if skipped:
             resp["auto_advanced_through"] = skipped
         return resp
