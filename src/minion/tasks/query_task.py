@@ -2,8 +2,52 @@
 
 from __future__ import annotations
 
+import os
+
 from minion.db import get_db
 from ._helpers import _get_flow
+
+
+def _resolve_path(path: str) -> str:
+    """Resolve a DB-stored path against the project root (DB parent's parent)."""
+    if os.path.isabs(path):
+        return path
+    from minion.db import _get_db_path
+    db_path = _get_db_path()
+    # DB lives at .work/minion.db — project root is two levels up
+    project_root = os.path.dirname(os.path.dirname(db_path))
+    return os.path.join(project_root, path)
+
+
+def _inline_file(path: str | None) -> str | None:
+    """Read file contents if path exists, else None."""
+    if not path:
+        return None
+    resolved = _resolve_path(path)
+    if not os.path.exists(resolved):
+        return None
+    try:
+        with open(resolved) as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def _inline_requirement(req_path: str | None) -> str | None:
+    """Read README.md from a requirement directory path (relative to .work/requirements/)."""
+    if not req_path:
+        return None
+    from minion.db import _get_db_path
+    db_path = _get_db_path()
+    project_root = os.path.dirname(os.path.dirname(db_path))
+    readme = os.path.join(project_root, ".work", "requirements", req_path, "README.md")
+    if not os.path.exists(readme):
+        return None
+    try:
+        with open(readme) as f:
+            return f.read()
+    except Exception:
+        return None
 
 
 def get_tasks(
@@ -57,7 +101,37 @@ def get_task(task_id: int) -> dict[str, object]:
         row = cursor.fetchone()
         if not row:
             return {"error": f"Task #{task_id} not found."}
-        result = {"task": dict(row)}
+        task = dict(row)
+        result: dict[str, object] = {"task": task}
+
+        # Inline file contents
+        task_content = _inline_file(task.get("task_file"))
+        if task_content is not None:
+            result["task_content"] = task_content
+
+        result_content = _inline_file(task.get("result_file"))
+        if result_content is not None:
+            result["result_content"] = result_content
+
+        req_content = _inline_requirement(task.get("requirement_path"))
+        if req_content is not None:
+            result["requirement_content"] = req_content
+
+        # Transition history
+        cursor.execute(
+            "SELECT from_status, to_status, triggered_by AS agent, created_at AS timestamp "
+            "FROM transition_log WHERE entity_id = ? AND entity_type = 'task' ORDER BY created_at ASC",
+            (task_id,),
+        )
+        result["history"] = [dict(r) for r in cursor.fetchall()]
+
+        # Flow position — DAG render with current stage marked
+        task_type = task.get("task_type") or "bugfix"
+        flow = _get_flow(task_type)
+        if flow:
+            result["flow_position"] = flow.render_dag(task.get("status"))
+
+        # Comments
         try:
             comment_rows = cursor.execute(
                 """SELECT agent_name, phase, comment, files_read, created_at

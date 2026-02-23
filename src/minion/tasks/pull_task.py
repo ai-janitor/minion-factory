@@ -7,6 +7,7 @@ import os
 from minion.db import get_db, now_iso
 from minion.crew._tmux import update_pane_task
 from ._helpers import _get_flow, _log_transition
+from .query_task import _inline_file, _inline_requirement
 
 
 def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
@@ -76,13 +77,6 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         new_status = "assigned" if task_status not in ("fixed", "verified") else task_status
         _log_transition(cursor, task_id, task_status, new_status, agent_name, now)
 
-        # Read task file content
-        task_content = ""
-        task_file = task_row["task_file"]
-        if task_file and os.path.exists(task_file):
-            with open(task_file) as f:
-                task_content = f.read()
-
         cursor.execute(
             "UPDATE agents SET context_updated_at = ?, last_seen = ? WHERE name = ?",
             (now, now, agent_name),
@@ -91,15 +85,45 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
 
         update_pane_task(agent_name, f"T{task_id}: {task_row['title']}")
 
+        # Need full task row for inlining — re-query to get all columns
+        cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        full_task = dict(cursor.fetchone())
+
         result: dict[str, object] = {
             "status": "claimed",
             "task_id": task_id,
             "title": task_row["title"],
-            "task_file": task_file,
+            "task_file": full_task.get("task_file"),
             "task_status": task_status,
         }
-        if task_content:
+
+        # Inline file contents
+        task_content = _inline_file(full_task.get("task_file"))
+        if task_content is not None:
             result["task_content"] = task_content
+
+        result_content = _inline_file(full_task.get("result_file"))
+        if result_content is not None:
+            result["result_content"] = result_content
+
+        req_content = _inline_requirement(full_task.get("requirement_path"))
+        if req_content is not None:
+            result["requirement_content"] = req_content
+
+        # Transition history
+        cursor.execute(
+            "SELECT from_status, to_status, triggered_by AS agent, created_at AS timestamp "
+            "FROM transition_log WHERE entity_id = ? AND entity_type = 'task' ORDER BY created_at ASC",
+            (task_id,),
+        )
+        result["history"] = [dict(r) for r in cursor.fetchall()]
+
+        # Flow position
+        task_type = full_task.get("task_type") or "bugfix"
+        flow = _get_flow(task_type)
+        if flow:
+            result["flow_position"] = flow.render_dag(full_task.get("status"))
+
         return result
     finally:
         conn.close()
