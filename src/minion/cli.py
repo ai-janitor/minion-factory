@@ -365,6 +365,28 @@ def check_work_cmd(ctx: click.Context, agent: str) -> None:
     sys.exit(0 if tasks else 1)
 
 
+@task_group.command("comment")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--message", required=True)
+@click.option("--files", default="", help="Comma-separated file paths read for context")
+@click.pass_context
+def task_comment_cmd(ctx: click.Context, agent: str, task_id: int, message: str, files: str) -> None:
+    """Add a comment to a task with optional file context."""
+    from minion.tasks.comments import add_comment
+    files_list = [f.strip() for f in files.split(",") if f.strip()] if files else None
+    _output(add_comment(agent, task_id, message, files_read=files_list), ctx.obj["human"])
+
+
+@task_group.command("comments")
+@click.option("--task-id", required=True, type=int)
+@click.pass_context
+def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
+    """List all comments for a task."""
+    from minion.tasks.comments import list_comments
+    _output(list_comments(task_id), ctx.obj["human"])
+
+
 # =========================================================================
 # Flow group
 # =========================================================================

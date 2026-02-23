@@ -504,6 +504,23 @@ def _migrate_v8(conn: sqlite3.Connection) -> None:
     log.info("v8: created backlog table")
 
 
+def _migrate_v9(conn: sqlite3.Connection) -> None:
+    """Create the task_comments table for mid-flight context injection."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_comments (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id     INTEGER NOT NULL REFERENCES tasks(id),
+            agent_name  TEXT NOT NULL,
+            phase       TEXT,
+            comment     TEXT NOT NULL,
+            files_read  TEXT,
+            created_at  TEXT NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_comments_task ON task_comments(task_id)")
+    log.info("v9: created task_comments table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -515,6 +532,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (6, "Migrate task_history and transitions into transition_log", _migrate_v6),
     (7, "Drop task_history and transitions tables", _migrate_v7),
     (8, "Create backlog table", _migrate_v8),
+    (9, "Create task_comments table", _migrate_v9),
 ]
 
 

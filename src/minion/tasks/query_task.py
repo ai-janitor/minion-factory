@@ -57,7 +57,27 @@ def get_task(task_id: int) -> dict[str, object]:
         row = cursor.fetchone()
         if not row:
             return {"error": f"Task #{task_id} not found."}
-        return {"task": dict(row)}
+        result = {"task": dict(row)}
+        try:
+            comment_rows = cursor.execute(
+                """SELECT agent_name, phase, comment, files_read, created_at
+                   FROM task_comments WHERE task_id = ? ORDER BY created_at ASC""",
+                (task_id,),
+            ).fetchall()
+            import json as _json_mod
+            comments = []
+            for cr in comment_rows:
+                c = dict(cr)
+                if c.get("files_read"):
+                    try:
+                        c["files_read"] = _json_mod.loads(c["files_read"])
+                    except Exception:
+                        pass
+                comments.append(c)
+            result["comments"] = comments
+        except Exception:
+            result["comments"] = []
+        return result
     finally:
         conn.close()
 
