@@ -9,6 +9,35 @@ from minion.crew.config import get_agent_prompt
 from minion.tasks.query_task import get_task
 
 
+def format_as_prompt(data: dict[str, Any]) -> str:
+    """Flatten get_spawn_prompt result into one ready-to-use string.
+
+    Concatenates system_prompt, task_briefing, tool list, and a result-reporting
+    instruction so the caller can pass the output directly to a Task tool without
+    any manual assembly.
+    """
+    system_prompt = data.get("system_prompt", "")
+    task_briefing = data.get("task_briefing", "")
+    task_id = data.get("task_id", "")
+    agent_name = data.get("agent_name", "")
+
+    tools = data.get("tools") or []
+    tool_commands = ", ".join(t.get("command", str(t)) for t in tools)
+
+    result_instruction = (
+        f"Report results via: "
+        f"minion --compact task result --agent {agent_name} "
+        f"--task-id {task_id} --summary \"description\""
+    )
+
+    parts = [system_prompt, task_briefing]
+    if tool_commands:
+        parts.append(f"Available tools: {tool_commands}")
+    parts.append(result_instruction)
+
+    return "\n\n".join(parts)
+
+
 def get_spawn_prompt(task_id: int, agent_name: str, crew_name: str) -> dict[str, Any]:
     """Combine crew YAML agent config, task content, and onboarding tools.
 

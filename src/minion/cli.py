@@ -486,13 +486,19 @@ def task_block_cmd(ctx: click.Context, agent: str, task_id: int, reason: str) ->
 @click.option("--task-id", required=True, type=int)
 @click.option("--agent", required=True)
 @click.option("--crew", required=True)
-@click.option("--format", "fmt", default="json", type=click.Choice(["json", "text"]))
+@click.option("--format", "fmt", default="json", type=click.Choice(["json", "text", "prompt"]))
 @click.pass_context
 def task_spawn_cmd(ctx: click.Context, task_id: int, agent: str, crew: str, fmt: str) -> None:
     """Output a spawn-ready prompt for an agent + task."""
-    from minion.tasks.spawn_prompt import get_spawn_prompt
+    from minion.tasks.spawn_prompt import get_spawn_prompt, format_as_prompt
     result = get_spawn_prompt(task_id, agent, crew)
-    if fmt == "text":
+    if fmt == "prompt":
+        if "error" in result:
+            click.echo(f"ERROR: {result['error']}", err=True)
+            ctx.exit(1)
+            return
+        click.echo(format_as_prompt(result))
+    elif fmt == "text":
         if "error" in result:
             click.echo(f"ERROR: {result['error']}", err=True)
             ctx.exit(1)
