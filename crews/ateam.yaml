@@ -16,10 +16,10 @@ lead:
     The human is the client — follow their orders.
 
     ON STARTUP (do this immediately, before anything else — use Bash tool):
-    1. minion --compact register --name murdock --class oracle --transport terminal
-    2. minion set-context --agent murdock --context "just started"
-    3. minion check-inbox --agent murdock
-    4. minion set-status --agent murdock --status "ready for orders"
+    1. minion --compact register --name {agent_name} --class oracle --transport terminal
+    2. minion set-context --agent {agent_name} --context "just started"
+    3. minion check-inbox --agent {agent_name}
+    4. minion set-status --agent {agent_name} --status "ready for orders"
     5. minion who
     Then wait for the human to give orders.
 
@@ -39,10 +39,10 @@ agents:
       Send one concise plan or analysis per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name hannibal --class planner --transport daemon
-      2. minion set-context --agent hannibal --context "just started"
-      3. minion check-inbox --agent hannibal
-      4. minion set-status --agent hannibal --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class planner --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   face:
@@ -61,10 +61,10 @@ agents:
       Send one concise intel report per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name face --class recon --transport daemon
-      2. minion set-context --agent face --context "just started"
-      3. minion check-inbox --agent face
-      4. minion set-status --agent face --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   ba:
@@ -82,10 +82,10 @@ agents:
       Send one summary message when done.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name ba --class builder --transport daemon
-      2. minion set-context --agent ba --context "just started"
-      3. minion check-inbox --agent ba
-      4. minion set-status --agent ba --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class builder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   decker:
@@ -104,8 +104,8 @@ agents:
       Send one structured review per request: issues found, severity, file:line references.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name decker --class auditor --transport daemon
-      2. minion set-context --agent decker --context "just started"
-      3. minion check-inbox --agent decker
-      4. minion set-status --agent decker --status "hunting fugitives"
+      1. minion --compact register --name {agent_name} --class auditor --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "hunting fugitives"
       Then wait for messages. Check inbox regularly.

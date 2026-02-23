@@ -114,7 +114,7 @@ def test_returns_system_prompt(tmp_path, crew_dir):
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
     task_id = _insert_task(tmp_path)
-    result = get_spawn_prompt(task_id, "leo", "testcrew")
+    result = get_spawn_prompt(task_id, profile_name="leo", agent_name="leo", crew_name="testcrew")
 
     assert "error" not in result
     assert "clean code" in result["system_prompt"]
@@ -126,7 +126,7 @@ def test_includes_task_content(tmp_path, crew_dir):
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
     task_id = _insert_task(tmp_path, title="Implement widget", content="Build the widget module")
-    result = get_spawn_prompt(task_id, "leo", "testcrew")
+    result = get_spawn_prompt(task_id, profile_name="leo", agent_name="leo", crew_name="testcrew")
 
     assert "error" not in result
     assert "Implement widget" in result["task_briefing"]
@@ -139,7 +139,7 @@ def test_includes_tools_list(tmp_path, crew_dir):
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
     task_id = _insert_task(tmp_path)
-    result = get_spawn_prompt(task_id, "leo", "testcrew")
+    result = get_spawn_prompt(task_id, profile_name="leo", agent_name="leo", crew_name="testcrew")
 
     assert "error" not in result
     assert isinstance(result["tools"], list)
@@ -154,7 +154,7 @@ def test_error_when_task_not_found(tmp_path, crew_dir):
     """get_spawn_prompt returns error dict when task_id doesn't exist."""
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
-    result = get_spawn_prompt(99999, "leo", "testcrew")
+    result = get_spawn_prompt(99999, profile_name="leo", agent_name="leo", crew_name="testcrew")
 
     assert "error" in result
 
@@ -164,7 +164,7 @@ def test_error_when_agent_not_in_crew(tmp_path, crew_dir):
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
     task_id = _insert_task(tmp_path)
-    result = get_spawn_prompt(task_id, "nonexistent_agent", "testcrew")
+    result = get_spawn_prompt(task_id, profile_name="nonexistent_agent", agent_name="nonexistent_agent", crew_name="testcrew")
 
     assert "error" in result
     assert "nonexistent_agent" in result["error"]
@@ -175,7 +175,7 @@ def test_includes_model_and_permissions(tmp_path, crew_dir):
     from minion.tasks.spawn_prompt import get_spawn_prompt
 
     task_id = _insert_task(tmp_path)
-    result = get_spawn_prompt(task_id, "leo", "testcrew")
+    result = get_spawn_prompt(task_id, profile_name="leo", agent_name="leo", crew_name="testcrew")
 
     assert result["model"] == "claude-sonnet-4-6"
     assert result["allowed_tools"] == "Read,Write,Bash"

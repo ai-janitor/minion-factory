@@ -178,9 +178,10 @@ def load_config(config_path: str | Path) -> SwarmConfig:
     )
 
 
-def get_agent_prompt(agent_name: str, crew_name: str) -> dict[str, Any]:
+def get_agent_prompt(profile_name: str, crew_name: str) -> dict[str, Any]:
     """Load a crew YAML and return the named agent's full prompt config.
 
+    profile_name: key in the crew YAML agents mapping (character/role profile)
     Reuses _find_crew_file() for crew discovery and load_config() for parsing,
     so all prompt construction (system_prefix injection, defaults) stays consistent.
     """
@@ -195,10 +196,10 @@ def get_agent_prompt(agent_name: str, crew_name: str) -> dict[str, Any]:
     except (FileNotFoundError, ValueError) as exc:
         return {"error": f"Failed to load crew '{crew_name}': {exc}"}
 
-    agent = cfg.agents.get(agent_name)
+    agent = cfg.agents.get(profile_name)
     if agent is None:
         return {
-            "error": f"Agent '{agent_name}' not found in crew '{crew_name}'",
+            "error": f"Agent '{profile_name}' not found in crew '{crew_name}'",
             "available_agents": sorted(cfg.agents.keys()),
         }
 

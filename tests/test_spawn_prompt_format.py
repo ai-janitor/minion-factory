@@ -184,7 +184,7 @@ def test_cli_format_prompt_returns_flat_string(tmp_path, crew_dir):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["--compact", "task", "spawn", "--task-id", str(task_id), "--agent", "leo",
+        ["--compact", "task", "spawn", "--task-id", str(task_id), "--profile", "leo",
          "--crew", "testcrew", "--format", "prompt"],
     )
 

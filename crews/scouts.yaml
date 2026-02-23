@@ -109,10 +109,10 @@ lead:
     - .minion-comms/traps/<issue>.md — one file per gotcha/broken thing/trap
 
     ON STARTUP (do this immediately, before anything else — use Bash tool):
-    1. minion --compact register --name cartographer --class lead --transport terminal
-    2. minion set-context --agent cartographer --context "just started"
-    3. minion check-inbox --agent cartographer
-    4. minion set-status --agent cartographer --status "ready for orders"
+    1. minion --compact register --name {agent_name} --class lead --transport terminal
+    2. minion set-context --agent {agent_name} --context "just started"
+    3. minion check-inbox --agent {agent_name}
+    4. minion set-status --agent {agent_name} --status "ready for orders"
     5. minion who
     Then wait for the human to give orders.
 
@@ -198,10 +198,10 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name viper --class recon --transport daemon
-      2. minion set-context --agent viper --context "just started"
-      3. minion check-inbox --agent viper
-      4. minion set-status --agent viper --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   pixel:
@@ -255,10 +255,10 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name pixel --class recon --transport daemon
-      2. minion set-context --agent pixel --context "just started"
-      3. minion check-inbox --agent pixel
-      4. minion set-status --agent pixel --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   blueprint:
@@ -315,10 +315,10 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name blueprint --class recon --transport daemon
-      2. minion set-context --agent blueprint --context "just started"
-      3. minion check-inbox --agent blueprint
-      4. minion set-status --agent blueprint --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   torvalds:
@@ -389,10 +389,10 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name torvalds --class recon --transport daemon
-      2. minion set-context --agent torvalds --context "just started"
-      3. minion check-inbox --agent torvalds
-      4. minion set-status --agent torvalds --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   watchtower:
@@ -448,8 +448,8 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name watchtower --class recon --transport daemon
-      2. minion set-context --agent watchtower --context "just started"
-      3. minion check-inbox --agent watchtower
-      4. minion set-status --agent watchtower --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.

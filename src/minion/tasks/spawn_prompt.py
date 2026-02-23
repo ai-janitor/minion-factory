@@ -14,7 +14,7 @@ def format_as_prompt(data: dict[str, Any]) -> str:
 
     Concatenates system_prompt, task_briefing, tool list, and a result-reporting
     instruction so the caller can pass the output directly to a Task tool without
-    any manual assembly.
+    any manual assembly. Substitutes {agent_name} placeholders with the runtime name.
     """
     system_prompt = data.get("system_prompt", "")
     task_briefing = data.get("task_briefing", "")
@@ -35,17 +35,21 @@ def format_as_prompt(data: dict[str, Any]) -> str:
         parts.append(f"Available tools: {tool_commands}")
     parts.append(result_instruction)
 
-    return "\n\n".join(parts)
+    assembled = "\n\n".join(parts)
+    return assembled.replace("{agent_name}", agent_name)
 
 
-def get_spawn_prompt(task_id: int, agent_name: str, crew_name: str) -> dict[str, Any]:
+def get_spawn_prompt(task_id: int, profile_name: str, agent_name: str, crew_name: str) -> dict[str, Any]:
     """Combine crew YAML agent config, task content, and onboarding tools.
+
+    profile_name: key in the crew YAML (used to look up the agent config)
+    agent_name: runtime identity injected into {agent_name} placeholders and CLI commands
 
     Returns a dict with all fields needed to spawn an agent session,
     or an error dict if the task or agent cannot be resolved.
     """
-    # Resolve agent config from crew YAML
-    agent_cfg = get_agent_prompt(agent_name, crew_name)
+    # Resolve agent config from crew YAML using the profile key
+    agent_cfg = get_agent_prompt(profile_name, crew_name)
     if "error" in agent_cfg:
         return agent_cfg
 

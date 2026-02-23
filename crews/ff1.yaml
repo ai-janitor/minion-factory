@@ -14,10 +14,10 @@ lead:
     The human is the raid lead — follow their orders.
 
     ON STARTUP (do this immediately, before anything else — use Bash tool):
-    1. minion --compact register --name redmage --class lead --transport terminal
-    2. minion set-context --agent redmage --context "just started"
-    3. minion check-inbox --agent redmage
-    4. minion set-status --agent redmage --status "ready for orders"
+    1. minion --compact register --name {agent_name} --class lead --transport terminal
+    2. minion set-context --agent {agent_name} --context "just started"
+    3. minion check-inbox --agent {agent_name}
+    4. minion set-status --agent {agent_name} --status "ready for orders"
     5. minion who
     Then wait for the human to give orders.
 
@@ -36,10 +36,10 @@ agents:
       Send one summary message when done.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name fighter --class coder --transport daemon
-      2. minion set-context --agent fighter --context "just started"
-      3. minion check-inbox --agent fighter
-      4. minion set-status --agent fighter --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class coder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   whitemage:
@@ -56,10 +56,10 @@ agents:
       Send one concise response per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name whitemage --class oracle --transport daemon
-      2. minion set-context --agent whitemage --context "just started"
-      3. minion check-inbox --agent whitemage
-      4. minion set-status --agent whitemage --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class oracle --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   blackmage:
@@ -76,10 +76,10 @@ agents:
       Send one summary message when done.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name blackmage --class builder --transport daemon
-      2. minion set-context --agent blackmage --context "just started"
-      3. minion check-inbox --agent blackmage
-      4. minion set-status --agent blackmage --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class builder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   thief:
@@ -96,10 +96,10 @@ agents:
       Send one concise intel report per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name thief --class recon --transport daemon
-      2. minion set-context --agent thief --context "just started"
-      3. minion check-inbox --agent thief
-      4. minion set-status --agent thief --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   redmage-jr:
@@ -115,10 +115,10 @@ agents:
       Send one summary message when done.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name redmage-jr --class coder --transport daemon
-      2. minion set-context --agent redmage-jr --context "just started"
-      3. minion check-inbox --agent redmage-jr
-      4. minion set-status --agent redmage-jr --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class coder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   blackbelt:
@@ -136,10 +136,10 @@ agents:
       Send one summary message when done.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name blackbelt --class coder --transport daemon
-      2. minion set-context --agent blackbelt --context "just started"
-      3. minion check-inbox --agent blackbelt
-      4. minion set-status --agent blackbelt --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class coder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   whitewizard:
@@ -158,8 +158,8 @@ agents:
       Send one concise response per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name whitewizard --class oracle --transport daemon
-      2. minion set-context --agent whitewizard --context "just started"
-      3. minion check-inbox --agent whitewizard
-      4. minion set-status --agent whitewizard --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class oracle --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.

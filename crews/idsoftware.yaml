@@ -46,10 +46,10 @@ lead:
     The human is the client — follow their orders.
 
     ON STARTUP (do this immediately, before anything else — use Bash tool):
-    1. minion --compact register --name napoleon --class lead --transport terminal
-    2. minion set-context --agent napoleon --context "just started"
-    3. minion check-inbox --agent napoleon
-    4. minion set-status --agent napoleon --status "ready for orders"
+    1. minion --compact register --name {agent_name} --class lead --transport terminal
+    2. minion set-context --agent {agent_name} --context "just started"
+    3. minion check-inbox --agent {agent_name}
+    4. minion set-status --agent {agent_name} --status "ready for orders"
     5. minion who
     Then wait for the human to give orders.
 
@@ -98,10 +98,10 @@ agents:
       NEVER use AskUserQuestion. Route all communication through minion CLI.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name napoleon --class lead --transport daemon
-      2. minion set-context --agent napoleon --context "just started"
-      3. minion check-inbox --agent napoleon
-      4. minion set-status --agent napoleon --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class lead --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       5. minion who
       Then wait for messages. Check inbox regularly.
 
@@ -135,10 +135,10 @@ agents:
       Send one concise result per request: what you changed, why, before/after metrics.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name carmack --class coder --transport daemon
-      2. minion set-context --agent carmack --context "just started"
-      3. minion check-inbox --agent carmack
-      4. minion set-status --agent carmack --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class coder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   abrash:
@@ -178,10 +178,10 @@ agents:
       Send one concise result per request: what you changed, why, before/after metrics.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name abrash --class coder --transport daemon
-      2. minion set-context --agent abrash --context "just started"
-      3. minion check-inbox --agent abrash
-      4. minion set-status --agent abrash --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class coder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   romero:
@@ -220,10 +220,10 @@ agents:
       Send one summary message when done: built (yes/no), tests (pass/fail), perf numbers.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name romero --class builder --transport daemon
-      2. minion set-context --agent romero --context "just started"
-      3. minion check-inbox --agent romero
-      4. minion set-status --agent romero --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class builder --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   hook:
@@ -267,10 +267,10 @@ agents:
       Send one concise intel report per request.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name hook --class recon --transport daemon
-      2. minion set-context --agent hook --context "just started"
-      3. minion check-inbox --agent hook
-      4. minion set-status --agent hook --status "ready for orders"
+      1. minion --compact register --name {agent_name} --class recon --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   cloud:
@@ -319,8 +319,8 @@ agents:
       Send one structured review per request: issues found, severity, file:line references.
 
       ON STARTUP (do this immediately, before anything else — use Bash tool):
-      1. minion --compact register --name cloud --class auditor --transport daemon
-      2. minion set-context --agent cloud --context "just started"
-      3. minion check-inbox --agent cloud
-      4. minion set-status --agent cloud --status "auditing"
+      1. minion --compact register --name {agent_name} --class auditor --transport daemon
+      2. minion set-context --agent {agent_name} --context "just started"
+      3. minion check-inbox --agent {agent_name}
+      4. minion set-status --agent {agent_name} --status "auditing"
       Then wait for messages. Check inbox regularly.
