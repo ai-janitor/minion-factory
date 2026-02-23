@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 import yaml
 from minion.defaults import ENV_DB_PATH, resolve_db_path, resolve_docs_dir, resolve_path
@@ -176,3 +176,39 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         docs_dir=docs_dir,
         agents=agents,
     )
+
+
+def get_agent_prompt(agent_name: str, crew_name: str) -> dict[str, Any]:
+    """Load a crew YAML and return the named agent's full prompt config.
+
+    Reuses _find_crew_file() for crew discovery and load_config() for parsing,
+    so all prompt construction (system_prefix injection, defaults) stays consistent.
+    """
+    from minion.crew.spawn import _find_crew_file
+
+    crew_file = _find_crew_file(crew_name)
+    if crew_file is None:
+        return {"error": f"Crew '{crew_name}' not found"}
+
+    try:
+        cfg = load_config(crew_file)
+    except (FileNotFoundError, ValueError) as exc:
+        return {"error": f"Failed to load crew '{crew_name}': {exc}"}
+
+    agent = cfg.agents.get(agent_name)
+    if agent is None:
+        return {
+            "error": f"Agent '{agent_name}' not found in crew '{crew_name}'",
+            "available_agents": sorted(cfg.agents.keys()),
+        }
+
+    return {
+        "name": agent.name,
+        "role": agent.role,
+        "zone": agent.zone,
+        "model": agent.model,
+        "system": agent.system,
+        "allowed_tools": agent.allowed_tools,
+        "permission_mode": agent.permission_mode,
+        "capabilities": list(agent.capabilities),
+    }

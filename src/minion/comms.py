@@ -33,6 +33,7 @@ def register(
     model: str = "",
     description: str = "",
     transport: str = "terminal",
+    crew: str = "",
 ) -> dict[str, object]:
     if transport not in ("terminal", "daemon", "daemon-ts"):
         return {"error": f"Invalid transport '{transport}'. Must be 'terminal', 'daemon', or 'daemon-ts'."}
@@ -91,6 +92,35 @@ def register(
 
         result["triggers"] = format_trigger_codebook()
         result["tools"] = get_tools_for_class(agent_class)
+
+        # Merge crew YAML context when --crew is provided
+        if crew:
+            from minion.crew.spawn import _find_crew_file
+            from minion.crew.config import load_config as _load_crew_config
+
+            crew_file = _find_crew_file(crew)
+            if not crew_file:
+                result["crew_warning"] = f"Crew '{crew}' not found — skipping crew context"
+            else:
+                try:
+                    crew_cfg = _load_crew_config(crew_file)
+                    agent_cfg = crew_cfg.agents.get(agent_name)
+                    if not agent_cfg:
+                        result["crew_error"] = (
+                            f"Agent '{agent_name}' not found in crew '{crew}'. "
+                            f"Available: {', '.join(sorted(crew_cfg.agents.keys()))}"
+                        )
+                    else:
+                        result["crew"] = crew
+                        if agent_cfg.zone:
+                            result["zone"] = agent_cfg.zone
+                        if agent_cfg.capabilities:
+                            result["capabilities"] = list(agent_cfg.capabilities)
+                        if agent_cfg.system:
+                            result["system_prompt_excerpt"] = agent_cfg.system[:200]
+                except Exception as exc:
+                    result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
+
         if transport == "terminal":
             result["playbook"] = {
                 "type": "terminal",

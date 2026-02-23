@@ -46,7 +46,7 @@ wheels = [
 
 [[package]]
 name = "minion-factory"
-version = "0.3.42"
+version = "0.3.47"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

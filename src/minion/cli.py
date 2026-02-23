@@ -54,11 +54,12 @@ def agent_group(ctx: click.Context) -> None:
 @click.option("--model", default="")
 @click.option("--description", default="")
 @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
+@click.option("--crew", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
 @click.pass_context
-def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str) -> None:
+def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str) -> None:
     """Register an agent."""
     from minion.comms import register as _register
-    _output(_register(name, agent_class, model, description, transport), ctx.obj["human"], ctx.obj["compact"])
+    _output(_register(name, agent_class, model, description, transport, crew), ctx.obj["human"], ctx.obj["compact"])
 
 
 @agent_group.command("set-status")
@@ -479,6 +480,41 @@ def task_block_cmd(ctx: click.Context, agent: str, task_id: int, reason: str) ->
     """Block a task with a reason and transition to blocked status."""
     from minion.tasks.block import block_task
     _output(block_task(agent, task_id, reason), ctx.obj["human"])
+
+
+@task_group.command("spawn")
+@click.option("--task-id", required=True, type=int)
+@click.option("--agent", required=True)
+@click.option("--crew", required=True)
+@click.option("--format", "fmt", default="json", type=click.Choice(["json", "text"]))
+@click.pass_context
+def task_spawn_cmd(ctx: click.Context, task_id: int, agent: str, crew: str, fmt: str) -> None:
+    """Output a spawn-ready prompt for an agent + task."""
+    from minion.tasks.spawn_prompt import get_spawn_prompt
+    result = get_spawn_prompt(task_id, agent, crew)
+    if fmt == "text":
+        if "error" in result:
+            click.echo(f"ERROR: {result['error']}", err=True)
+            ctx.exit(1)
+            return
+        click.echo("=" * 60)
+        click.echo("SYSTEM PROMPT")
+        click.echo("=" * 60)
+        click.echo(result.get("system_prompt", ""))
+        click.echo()
+        click.echo("=" * 60)
+        click.echo("TASK BRIEFING")
+        click.echo("=" * 60)
+        click.echo(result.get("task_briefing", ""))
+        click.echo()
+        click.echo(f"Model:       {result.get('model', 'default')}")
+        click.echo(f"Permissions: {result.get('permission_mode', 'default')}")
+        tools = result.get("tools") or []
+        click.echo(f"Tools:       {len(tools)} commands")
+        for t in tools:
+            click.echo(f"  - {t.get('command', t)}")
+    else:
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
 
 
 # =========================================================================
