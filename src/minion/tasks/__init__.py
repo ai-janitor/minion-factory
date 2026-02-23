@@ -8,6 +8,7 @@ from .create_task import create_task, assign_task
 from .update_task import update_task, complete_phase
 from .close_task import close_task, reopen_task
 from .done import done_task
+from .spec import get_spec
 
 __all__ = [
     "Stage", "TaskFlow", "Transition",
@@ -16,5 +17,5 @@ __all__ = [
     "create_task", "assign_task", "update_task",
     "get_tasks", "get_task", "submit_result",
     "close_task", "reopen_task", "done_task", "pull_task", "complete_phase",
-    "get_task_lineage",
+    "get_task_lineage", "get_spec",
 ]

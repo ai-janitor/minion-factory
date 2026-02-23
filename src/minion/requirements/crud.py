@@ -54,6 +54,35 @@ def _infer_stage_from_fs(abs_path: str) -> str:
     return "seed"
 
 
+def create(file_path: str, title: str, description: str = "", created_by: str = "human") -> dict[str, Any]:
+    """Create a requirement folder with README.md and register it in one step.
+
+    file_path is relative to .work/requirements/. Creates the folder,
+    writes README.md from title+description, then registers in the index.
+    """
+    from minion.db import _get_db_path
+    work_dir = os.path.dirname(_get_db_path())
+    req_root = os.path.join(work_dir, "requirements")
+    abs_path = os.path.join(req_root, file_path)
+
+    if os.path.exists(abs_path):
+        return {"error": f"Folder already exists: {file_path}"}
+
+    os.makedirs(abs_path, exist_ok=True)
+    readme = os.path.join(abs_path, "README.md")
+    lines = [f"# {title}\n"]
+    if description:
+        lines.append(f"\n{description.strip()}\n")
+    with open(readme, "w") as f:
+        f.writelines(lines)
+
+    result = register(file_path, created_by)
+    if "error" in result:
+        return result
+    result["title"] = title
+    return result
+
+
 def register(file_path: str, created_by: str = "human") -> dict[str, Any]:
     """Register a requirement folder path in the index.
 

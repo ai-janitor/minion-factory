@@ -1,4 +1,5 @@
 from .crud import (
+    create,
     register,
     reindex,
     update_stage,
@@ -9,8 +10,12 @@ from .crud import (
     get_orphans,
     get_unlinked_tasks,
 )
+from .decompose import decompose
+from .findings import findings
+from .itemize import itemize
 
 __all__ = [
+    "create",
     "register",
     "reindex",
     "update_stage",
@@ -20,4 +25,7 @@ __all__ = [
     "get_tree",
     "get_orphans",
     "get_unlinked_tasks",
+    "decompose",
+    "findings",
+    "itemize",
 ]

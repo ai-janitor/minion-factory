@@ -289,6 +289,19 @@ def get_task(ctx: click.Context, task_id: int) -> None:
     _output(_get_task(task_id), ctx.obj["human"])
 
 
+@task_group.command("spec")
+@click.option("--task-id", required=True, type=int)
+@click.pass_context
+def task_spec_cmd(ctx: click.Context, task_id: int) -> None:
+    """Read the spec file contents for a task by ID."""
+    from minion.tasks import get_spec as _get_spec
+    result = _get_spec(task_id)
+    if ctx.obj["human"] and "spec" in result:
+        click.echo(result["spec"])
+    else:
+        _output(result, ctx.obj["human"])
+
+
 @task_group.command("lineage")
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
@@ -398,6 +411,74 @@ def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
     """List all comments for a task."""
     from minion.tasks.comments import list_comments
     _output(list_comments(task_id), ctx.obj["human"])
+
+
+@task_group.command("define")
+@click.option("--agent", required=True)
+@click.option("--title", required=True)
+@click.option("--description", required=True)
+@click.option("--task-type", default="feature", type=click.Choice(["feature", "bugfix", "chore"]))
+@click.option("--project", default="")
+@click.option("--zone", default="")
+@click.option("--blocked-by", default="", help="Comma-separated task IDs")
+@click.option("--class-required", default="")
+@click.pass_context
+def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
+                    task_type: str, project: str, zone: str, blocked_by: str, class_required: str) -> None:
+    """Create a task spec file and task record in one command."""
+    from minion.tasks.define import define_task
+    _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required), ctx.obj["human"])
+
+
+@task_group.command("result")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--summary", required=True)
+@click.option("--files-changed", default="", help="Comma-separated list of changed files")
+@click.option("--notes", default="")
+@click.pass_context
+def task_result_cmd(ctx: click.Context, agent: str, task_id: int, summary: str,
+                    files_changed: str, notes: str) -> None:
+    """Write a result file and submit it for a task."""
+    from minion.tasks.result import create_result
+    _output(create_result(agent, task_id, summary, files_changed, notes), ctx.obj["human"])
+
+
+@task_group.command("review")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--verdict", required=True, type=click.Choice(["pass", "fail"]))
+@click.option("--notes", default="")
+@click.pass_context
+def task_review_cmd(ctx: click.Context, agent: str, task_id: int, verdict: str, notes: str) -> None:
+    """Write a review verdict and advance the task phase."""
+    from minion.tasks.review import create_review
+    _output(create_review(agent, task_id, verdict, notes), ctx.obj["human"])
+
+
+@task_group.command("test")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--passed/--failed", required=True, help="Test outcome")
+@click.option("--output", "test_output", default="", help="Test output text")
+@click.option("--notes", default="")
+@click.pass_context
+def task_test_cmd(ctx: click.Context, agent: str, task_id: int, passed: bool,
+                  test_output: str, notes: str) -> None:
+    """Write a test report and advance the task phase."""
+    from minion.tasks.test_report import create_test_report
+    _output(create_test_report(agent, task_id, passed, test_output, notes), ctx.obj["human"])
+
+
+@task_group.command("block")
+@click.option("--agent", required=True)
+@click.option("--task-id", required=True, type=int)
+@click.option("--reason", required=True)
+@click.pass_context
+def task_block_cmd(ctx: click.Context, agent: str, task_id: int, reason: str) -> None:
+    """Block a task with a reason and transition to blocked status."""
+    from minion.tasks.block import block_task
+    _output(block_task(agent, task_id, reason), ctx.obj["human"])
 
 
 # =========================================================================
@@ -915,19 +996,26 @@ def backlog_list(ctx: click.Context, item_type: str | None, priority: str | None
 
 
 @backlog_group.command("show")
-@click.argument("path")
+@click.argument("path", required=False, default=None)
+@click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID")
 @click.pass_context
-def backlog_show(ctx: click.Context, path: str) -> None:
-    """Show a single backlog item by file path."""
+def backlog_show(ctx: click.Context, path: str | None, item_id: int | None) -> None:
+    """Show a single backlog item by file path or --id."""
     import json
     from minion.backlog import get_item as _get_item
+    if not path and item_id is None:
+        click.echo(json.dumps({"error": "Provide PATH or --id"}, indent=2))
+        sys.exit(1)
     try:
-        result = _get_item(file_path=path)
+        if item_id is not None:
+            result = _get_item(item_id=item_id)
+        else:
+            result = _get_item(file_path=path)
     except ValueError as e:
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)
     if result is None:
-        click.echo(json.dumps({"error": f"Backlog item '{path}' not found."}, indent=2))
+        click.echo(json.dumps({"error": f"Backlog item not found."}, indent=2))
         sys.exit(1)
     click.echo(json.dumps(result, indent=2))
 
@@ -1111,6 +1199,58 @@ def req_orphans(ctx: click.Context) -> None:
     """List leaf requirements with no linked tasks (work never started)."""
     from minion.requirements import get_orphans as _orphans
     _output(_orphans(), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("create")
+@click.option("--path", required=True, help="Path relative to .work/requirements/")
+@click.option("--title", required=True, help="Requirement title")
+@click.option("--description", default="", help="Requirement description")
+@click.option("--by", "created_by", default="human")
+@click.pass_context
+def req_create(ctx: click.Context, path: str, title: str, description: str, created_by: str) -> None:
+    """Create a requirement folder with README and register it."""
+    from minion.requirements import create as _create
+    _output(_create(path, title, description, created_by), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("decompose")
+@click.option("--path", required=True, help="Parent requirement path")
+@click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file for children")
+@click.option("--by", "agent_name", default="lead")
+@click.pass_context
+def req_decompose(ctx: click.Context, path: str, spec: str, agent_name: str) -> None:
+    """Decompose a requirement into children from a spec file."""
+    from minion.requirements.decompose import decompose as _decompose, _load_spec
+    spec_data = _load_spec(spec)
+    _output(_decompose(path, spec_data, agent_name), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("itemize")
+@click.option("--path", required=True, help="Requirement path")
+@click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file with items")
+@click.option("--by", "created_by", default="lead")
+@click.pass_context
+def req_itemize(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
+    """Write itemized-requirements.md from a spec file."""
+    import yaml
+    with open(spec) as f:
+        spec_data = yaml.safe_load(f)
+    from minion.requirements import itemize as _itemize
+    _output(_itemize(path, spec_data, created_by), ctx.obj["human"], ctx.obj["compact"])
+
+
+@req_group.command("findings")
+@click.option("--path", required=True, help="Requirement path")
+@click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file with findings")
+@click.option("--by", "created_by", default="lead")
+@click.pass_context
+def req_findings(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
+    """Write findings.md from a spec file."""
+    import yaml
+    with open(spec) as f:
+        spec_data = yaml.safe_load(f)
+    from minion.requirements import findings as _findings
+    _output(_findings(path, spec_data, created_by), ctx.obj["human"], ctx.obj["compact"])
 
 
 # =========================================================================
