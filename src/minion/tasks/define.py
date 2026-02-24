@@ -27,6 +27,7 @@ def define_task(
     zone: str = "",
     blocked_by: str = "",
     class_required: str = "",
+    intel: str = "",
 ) -> dict[str, object]:
     """Create a task spec file and a task record in one shot."""
     work_dir = get_runtime_dir()
@@ -40,7 +41,7 @@ def define_task(
     with open(spec_path, "w") as f:
         f.write(f"# {title}\n\n{description}\n")
 
-    return create_task(
+    result = create_task(
         agent_name=agent_name,
         title=title,
         task_file=spec_path,
@@ -50,3 +51,15 @@ def define_task(
         class_required=class_required,
         task_type=task_type,
     )
+
+    # Auto-link intel docs to the new task
+    if intel and "task_id" in result:
+        from minion.intel import link_doc
+        slugs = [s.strip() for s in intel.split(",") if s.strip()]
+        linked = []
+        for intel_slug in slugs:
+            link_result = link_doc(intel_slug, task_id=result["task_id"])
+            linked.append(link_result)
+        result["intel_linked"] = linked
+
+    return result

@@ -423,12 +423,13 @@ def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
 @click.option("--zone", default="")
 @click.option("--blocked-by", default="", help="Comma-separated task IDs")
 @click.option("--class-required", default="")
+@click.option("--intel", default="", help="Comma-separated intel slugs to link")
 @click.pass_context
 def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
-                    task_type: str, project: str, zone: str, blocked_by: str, class_required: str) -> None:
+                    task_type: str, project: str, zone: str, blocked_by: str, class_required: str, intel: str) -> None:
     """Create a task spec file and task record in one command."""
     from minion.tasks.define import define_task
-    _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required), ctx.obj["human"])
+    _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required, intel), ctx.obj["human"])
 
 
 @task_group.command("result")
