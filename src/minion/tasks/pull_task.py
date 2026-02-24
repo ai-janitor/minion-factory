@@ -124,6 +124,22 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         if flow:
             result["flow_position"] = flow.render_dag(full_task.get("status"))
 
+        # War plan injection — read-only, never blocks the pull
+        try:
+            from minion.intel import show_war_plan
+            wp = show_war_plan()
+            result["war_plan"] = wp.get("content", "")
+        except Exception:
+            result["war_plan"] = ""
+
+        # Linked intel injection — read-only, never blocks the pull
+        try:
+            from minion.intel import intel_for_task
+            intel_result = intel_for_task(task_id)
+            result["linked_intel"] = intel_result.get("docs", [])
+        except Exception:
+            result["linked_intel"] = []
+
         return result
     finally:
         conn.close()

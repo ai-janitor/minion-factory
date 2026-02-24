@@ -531,6 +531,33 @@ def _migrate_v10(conn: sqlite3.Connection) -> None:
     log.info("v10: task_type→flow_type references fixed in application code")
 
 
+def _migrate_v11(conn: sqlite3.Connection) -> None:
+    """Create intel_docs and intel_links tables — queryable index over .work/intel/."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS intel_docs (
+            slug         TEXT PRIMARY KEY,
+            doc_path     TEXT NOT NULL,
+            tags         TEXT DEFAULT '[]',
+            description  TEXT DEFAULT '',
+            created_by   TEXT,
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS intel_links (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            intel_slug   TEXT NOT NULL REFERENCES intel_docs(slug),
+            entity_type  TEXT NOT NULL,
+            entity_id    INTEGER NOT NULL,
+            UNIQUE(intel_slug, entity_type, entity_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_intel_links_slug ON intel_links(intel_slug)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_intel_links_entity ON intel_links(entity_type, entity_id)")
+    log.info("v11: created intel_docs and intel_links tables")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -544,6 +571,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (8, "Create backlog table", _migrate_v8),
     (9, "Create task_comments table", _migrate_v9),
     (10, "Drop orphan task_type column from tasks", _migrate_v10),
+    (11, "Create intel_docs and intel_links tables", _migrate_v11),
 ]
 
 

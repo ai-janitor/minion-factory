@@ -1104,6 +1104,138 @@ def backlog_reindex(ctx: click.Context) -> None:
 
 
 # =========================================================================
+# War plan
+# =========================================================================
+
+@cli.group("war-plan")
+@click.pass_context
+def war_plan_group(ctx: click.Context) -> None:
+    """Set and read the persistent project war plan."""
+    pass
+
+
+@war_plan_group.command("show")
+@click.pass_context
+def war_plan_show(ctx: click.Context) -> None:
+    """Print the current war plan content."""
+    from minion.intel import show_war_plan as _show_war_plan
+    _output(_show_war_plan(), ctx.obj["human"], ctx.obj["compact"])
+
+
+@war_plan_group.command("set")
+@click.option("--agent", required=True, help="Lead agent setting the war plan")
+@click.option("--text", required=True, help="War plan content to write")
+@click.pass_context
+def war_plan_set(ctx: click.Context, agent: str, text: str) -> None:
+    """Overwrite the war plan (lead-only)."""
+    from minion.intel import set_war_plan as _set_war_plan
+    _output(_set_war_plan(agent, text), ctx.obj["human"], ctx.obj["compact"])
+
+
+@war_plan_group.command("append")
+@click.option("--agent", required=True, help="Lead agent appending to the war plan")
+@click.option("--text", required=True, help="Text to append")
+@click.pass_context
+def war_plan_append(ctx: click.Context, agent: str, text: str) -> None:
+    """Append text to the war plan (lead-only)."""
+    from minion.intel import append_war_plan as _append_war_plan
+    _output(_append_war_plan(agent, text), ctx.obj["human"], ctx.obj["compact"])
+
+
+# =========================================================================
+# Intel
+# =========================================================================
+
+@cli.group("intel")
+@click.pass_context
+def intel_group(ctx: click.Context) -> None:
+    """Index, link, and query .work/intel/ knowledge docs."""
+    pass
+
+
+@intel_group.command("add")
+@click.option("--slug", required=True, help="Human-readable key for this doc")
+@click.option("--path", "doc_path", required=True, help="Absolute path to the .md file")
+@click.option("--tags", default="", help="Comma-separated list of tags")
+@click.option("--description", default="", help="Short description")
+@click.option("--created-by", default="", help="Agent or user who created this doc")
+@click.option("--scaffold", is_flag=True, default=False, help="Create file with frontmatter stub if missing")
+@click.pass_context
+def intel_add(ctx: click.Context, slug: str, doc_path: str, tags: str, description: str, created_by: str, scaffold: bool) -> None:
+    """Register an intel doc in the index."""
+    from minion.intel import add_doc as _add_doc
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+    _output(_add_doc(slug, doc_path, tag_list, description, created_by, scaffold), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("link")
+@click.option("--slug", required=True, help="Intel doc slug")
+@click.option("--task", "task_id", type=int, default=None, help="Task ID to link")
+@click.option("--req", "req_id", type=int, default=None, help="Requirement ID to link")
+@click.pass_context
+def intel_link(ctx: click.Context, slug: str, task_id: int | None, req_id: int | None) -> None:
+    """Link an intel doc to a task or requirement."""
+    from minion.intel import link_doc as _link_doc
+    _output(_link_doc(slug, task_id, req_id), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("list")
+@click.option("--tag", default="", help="Filter by tag")
+@click.option("--limit", type=int, default=50, help="Max results (default 50)")
+@click.pass_context
+def intel_list(ctx: click.Context, tag: str, limit: int) -> None:
+    """List all registered intel docs."""
+    from minion.intel import list_docs as _list_docs
+    _output(_list_docs(tag, limit), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("find")
+@click.option("--tag", default="", help="Filter by tag")
+@click.option("--path", "path_fragment", default="", help="Filter by path fragment")
+@click.pass_context
+def intel_find(ctx: click.Context, tag: str, path_fragment: str) -> None:
+    """Find intel docs by tag or path fragment."""
+    from minion.intel import find_docs as _find_docs
+    _output(_find_docs(tag, path_fragment), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("get")
+@click.option("--slug", required=True, help="Intel doc slug")
+@click.pass_context
+def intel_get(ctx: click.Context, slug: str) -> None:
+    """Get metadata and links for a registered intel doc."""
+    from minion.intel import get_doc as _get_doc
+    _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("read")
+@click.option("--slug", required=True, help="Intel doc slug")
+@click.option("--summary", is_flag=True, default=False, help="Return first 10 lines only")
+@click.pass_context
+def intel_read(ctx: click.Context, slug: str, summary: bool) -> None:
+    """Read the content of a registered intel doc."""
+    from minion.intel import read_doc as _read_doc
+    _output(_read_doc(slug, summary), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("for-task")
+@click.option("--task-id", required=True, type=int, help="Task ID to look up intel for")
+@click.pass_context
+def intel_for_task_cmd(ctx: click.Context, task_id: int) -> None:
+    """List all intel docs linked to a task."""
+    from minion.intel import intel_for_task as _intel_for_task
+    _output(_intel_for_task(task_id), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("reindex")
+@click.pass_context
+def intel_reindex(ctx: click.Context) -> None:
+    """Rebuild intel_docs from filesystem by scanning .work/intel/."""
+    from minion.intel import reindex_intel as _reindex_intel
+    _output(_reindex_intel(), ctx.obj["human"], ctx.obj["compact"])
+
+
+# =========================================================================
 # Requirements (already grouped — unchanged)
 # =========================================================================
 

@@ -302,6 +302,24 @@ def sitrep() -> dict[str, object]:
         cursor.execute("SELECT from_agent, to_agent, timestamp, is_cc FROM messages ORDER BY timestamp DESC LIMIT 10")
         recent_comms = [dict(row) for row in cursor.fetchall()]
 
+        # War plan summary — truncated to 500 chars for sitrep
+        war_plan_summary: str | None = None
+        try:
+            from minion.intel import show_war_plan
+            wp = show_war_plan()
+            content = wp.get("content", "")
+            war_plan_summary = content[:500] if content else None
+        except Exception:
+            pass
+
+        # Intel doc count — number of registered intel docs
+        intel_count = 0
+        try:
+            cursor.execute("SELECT COUNT(*) FROM intel_docs")
+            intel_count = cursor.fetchone()[0]
+        except Exception:
+            pass
+
         return {
             "agents": agents,
             "active_tasks": active_tasks,
@@ -309,6 +327,8 @@ def sitrep() -> dict[str, object]:
             "flags": flags,
             "battle_plan": battle_plan,
             "recent_comms": recent_comms[::-1],
+            "war_plan": war_plan_summary,
+            "intel_count": intel_count,
         }
     finally:
         conn.close()
