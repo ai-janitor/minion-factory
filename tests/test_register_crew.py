@@ -15,12 +15,14 @@ from minion.db import init_db, reset_db_path, register_agent_db
 
 @pytest.fixture(autouse=True)
 def isolated_db(tmp_path, monkeypatch):
-    """Each test gets its own .work/ dir and isolated SQLite DB."""
+    """Each test gets its own .work/ dir and isolated SQLite DB + coordinator DB."""
     work_dir = tmp_path / ".work"
     work_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = str(work_dir / "minion.db")
+    coord_path = str(work_dir / "coordinator.db")
     monkeypatch.setenv("MINION_DB_PATH", db_path)
+    monkeypatch.setenv("MINION_COORDINATOR_DB_PATH", coord_path)
     reset_db_path()
     init_db()
 

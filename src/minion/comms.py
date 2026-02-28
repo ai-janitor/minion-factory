@@ -84,6 +84,20 @@ def register(
             init_coordinator_db()
             coord = get_coordinator_db()
             try:
+                project_path = os.getcwd()
+                # Check if name is already taken by a different active project
+                existing = coord.execute(
+                    "SELECT project_path FROM agents WHERE name = ?", (agent_name,)
+                ).fetchone()
+                if existing and os.path.realpath(existing["project_path"]) != os.path.realpath(project_path):
+                    old_db = os.path.join(existing["project_path"], ".work", "minion.db")
+                    if os.path.exists(old_db):
+                        return {
+                            "error": (
+                                f"Agent name '{agent_name}' already registered in project "
+                                f"{existing['project_path']}. Use a unique name."
+                            )
+                        }
                 coord.execute(
                     """INSERT INTO agents
                         (name, agent_class, model, project_path, registered_at, last_seen, description, status, transport)
@@ -97,7 +111,7 @@ def register(
                         transport     = excluded.transport,
                         status        = 'waiting for work'
                     """,
-                    (agent_name, agent_class, model or None, os.getcwd(), now, now, description or None, transport),
+                    (agent_name, agent_class, model or None, project_path, now, now, description or None, transport),
                 )
                 coord.commit()
             finally:
@@ -151,15 +165,22 @@ def register(
                 except Exception as exc:
                     result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
 
+        result["critical"] = (
+            "YOU MUST START POLLING IMMEDIATELY. "
+            "Without polling, you CANNOT receive messages or task assignments. "
+            "No poll = no comms. Run: minion poll --agent " + agent_name
+        )
+
         if transport == "terminal":
             result["playbook"] = {
                 "type": "terminal",
                 "steps": [
-                    "POLLING: Run `minion poll --agent " + agent_name + "` as a BACKGROUND task (run_in_background=true). "
-                    "Do NOT append `&` to the command — use the run_in_background parameter instead. "
-                    "Do NOT add --timeout. The poll blocks forever until a message or task arrives — that is intentional. "
-                    "When the background task completes, you get a task-notification. Read the output file to get your messages/tasks. "
-                    "If the output says to restart polling, start ONE new background poll. "
+                    "CRITICAL — START POLLING NOW: Run `minion poll --agent " + agent_name + "` in the FOREGROUND. "
+                    "Without poll running, you are DEAF — you cannot receive messages or tasks. "
+                    "The poll blocks until a message or task arrives — that is intentional. "
+                    "Tuck to terminal background if needed — do NOT launch as a background task. "
+                    "Do NOT add --timeout. "
+                    "When poll returns content, process it and restart poll in the foreground again. "
                     "If the output says Do NOT restart (stand_down/retire), stop. "
                     "NEVER restart in a tight loop — if poll exits immediately, something is wrong. Investigate, do not retry.",
                     "Read your protocol doc: " + os.path.join(DOCS_DIR, "protocol-" + agent_class + ".md"),

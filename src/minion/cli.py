@@ -57,7 +57,13 @@ def agent_group(ctx: click.Context) -> None:
 @click.option("--crew", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
 @click.pass_context
 def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str) -> None:
-    """Register an agent."""
+    """Register an agent into the local session AND the global coordinator DB.
+
+    After registering, you MUST start polling to receive messages:
+    minion poll --agent <name>
+
+    An agent that registers but doesn't poll is deaf — it cannot receive
+    messages or task assignments. Names must be unique across all projects."""
     from minion.comms import register as _register
     _output(_register(name, agent_class, model, description, transport, crew), ctx.obj["human"], ctx.obj["compact"])
 
@@ -1484,6 +1490,46 @@ def req_report(ctx: click.Context, path: str, raw: bool) -> None:
 
 
 # =========================================================================
+# Global group — cross-repo coordination via ~/.minion/coordinator.db
+# =========================================================================
+
+@cli.group("global")
+@click.pass_context
+def global_group(ctx: click.Context) -> None:
+    """Cross-repo coordination via the global coordinator DB (~/.minion/coordinator.db).
+
+    Agents register locally AND globally. The coordinator enables cross-repo
+    message routing and a unified view of all agents across all projects."""
+    pass
+
+
+@global_group.command("who")
+@click.pass_context
+def global_who(ctx: click.Context) -> None:
+    """List all agents across ALL projects from the coordinator DB.
+
+    Shows every registered agent with their project_path, so you can see
+    which repo each agent lives in. Useful for cross-repo coordination."""
+    from minion.comms import who_global as _who_global
+    _output(_who_global(), ctx.obj["human"])
+
+
+@global_group.command("send")
+@click.option("--from", "from_agent", required=True, help="Sender agent name")
+@click.option("--to", "to_agent", required=True, help="Target agent name (can be in a different repo)")
+@click.option("--message", required=True, help="Message content")
+@click.pass_context
+def global_send(ctx: click.Context, from_agent: str, to_agent: str, message: str) -> None:
+    """Send a message to an agent in ANY repo via the coordinator.
+
+    Looks up the target agent's project in the coordinator DB and delivers
+    the message to that project's local .work/minion.db. The target agent's
+    poll picks it up from their local inbox."""
+    from minion.comms import send as _send
+    _output(_send(from_agent, to_agent, message), ctx.obj["human"])
+
+
+# =========================================================================
 # Top-level commands (stay ungrouped)
 # =========================================================================
 
@@ -1494,6 +1540,12 @@ def req_report(ctx: click.Context, path: str, raw: bool) -> None:
 @click.pass_context
 def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
     """Block until messages or tasks arrive, then print and exit.
+
+    If you're not polling, you CANNOT receive messages. No poll = no comms.
+    Every agent MUST have poll running to participate in the session.
+
+    Start poll in the FOREGROUND. It blocks until a message arrives. Tuck to
+    terminal background if needed — do NOT launch as a background task.
 
     Checks both inbox and task queue every INTERVAL seconds.
     Exits with code 0 (content found), 1 (timeout), or 3 (stand_down/retire signal).

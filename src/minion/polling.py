@@ -251,9 +251,9 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
                 result["tasks"] = available_tasks
             if transport == "terminal":
                 result["transport_hint"] = (
-                    f"RESTART POLLING: Run `minion poll --agent {agent}` in the FOREGROUND (not background). "
-                    f"Do NOT add --timeout. It blocks forever until the next message arrives. "
-                    f"Do NOT use run_in_background — foreground polling ensures messages are delivered reliably."
+                    f"RESTART POLLING: Run `minion poll --agent {agent}` in the FOREGROUND. "
+                    f"Do NOT add --timeout. It blocks until the next message arrives. "
+                    f"Tuck to terminal background if needed — do NOT launch as a background task."
                 )
             return result
 

@@ -71,8 +71,14 @@ def resolve_swarm_runtime_dir(project_dir: str | Path | None = None) -> Path:
     return base / SWARM_DIR_NAME
 
 
+ENV_COORDINATOR_DB_PATH = "MINION_COORDINATOR_DB_PATH"
+
+
 def resolve_coordinator_db_path() -> str:
-    """Resolve coordinator DB path: ~/.minion/coordinator.db."""
+    """Resolve coordinator DB path: MINION_COORDINATOR_DB_PATH env > ~/.minion/coordinator.db."""
+    explicit = os.getenv(ENV_COORDINATOR_DB_PATH)
+    if explicit:
+        return explicit
     return os.path.join(os.path.expanduser(COORDINATOR_DIR), COORDINATOR_DB_NAME)
 
 
