@@ -49,6 +49,7 @@ def add(
     source: str = "human",
     description: str = "",
     priority: str = "unset",
+    flow_hint: str = "",
     db: str | None = None,
 ) -> dict[str, Any]:
     """Capture a new backlog item as a README.md folder and index it in the DB.
@@ -101,9 +102,9 @@ def add(
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO backlog
-                   (file_path, type, title, priority, status, source, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 'open', ?, ?, ?)""",
-            (rel_path, type, title, priority, source, now, now),
+                   (file_path, type, title, priority, status, source, flow_hint, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?)""",
+            (rel_path, type, title, priority, source, flow_hint or None, now, now),
         )
         item_id = cursor.lastrowid
         conn.commit()

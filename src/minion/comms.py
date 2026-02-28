@@ -6,15 +6,18 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import sqlite3
 
 from minion.auth import CLASS_MODEL_WHITELIST, VALID_CLASSES, get_tools_for_class
 from minion.db import (
     DOCS_DIR,
     enrich_agent_row,
     format_trigger_codebook,
+    get_coordinator_db,
     get_db,
     get_lead,
     hp_summary,
+    init_coordinator_db,
     load_onboarding,
     now_iso,
     scan_triggers,
@@ -75,6 +78,33 @@ def register(
         # Clear retire flag for re-spawned agents
         cursor.execute("DELETE FROM agent_retire WHERE agent_name = ?", (agent_name,))
         conn.commit()
+
+        # Register in global coordinator DB for cross-repo routing
+        try:
+            init_coordinator_db()
+            coord = get_coordinator_db()
+            try:
+                coord.execute(
+                    """INSERT INTO agents
+                        (name, agent_class, model, project_path, registered_at, last_seen, description, status, transport)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting for work', ?)
+                    ON CONFLICT(name) DO UPDATE SET
+                        last_seen     = excluded.last_seen,
+                        agent_class   = excluded.agent_class,
+                        model         = COALESCE(NULLIF(excluded.model, ''), agents.model),
+                        project_path  = excluded.project_path,
+                        description   = COALESCE(NULLIF(excluded.description, ''), agents.description),
+                        transport     = excluded.transport,
+                        status        = 'waiting for work'
+                    """,
+                    (agent_name, agent_class, model or None, os.getcwd(), now, now, description or None, transport),
+                )
+                coord.commit()
+            finally:
+                coord.close()
+        except Exception as exc:
+            import sys
+            print(f"WARNING: coordinator DB registration failed: {exc}", file=sys.stderr)
 
         result: dict[str, object] = {
             "status": "registered",
@@ -174,6 +204,17 @@ def deregister(agent_name: str) -> dict[str, object]:
         cursor.execute("DELETE FROM file_waitlist WHERE agent_name = ?", (agent_name,))
         cursor.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
         conn.commit()
+
+        # Remove from global coordinator DB
+        try:
+            coord = get_coordinator_db()
+            try:
+                coord.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
+                coord.commit()
+            finally:
+                coord.close()
+        except Exception:
+            pass  # coordinator DB may not exist yet
 
         result: dict[str, object] = {
             "status": "deregistered",
@@ -312,6 +353,75 @@ def who() -> dict[str, object]:
         conn.close()
 
 
+def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) -> dict[str, object] | None:
+    """Look up target agent in coordinator DB and deliver message to their project's local DB.
+
+    Returns a result dict if cross-repo delivery succeeded, None if agent not found globally.
+    """
+    try:
+        coord = get_coordinator_db()
+        try:
+            row = coord.execute(
+                "SELECT project_path FROM agents WHERE name = ?", (to_agent,)
+            ).fetchone()
+        finally:
+            coord.close()
+    except Exception:
+        return None
+
+    if not row:
+        return None
+
+    project_path = row["project_path"]
+    remote_db_path = os.path.join(project_path, ".work", "minion.db")
+    if not os.path.exists(remote_db_path):
+        return None
+
+    # Write message content to target project's inbox
+    remote_inbox = os.path.join(project_path, ".work", "inbox", to_agent)
+    os.makedirs(remote_inbox, exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    fname = f"{ts}-{from_agent[:20]}-msg.md"
+    content_file = os.path.join(remote_inbox, fname)
+    atomic_write_file(content_file, message)
+
+    # Insert message metadata into target project's DB
+    remote_conn = sqlite3.connect(remote_db_path, timeout=5)
+    remote_conn.row_factory = sqlite3.Row
+    remote_conn.execute("PRAGMA journal_mode=WAL")
+    remote_conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        remote_conn.execute(
+            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
+            (from_agent, to_agent, content_file, now),
+        )
+        remote_conn.commit()
+    finally:
+        remote_conn.close()
+
+    return {
+        "status": "sent",
+        "from": from_agent,
+        "to": to_agent,
+        "routed_via": "coordinator",
+        "target_project": project_path,
+    }
+
+
+def who_global() -> dict[str, object]:
+    """List all agents across all projects from the coordinator DB."""
+    try:
+        coord = get_coordinator_db()
+        try:
+            rows = coord.execute("SELECT * FROM agents ORDER BY last_seen DESC").fetchall()
+            agents = [dict(row) for row in rows]
+            return {"agents": agents, "source": "coordinator"}
+        finally:
+            coord.close()
+    except Exception as exc:
+        return {"error": f"Coordinator DB not available: {exc}"}
+
+
 def send(
     from_agent: str,
     to_agent: str,
@@ -360,6 +470,17 @@ def send(
             "INSERT OR IGNORE INTO agents (name, agent_class, registered_at, last_seen) VALUES (?, 'coder', ?, ?)",
             (from_agent, now, now),
         )
+
+        # Cross-repo routing: if target not in local DB, try coordinator
+        if to_agent != "all":
+            cursor.execute("SELECT name FROM agents WHERE name = ?", (to_agent,))
+            if not cursor.fetchone():
+                cross_result = _route_cross_repo(to_agent, from_agent, message, now)
+                if cross_result:
+                    cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                    conn.commit()
+                    return cross_result
+                return {"error": f"Agent '{to_agent}' not found locally or in coordinator DB."}
 
         # Write message body to filesystem
         content_file = message_file_path(to_agent, from_agent)

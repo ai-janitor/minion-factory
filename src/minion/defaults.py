@@ -25,6 +25,10 @@ ENV_CLASS = "MINION_CLASS"
 WORK_ROOT = "~/.minion_work"
 DEFAULT_DOCS_DIR = "~/.minion_work/docs"
 
+# Global coordinator DB — cross-repo agent registry
+COORDINATOR_DIR = "~/.minion"
+COORDINATOR_DB_NAME = "coordinator.db"
+
 # Project-local work directory for DB, intel, traps, inbox, battle plans
 WORK_DIR_NAME = ".work"
 
@@ -65,6 +69,11 @@ def resolve_swarm_runtime_dir(project_dir: str | Path | None = None) -> Path:
     """Resolve the project-local .minion-swarm runtime directory."""
     base = Path(project_dir) if project_dir else Path.cwd()
     return base / SWARM_DIR_NAME
+
+
+def resolve_coordinator_db_path() -> str:
+    """Resolve coordinator DB path: ~/.minion/coordinator.db."""
+    return os.path.join(os.path.expanduser(COORDINATOR_DIR), COORDINATOR_DB_NAME)
 
 
 def resolve_path(raw_value: str, base: Path) -> Path:

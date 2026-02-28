@@ -12,15 +12,16 @@ def update_item(
     file_path: str,
     priority: str | None = None,
     status: str | None = None,
+    flow_hint: str | None = None,
     db: str | None = None,
 ) -> dict[str, Any]:
     """Patch mutable fields on a backlog item and bump updated_at.
 
-    At least one of priority or status must be provided. Both are validated
-    against the vocabulary constants before any write occurs.
+    At least one of priority, status, or flow_hint must be provided. Priority
+    and status are validated against vocabulary constants before any write.
     """
-    if priority is None and status is None:
-        return {"error": "Provide at least one field to update: priority, status."}
+    if priority is None and status is None and flow_hint is None:
+        return {"error": "Provide at least one field to update: priority, status, flow_hint."}
     if priority is not None and priority not in VALID_PRIORITIES:
         return {"error": f"Invalid priority '{priority}'. Valid: {', '.join(sorted(VALID_PRIORITIES))}"}
     if status is not None and status not in VALID_STATUSES:
@@ -46,6 +47,9 @@ def update_item(
         if status is not None:
             set_clauses.append("status = ?")
             params.append(status)
+        if flow_hint is not None:
+            set_clauses.append("flow_hint = ?")
+            params.append(flow_hint)
 
         params.append(file_path)
         cursor.execute(

@@ -241,3 +241,24 @@ def list_flows(flows_dir: str | Path | None = None) -> list[str]:
     if not _FLOWS_LOADED:
         _load_all_flows(Path(flows_dir) if flows_dir else None)
     return sorted(_FLOW_CACHE.keys())
+
+
+def list_flows_detailed(flows_dir: str | Path | None = None) -> list[dict]:
+    """List all flows with description, stage pipeline, and use-case guidance."""
+    if not _FLOWS_LOADED:
+        _load_all_flows(Path(flows_dir) if flows_dir else None)
+    result = []
+    for name in sorted(_FLOW_CACHE.keys()):
+        flow = _FLOW_CACHE[name]
+        # Build ordered stage pipeline (skip → resolved, show only non-skip)
+        pipeline = [
+            s.name for s in flow.stages.values()
+            if not s.skip
+        ]
+        result.append({
+            "name": flow.name,
+            "description": flow.description,
+            "pipeline": " → ".join(pipeline),
+            "stages": len(pipeline),
+        })
+    return result

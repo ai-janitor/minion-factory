@@ -87,11 +87,17 @@ def set_context(ctx: click.Context, agent: str, context: str, tokens_used: int, 
 
 
 @agent_group.command("who")
+@click.option("--global", "use_global", is_flag=True, default=False,
+              help="Query the global coordinator DB (~/.minion/coordinator.db) to show agents across ALL projects, not just the current repo")
 @click.pass_context
-def who(ctx: click.Context) -> None:
-    """List all registered agents."""
-    from minion.comms import who as _who
-    _output(_who(), ctx.obj["human"])
+def who(ctx: click.Context, use_global: bool) -> None:
+    """List registered agents. Use --global to see agents across all repos."""
+    if use_global:
+        from minion.comms import who_global as _who_global
+        _output(_who_global(), ctx.obj["human"])
+    else:
+        from minion.comms import who as _who
+        _output(_who(), ctx.obj["human"])
 
 
 @agent_group.command("update-hp")
@@ -495,11 +501,16 @@ def flow_group(ctx: click.Context) -> None:
 
 
 @flow_group.command("list")
+@click.option("--verbose", "-v", is_flag=True, help="Show description, pipeline, and stage count for each flow")
 @click.pass_context
-def list_flows_cmd(ctx: click.Context) -> None:
+def list_flows_cmd(ctx: click.Context, verbose: bool) -> None:
     """List available task flow types."""
-    from minion.tasks import list_flows
-    _output({"flows": list_flows()}, ctx.obj["human"])
+    if verbose:
+        from minion.tasks.loader import list_flows_detailed
+        _output({"flows": list_flows_detailed()}, ctx.obj["human"], ctx.obj["compact"])
+    else:
+        from minion.tasks import list_flows
+        _output({"flows": list_flows()}, ctx.obj["human"])
 
 
 @flow_group.command("show")
@@ -967,17 +978,24 @@ def backlog_group(ctx: click.Context) -> None:
 @click.option("--source", default="human", help="Who captured this (default: human)")
 @click.option("--description", default="", help="Longer description of the item")
 @click.option("--priority", default="unset", type=click.Choice(["unset", "low", "medium", "high", "critical"]))
+@click.option("--flow-hint", default="", help="DAG flow type hint (e.g. implementation, feature, chore, build)")
 @click.pass_context
-def backlog_add(ctx: click.Context, item_type: str, title: str, source: str, description: str, priority: str) -> None:
+def backlog_add(ctx: click.Context, item_type: str, title: str, source: str, description: str, priority: str, flow_hint: str) -> None:
     """Add a new item to the backlog."""
     import json
     from minion.backlog import add as _add
     try:
-        result = _add(item_type, title, source, description, priority)
+        result = _add(item_type, title, source, description, priority, flow_hint=flow_hint)
     except ValueError as e:
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)
     click.echo(json.dumps(result, indent=2))
+    if not flow_hint:
+        click.echo(
+            "\n⚠ No --flow-hint set. Run `minion backlog update <path> --flow-hint <dag>` "
+            "when you have clarity.\n  Available DAGs: minion flow list --verbose",
+            err=True,
+        )
 
 
 @backlog_group.command("list")
@@ -995,6 +1013,15 @@ def backlog_list(ctx: click.Context, item_type: str | None, priority: str | None
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)
     click.echo(json.dumps(result, indent=2))
+    missing = [r for r in result if not r.get("flow_hint")]
+    if missing:
+        click.echo(
+            f"\n⚠ {len(missing)} item(s) missing --flow-hint: "
+            f"{', '.join('#' + str(r['id']) for r in missing[:10])}"
+            f"{'...' if len(missing) > 10 else ''}"
+            f"\n  Set with: minion backlog update <path> --flow-hint <dag>",
+            err=True,
+        )
 
 
 @backlog_group.command("show")
@@ -1026,13 +1053,14 @@ def backlog_show(ctx: click.Context, path: str | None, item_id: int | None) -> N
 @click.argument("path")
 @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
 @click.option("--status", default=None, type=click.Choice(["open", "promoted", "killed", "deferred"]))
+@click.option("--flow-hint", default=None, help="DAG flow type hint (e.g. implementation, feature, chore, build)")
 @click.pass_context
-def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None) -> None:
+def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None, flow_hint: str | None) -> None:
     """Update priority and/or status of a backlog item."""
     import json
     from minion.backlog import update_item as _update_item
     try:
-        result = _update_item(path, priority, status)
+        result = _update_item(path, priority, status, flow_hint=flow_hint)
     except ValueError as e:
         click.echo(json.dumps({"error": str(e)}, indent=2))
         sys.exit(1)
@@ -1460,12 +1488,16 @@ def req_report(ctx: click.Context, path: str, raw: bool) -> None:
 # =========================================================================
 
 @cli.command()
-@click.option("--agent", required=True)
-@click.option("--interval", default=5, type=int, help="Poll interval in seconds")
-@click.option("--timeout", default=0, type=int, help="Timeout in seconds (0 = forever)")
+@click.option("--agent", required=True, help="Agent name to poll as")
+@click.option("--interval", default=5, type=int, help="Seconds between checks (default: 5)")
+@click.option("--timeout", default=0, type=int, help="Max wait in seconds. 0 = block forever until content arrives (default: 0)")
 @click.pass_context
 def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
-    """Poll for messages and tasks. Returns content when available."""
+    """Block until messages or tasks arrive, then print and exit.
+
+    Checks both inbox and task queue every INTERVAL seconds.
+    Exits with code 0 (content found), 1 (timeout), or 3 (stand_down/retire signal).
+    Designed to run in a loop: call poll, process output, call poll again."""
     from minion.polling import poll_loop
     result = poll_loop(agent, interval, timeout)
     exit_code = result.pop("exit_code", 1)

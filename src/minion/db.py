@@ -14,7 +14,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-from minion.defaults import resolve_db_path, resolve_docs_dir
+from minion.defaults import resolve_coordinator_db_path, resolve_db_path, resolve_docs_dir
 
 # ---------------------------------------------------------------------------
 # Paths — lazy resolution so env vars and cwd are read at call time, not import
@@ -53,6 +53,17 @@ def __getattr__(name: str) -> Any:
 # ---------------------------------------------------------------------------
 # Connection
 # ---------------------------------------------------------------------------
+
+
+def get_coordinator_db() -> sqlite3.Connection:
+    """Open a WAL-mode connection to the global coordinator DB (~/.minion/coordinator.db)."""
+    db_path = resolve_coordinator_db_path()
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
 
 
 def get_db() -> sqlite3.Connection:
@@ -558,6 +569,15 @@ def _migrate_v11(conn: sqlite3.Connection) -> None:
     log.info("v11: created intel_docs and intel_links tables")
 
 
+def _migrate_v12(conn: sqlite3.Connection) -> None:
+    """Add flow_hint to backlog — lets agents know which DAG to use when promoting."""
+    try:
+        conn.execute("ALTER TABLE backlog ADD COLUMN flow_hint TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # column already exists (re-run safe)
+    log.info("v12: added flow_hint column to backlog table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -572,6 +592,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (9, "Create task_comments table", _migrate_v9),
     (10, "Drop orphan task_type column from tasks", _migrate_v10),
     (11, "Create intel_docs and intel_links tables", _migrate_v11),
+    (12, "Add flow_hint column to backlog table", _migrate_v12),
 ]
 
 
@@ -630,6 +651,34 @@ def init_db() -> None:
     _migrate(conn)
     _run_migrations(conn)
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Coordinator DB — global agent registry at ~/.minion/coordinator.db
+# ---------------------------------------------------------------------------
+
+_COORDINATOR_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS agents (
+    name            TEXT PRIMARY KEY,
+    agent_class     TEXT NOT NULL DEFAULT 'coder',
+    model           TEXT DEFAULT NULL,
+    project_path    TEXT NOT NULL,
+    registered_at   TEXT,
+    last_seen       TEXT,
+    description     TEXT DEFAULT NULL,
+    status          TEXT DEFAULT 'waiting for work',
+    transport       TEXT DEFAULT 'terminal'
+);
+"""
+
+
+def init_coordinator_db() -> None:
+    """Create the coordinator DB schema if it doesn't exist."""
+    conn = get_coordinator_db()
+    try:
+        conn.executescript(_COORDINATOR_SCHEMA_SQL)
+    finally:
+        conn.close()
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
