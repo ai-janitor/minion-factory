@@ -17,6 +17,11 @@
 
 <!-- logs, screenshots, code refs, reproduction steps — append as discovered -->
 
+## Acceptance Criteria
+
+<!-- how will completion be verified? test harness, benchmark, manual test, etc. -->
+<!-- who verifies — implementer, lead, oracle? -->
+
 ## Notes
 
 <!-- ongoing thinking, updates, links to related items — append-only -->
