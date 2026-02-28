@@ -14,7 +14,7 @@ import time
 from typing import Any
 
 from minion.auth import CAP_REVIEW, classes_with
-from minion.db import get_db, now_iso
+from minion.db import get_db, now_iso, touch_coordinator_activity
 
 _reviewers = classes_with(CAP_REVIEW)
 
@@ -255,6 +255,7 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
                     f"Do NOT add --timeout. It blocks until the next message arrives. "
                     f"Tuck to terminal background if needed — do NOT launch as a background task."
                 )
+            touch_coordinator_activity(agent)
             return result
 
         time.sleep(interval)

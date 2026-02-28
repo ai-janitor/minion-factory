@@ -22,6 +22,7 @@ from minion.db import (
     now_iso,
     scan_triggers,
     staleness_check,
+    touch_coordinator_activity,
 )
 from minion.fs import (
     atomic_write_file,
@@ -100,10 +101,11 @@ def register(
                         }
                 coord.execute(
                     """INSERT INTO agents
-                        (name, agent_class, model, project_path, registered_at, last_seen, description, status, transport)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting for work', ?)
+                        (name, agent_class, model, project_path, registered_at, last_seen, last_active, description, status, transport)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting for work', ?)
                     ON CONFLICT(name) DO UPDATE SET
                         last_seen     = excluded.last_seen,
+                        last_active   = excluded.last_active,
                         agent_class   = excluded.agent_class,
                         model         = COALESCE(NULLIF(excluded.model, ''), agents.model),
                         project_path  = excluded.project_path,
@@ -111,7 +113,7 @@ def register(
                         transport     = excluded.transport,
                         status        = 'waiting for work'
                     """,
-                    (agent_name, agent_class, model or None, project_path, now, now, description or None, transport),
+                    (agent_name, agent_class, model or None, project_path, now, now, now, description or None, transport),
                 )
                 coord.commit()
             finally:
@@ -357,6 +359,7 @@ def set_context(
             finally:
                 conn2.close()
 
+        touch_coordinator_activity(agent_name)
         return result
     finally:
         conn.close()
@@ -429,18 +432,135 @@ def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) ->
     }
 
 
+def send_global(
+    from_agent: str,
+    to_agent: str,
+    message: str,
+) -> dict[str, object]:
+    """Send a message ALWAYS routed through the coordinator DB.
+
+    Bypasses local DB target lookup — always uses coordinator to find
+    the target agent's project_path and delivers to that project's
+    .work/minion.db. Sender guards (inbox, battle plan, context) are
+    still checked against the sender's local DB.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    now = now_iso()
+    try:
+        # Sender guards — same as send()
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
+            (from_agent,),
+        )
+        unread_direct = cursor.fetchone()[0]
+        cursor.execute(
+            """SELECT COUNT(*) FROM messages
+               WHERE to_agent = 'all' AND from_agent != ?
+               AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
+            (from_agent, from_agent),
+        )
+        unread_broadcast = cursor.fetchone()[0]
+        unread = unread_direct + unread_broadcast
+        if unread > 0:
+            return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
+
+        cursor.execute("SELECT COUNT(*) FROM battle_plan WHERE status = 'active'")
+        if cursor.fetchone()[0] == 0:
+            return {"error": "BLOCKED: No active battle plan. Lead must call set-battle-plan first."}
+
+        is_stale, stale_msg = staleness_check(cursor, from_agent)
+        if is_stale:
+            return {"error": stale_msg}
+
+        # Auto-register unknown senders
+        cursor.execute(
+            "INSERT OR IGNORE INTO agents (name, agent_class, registered_at, last_seen) VALUES (?, 'coder', ?, ?)",
+            (from_agent, now, now),
+        )
+
+        # ALWAYS route through coordinator — never check local DB for target
+        cross_result = _route_cross_repo(to_agent, from_agent, message, now)
+        if cross_result:
+            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+            conn.commit()
+            touch_coordinator_activity(from_agent)
+            return cross_result
+
+        return {"error": f"Agent '{to_agent}' not found in coordinator DB or target project unreachable."}
+    finally:
+        conn.close()
+
+
 def who_global() -> dict[str, object]:
     """List all agents across all projects from the coordinator DB."""
     try:
         coord = get_coordinator_db()
         try:
-            rows = coord.execute("SELECT * FROM agents ORDER BY last_seen DESC").fetchall()
+            rows = coord.execute("SELECT * FROM agents ORDER BY last_active DESC, last_seen DESC").fetchall()
             agents = [dict(row) for row in rows]
             return {"agents": agents, "source": "coordinator"}
         finally:
             coord.close()
     except Exception as exc:
         return {"error": f"Coordinator DB not available: {exc}"}
+
+
+def deregister_global(agent_name: str) -> dict[str, object]:
+    """Remove an agent from the coordinator DB. Lead-only."""
+    try:
+        coord = get_coordinator_db()
+        try:
+            row = coord.execute(
+                "SELECT name, project_path, last_active FROM agents WHERE name = ?",
+                (agent_name,),
+            ).fetchone()
+            if not row:
+                return {"error": f"Agent '{agent_name}' not found in coordinator DB."}
+            info = dict(row)
+            coord.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
+            coord.commit()
+            return {
+                "status": "deregistered",
+                "agent": agent_name,
+                "was_in_project": info["project_path"],
+                "last_active": info.get("last_active") or "never",
+            }
+        finally:
+            coord.close()
+    except Exception as exc:
+        return {"error": f"Coordinator DB error: {exc}"}
+
+
+def prune_global(stale_minutes: int = 30) -> dict[str, object]:
+    """Remove agents from coordinator DB that haven't been active in N minutes. Lead-only."""
+    cutoff = (datetime.datetime.now() - datetime.timedelta(minutes=stale_minutes)).isoformat()
+    try:
+        coord = get_coordinator_db()
+        try:
+            # Find stale agents: last_active older than cutoff, or NULL last_active
+            rows = coord.execute(
+                "SELECT name, project_path, last_active FROM agents WHERE last_active IS NULL OR last_active < ?",
+                (cutoff,),
+            ).fetchall()
+            stale = [dict(r) for r in rows]
+            if not stale:
+                return {"status": "no stale agents", "threshold_minutes": stale_minutes}
+            names = [a["name"] for a in stale]
+            coord.execute(
+                f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",
+                names,
+            )
+            coord.commit()
+            return {
+                "status": "pruned",
+                "threshold_minutes": stale_minutes,
+                "removed": stale,
+            }
+        finally:
+            coord.close()
+    except Exception as exc:
+        return {"error": f"Coordinator DB error: {exc}"}
 
 
 def send(
@@ -500,6 +620,7 @@ def send(
                 if cross_result:
                     cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
                     conn.commit()
+                    touch_coordinator_activity(from_agent)
                     return cross_result
                 return {"error": f"Agent '{to_agent}' not found locally or in coordinator DB."}
 
@@ -586,6 +707,7 @@ def send(
                 "SDLC artifacts should be written to .work/ first, then referenced by path."
             )
 
+        touch_coordinator_activity(from_agent)
         return result
     finally:
         conn.close()
@@ -656,6 +778,7 @@ def check_inbox(agent_name: str) -> dict[str, object]:
                 f"minion set-context --agent {agent_name} --context '...' --hp <0-100>"
             )
 
+        touch_coordinator_activity(agent_name)
         return result
     finally:
         conn.close()

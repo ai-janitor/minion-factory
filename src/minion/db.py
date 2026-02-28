@@ -665,6 +665,7 @@ CREATE TABLE IF NOT EXISTS agents (
     project_path    TEXT NOT NULL,
     registered_at   TEXT,
     last_seen       TEXT,
+    last_active     TEXT,
     description     TEXT DEFAULT NULL,
     status          TEXT DEFAULT 'waiting for work',
     transport       TEXT DEFAULT 'terminal'
@@ -677,8 +678,29 @@ def init_coordinator_db() -> None:
     conn = get_coordinator_db()
     try:
         conn.executescript(_COORDINATOR_SCHEMA_SQL)
+        # Migrate: add last_active if missing (older DBs)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
+        if "last_active" not in cols:
+            conn.execute("ALTER TABLE agents ADD COLUMN last_active TEXT")
+            conn.commit()
     finally:
         conn.close()
+
+
+def touch_coordinator_activity(agent_name: str) -> None:
+    """Bump last_active for an agent in the coordinator DB. Best-effort, never raises."""
+    try:
+        conn = get_coordinator_db()
+        try:
+            conn.execute(
+                "UPDATE agents SET last_active = ? WHERE name = ?",
+                (now_iso(), agent_name),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
