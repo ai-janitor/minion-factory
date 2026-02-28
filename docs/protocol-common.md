@@ -21,6 +21,30 @@ When you finish a request from anyone (orders, questions, tasks), **always messa
 - **Trigger detection:** Trigger words in messages are auto-detected and flagged.
 - **Activity warnings:** `update-task` warns at activity count 4+.
 
+## Communication Channels
+
+Two databases, two scopes:
+
+**LOCAL** (`.work/minion.db`) — repo-scoped team chat. For agents working on the same repo. Fast path, no routing overhead.
+
+**GLOBAL** (`~/.minion/coordinator.db`) — the default channel. Lead-to-agent, cross-repo, any agent talking to anyone not in the same repo. Messages are routed via the coordinator to the target agent's repo.
+
+### Routing Rules
+
+- `minion comms send` checks if the target is in your local DB first. If yes, delivers locally. If not, looks up the coordinator DB, finds the target's project_path, and delivers to that repo's `.work/minion.db`.
+- `minion global send` always routes via the coordinator.
+- `minion poll` checks BOTH local and global for incoming messages every cycle.
+
+### Registration
+
+`minion agent register` writes to BOTH databases. The coordinator gets a `project_path` column so routing knows which repo to deliver to. Names must be unique across ALL projects — no two repos can have an agent with the same name.
+
+### Polling
+
+**Every agent MUST poll.** Without polling, you cannot receive messages or task assignments. An agent that registers but doesn't poll is deaf.
+
+Start poll in the **FOREGROUND**: `minion poll --agent <name>`. Tuck to terminal background if needed — do NOT launch as a background task.
+
 ## CLI Usage
 
 All commands: `minion <command> [options]`. JSON output by default, `--human` for tables.
@@ -29,11 +53,14 @@ Common quick-reference:
 
 ```bash
 minion agent register --name <name> --class <class>
+minion poll --agent <name>                              # MUST run — no poll = no comms
 minion comms check-inbox --agent <name>
 minion comms send --from <name> --to <target> --message "..."
 minion agent set-context --agent <name> --context "what you have loaded"
-minion agent who
-minion sitrep                    # fused view of everything
+minion agent who                                        # local agents
+minion global who                                       # all agents across all repos
+minion global send --from <name> --to <target> --message "..."  # cross-repo send
+minion sitrep                                           # fused view of everything
 ```
 
 Full reference: `minion docs` or see [`docs/cli-reference.md`](cli-reference.md).

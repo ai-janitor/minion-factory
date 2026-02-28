@@ -23,7 +23,19 @@ from minion.output import output as _output
 @click.option("--project-dir", "-C", default=None, help="Project directory (default: cwd)")
 @click.pass_context
 def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None) -> None:
-    """minion — multi-agent coordination CLI."""
+    """minion — multi-agent coordination CLI.
+
+    \b
+    Quick start:
+      1. Register:  minion agent register --name <you> --class <role>
+      2. Poll:      minion poll --agent <you>  (REQUIRED — no poll = no messages)
+      3. Send:      minion comms send --from <you> --to <target> --message '...'
+
+    \b
+    Communication:
+      LOCAL  (comms)  — same-repo agents. Messages in .work/minion.db.
+      GLOBAL (global) — cross-repo agents. Routes via ~/.minion/coordinator.db.
+      Poll checks BOTH automatically."""
     ctx.ensure_object(dict)
     ctx.obj["human"] = human
     ctx.obj["compact"] = compact
