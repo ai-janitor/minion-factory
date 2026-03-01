@@ -8,6 +8,16 @@ Unified multi-agent coordination framework. RPG raid party metaphor over SQLite.
 uv tool uninstall minion-comms 2>/dev/null; uv tool install git+https://github.com/ai-janitor/minion-factory.git
 ```
 
+## After Code Changes — REINSTALL REQUIRED
+
+Source edits don't take effect until reinstalled. All agents consuming the `minion` CLI must reinstall after any code change:
+
+```bash
+uv tool install --force -e /Users/hung/projects/minion-factory
+```
+
+Without this, daemons and other agents run the stale installed binary. If you changed code and something isn't working, reinstall first.
+
 ## Agent Bootstrap
 
 Read `AGENTS.md` for the universal agent playbook (boot sequence, classes, HP, hard blocks, crew lifecycle). Everything there applies regardless of runtime.

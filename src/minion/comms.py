@@ -140,6 +140,8 @@ def register(
         result["tools"] = get_tools_for_class(agent_class)
 
         # Merge crew YAML context when --crew is provided
+        zone = ""
+        capabilities: list[str] = []
         if crew:
             from minion.crew.spawn import _find_crew_file
             from minion.crew.config import load_config as _load_crew_config
@@ -159,13 +161,31 @@ def register(
                     else:
                         result["crew"] = crew
                         if agent_cfg.zone:
-                            result["zone"] = agent_cfg.zone
+                            zone = agent_cfg.zone
+                            result["zone"] = zone
                         if agent_cfg.capabilities:
-                            result["capabilities"] = list(agent_cfg.capabilities)
+                            capabilities = list(agent_cfg.capabilities)
+                            result["capabilities"] = capabilities
                         if agent_cfg.system:
                             result["system_prompt_excerpt"] = agent_cfg.system[:200]
                 except Exception as exc:
                     result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
+
+        # Write agent roster file for hook discovery
+        from minion.db import get_runtime_dir
+        agents_dir = os.path.join(get_runtime_dir(), ".minion-agents")
+        os.makedirs(agents_dir, exist_ok=True)
+        profile_lines = [
+            f"agent_class: {agent_class}",
+            f"model: {model or 'default'}",
+            f"transport: {transport}",
+            f"registered_at: {now}",
+        ]
+        if zone:
+            profile_lines.append(f"zone: {zone}")
+        if capabilities:
+            profile_lines.append(f"capabilities: {','.join(capabilities)}")
+        atomic_write_file(os.path.join(agents_dir, agent_name), "\n".join(profile_lines) + "\n")
 
         result["critical"] = (
             "YOU MUST START POLLING IMMEDIATELY. "
@@ -238,6 +258,12 @@ def deregister(agent_name: str) -> dict[str, object]:
                 coord.close()
         except Exception:
             pass  # coordinator DB may not exist yet
+
+        # Remove agent roster file
+        from minion.db import get_runtime_dir
+        roster_file = os.path.join(get_runtime_dir(), ".minion-agents", agent_name)
+        if os.path.exists(roster_file):
+            os.remove(roster_file)
 
         result: dict[str, object] = {
             "status": "deregistered",
@@ -506,6 +532,13 @@ def who_global() -> dict[str, object]:
         return {"error": f"Coordinator DB not available: {exc}"}
 
 
+def _remove_roster_file(agent_name: str, project_path: str) -> None:
+    """Remove an agent's roster file from a project's .work/.minion-agents/."""
+    roster_file = os.path.join(project_path, ".work", ".minion-agents", agent_name)
+    if os.path.exists(roster_file):
+        os.remove(roster_file)
+
+
 def deregister_global(agent_name: str) -> dict[str, object]:
     """Remove an agent from the coordinator DB. Lead-only."""
     try:
@@ -520,6 +553,7 @@ def deregister_global(agent_name: str) -> dict[str, object]:
             info = dict(row)
             coord.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
             coord.commit()
+            _remove_roster_file(agent_name, info["project_path"])
             return {
                 "status": "deregistered",
                 "agent": agent_name,
@@ -552,6 +586,9 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
                 names,
             )
             coord.commit()
+            # Clean up roster files in each pruned agent's project
+            for agent in stale:
+                _remove_roster_file(agent["name"], agent["project_path"])
             return {
                 "status": "pruned",
                 "threshold_minutes": stale_minutes,
@@ -780,6 +817,61 @@ def check_inbox(agent_name: str) -> dict[str, object]:
 
         touch_coordinator_activity(agent_name)
         return result
+    finally:
+        conn.close()
+
+
+def check_inbox_silent(agent_name: str) -> str:
+    """Check inbox and return raw message content only. Empty string if no messages.
+
+    Designed for PostToolUse hooks — fast, no JSON wrapper, no warnings.
+    Marks messages as read on retrieval.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    now = now_iso()
+    try:
+        cursor.execute(
+            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
+            (now, now, agent_name),
+        )
+
+        cursor.execute(
+            "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0",
+            (agent_name,),
+        )
+        direct_msgs = [dict(row) for row in cursor.fetchall()]
+        if direct_msgs:
+            ids = [m["id"] for m in direct_msgs]
+            placeholders = ",".join(["?"] * len(ids))
+            cursor.execute(f"UPDATE messages SET read_flag = 1 WHERE id IN ({placeholders})", ids)
+
+        cursor.execute(
+            """SELECT * FROM messages
+               WHERE to_agent = 'all'
+               AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
+            (agent_name,),
+        )
+        broadcast_msgs = [dict(row) for row in cursor.fetchall()]
+        for msg in broadcast_msgs:
+            cursor.execute(
+                "INSERT OR IGNORE INTO broadcast_reads (agent_name, message_id) VALUES (?, ?)",
+                (agent_name, msg["id"]),
+            )
+
+        conn.commit()
+
+        all_messages = direct_msgs + broadcast_msgs
+        if not all_messages:
+            return ""
+
+        all_messages.sort(key=lambda x: x.get("timestamp", ""))
+        parts = []
+        for msg in all_messages:
+            content = read_content_file(msg.get("content_file"))
+            sender = msg.get("from_agent", "unknown")
+            parts.append(f"[{sender}] {content}")
+        return "\n".join(parts)
     finally:
         conn.close()
 

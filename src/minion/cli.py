@@ -109,7 +109,7 @@ def set_context(ctx: click.Context, agent: str, context: str, tokens_used: int, 
               help="Query the global coordinator DB (~/.minion/coordinator.db) to show agents across ALL projects, not just the current repo")
 @click.pass_context
 def who(ctx: click.Context, use_global: bool) -> None:
-    """List registered agents. Use --global to see agents across all repos."""
+    """List registered agents in THIS repo. Use --global for all repos."""
     if use_global:
         from minion.comms import who_global as _who_global
         _output(_who_global(), ctx.obj["human"])
@@ -192,7 +192,7 @@ def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
 @cli.group("comms")
 @click.pass_context
 def comms_group(ctx: click.Context) -> None:
-    """Send and receive messages between agents."""
+    """LOCAL same-repo messaging. For cross-repo, use 'minion global send'."""
     pass
 
 
@@ -203,18 +203,32 @@ def comms_group(ctx: click.Context) -> None:
 @click.option("--cc", default="")
 @click.pass_context
 def send(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str) -> None:
-    """Send a message to an agent (or 'all' for broadcast)."""
+    """Send a message to a LOCAL agent (same repo) or 'all' for broadcast.
+
+    LOCAL ONLY — delivers to agents in THIS repo's .work/minion.db.
+    For cross-repo messaging, use: minion global send"""
     from minion.comms import send as _send
     _output(_send(from_agent, to_agent, message, cc), ctx.obj["human"])
 
 
 @comms_group.command("check-inbox")
 @click.option("--agent", required=True)
+@click.option("--silent", is_flag=True, default=False,
+              help="Raw message content only, no JSON. Empty output if no messages. For hooks.")
 @click.pass_context
-def check_inbox(ctx: click.Context, agent: str) -> None:
-    """Check and clear unread messages."""
-    from minion.comms import check_inbox as _check_inbox
-    _output(_check_inbox(agent), ctx.obj["human"])
+def check_inbox(ctx: click.Context, agent: str, silent: bool) -> None:
+    """Check and clear unread messages.
+
+    Use --silent for PostToolUse hooks: prints only message content,
+    nothing if inbox is empty. Designed for high-frequency automated calls."""
+    if silent:
+        from minion.comms import check_inbox_silent as _check_inbox_silent
+        output = _check_inbox_silent(agent)
+        if output:
+            click.echo(output)
+    else:
+        from minion.comms import check_inbox as _check_inbox
+        _output(_check_inbox(agent), ctx.obj["human"])
 
 
 @comms_group.command("purge-inbox")

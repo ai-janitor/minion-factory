@@ -687,15 +687,46 @@ def init_coordinator_db() -> None:
         conn.close()
 
 
+_STALE_HOURS = 6
+_last_prune_check: float = 0.0
+
+
 def touch_coordinator_activity(agent_name: str) -> None:
-    """Bump last_active for an agent in the coordinator DB. Best-effort, never raises."""
+    """Bump last_active for an agent in the coordinator DB. Best-effort, never raises.
+
+    Auto-prunes agents inactive for 6+ hours, checked at most once per 10 minutes.
+    """
+    import time as _time
+    global _last_prune_check
     try:
         conn = get_coordinator_db()
         try:
+            now = now_iso()
             conn.execute(
                 "UPDATE agents SET last_active = ? WHERE name = ?",
-                (now_iso(), agent_name),
+                (now, agent_name),
             )
+            # Auto-prune stale agents (at most once per 10 minutes)
+            wall = _time.monotonic()
+            if wall - _last_prune_check > 600:
+                _last_prune_check = wall
+                import datetime as _dt
+                cutoff = (_dt.datetime.now() - _dt.timedelta(hours=_STALE_HOURS)).isoformat()
+                stale = conn.execute(
+                    "SELECT name, project_path FROM agents WHERE last_active IS NOT NULL AND last_active < ?",
+                    (cutoff,),
+                ).fetchall()
+                if stale:
+                    import os as _os
+                    for row in stale:
+                        roster = _os.path.join(row["project_path"], ".work", ".minion-agents", row["name"])
+                        if _os.path.exists(roster):
+                            _os.remove(roster)
+                    names = [row["name"] for row in stale]
+                    conn.execute(
+                        f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",
+                        names,
+                    )
             conn.commit()
         finally:
             conn.close()

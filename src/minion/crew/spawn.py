@@ -225,6 +225,7 @@ def spawn_party(
             agent_class=_role_to_class(cfg.get("role", "coder")),
             model=cfg.get("model", ""),
             transport=transport,
+            crew=crew,
         )
         registered.add(name)
 
