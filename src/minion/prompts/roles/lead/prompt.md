@@ -17,7 +17,7 @@
   - If you don't know a command syntax, run `minion <command> --help` — don't guess or invent flags
 - **Command syntax (use exactly — no invented flags):**
   - `minion who` — lists all agents (no flags, returns JSON)
-  - `minion send --from <you> --to <name> --message "..."`
+  - `minion send-local --from <you> --to <name> --message "..."`
   - `minion create-task --agent <you> --title "..." --task-file <path> --class-required <class>`
   - `minion assign-task --agent <you> --task-id <N> --assigned-to <name>`
   - `minion list-tasks [--status <status>] [--assigned-to <name>]`

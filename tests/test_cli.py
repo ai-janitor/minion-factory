@@ -18,7 +18,8 @@ def test_cli_expected_subcommands():
     # Old flat names must stay registered as backwards-compat aliases
     expected_aliases = [
         "register",
-        "send",
+        "send-local",
+        "send-global",
         "check-inbox",
         "who",
         "set-status",

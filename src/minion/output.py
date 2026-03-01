@@ -10,7 +10,7 @@ import click
 def output(data: dict[str, object], human: bool = False, compact: bool = False) -> None:
     """Print result as JSON (default), human-readable, or compact text."""
     if "error" in data:
-        click.echo(json.dumps(data, indent=2, default=str), err=True)
+        click.echo(json.dumps(data, indent=2, default=str))
         sys.exit(1)
     if compact:
         click.echo(_format_compact(data))

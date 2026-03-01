@@ -221,9 +221,9 @@ Delete old messages from inbox.
 | `--agent` | text | Yes |  |  |
 | `--older-than-hours` | integer |  | `2` |  |
 
-### `minion comms send`
+### `minion comms send local`
 
-Send a message to an agent (or 'all' for broadcast).
+Send to a LOCAL agent (same repo) or 'all' for broadcast.
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -231,6 +231,16 @@ Send a message to an agent (or 'all' for broadcast).
 | `--to` | text | Yes |  |  |
 | `--message` | text | Yes |  |  |
 | `--cc` | text |  |  |  |
+
+### `minion comms send global`
+
+Send to an agent in ANY repo via the coordinator.
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `--from` | text | Yes |  |  |
+| `--to` | text | Yes |  |  |
+| `--message` | text | Yes |  |  |
 
 ## 4. crew
 
@@ -1168,9 +1178,9 @@ Signal a single daemon agent to exit gracefully. Lead only.
 | `--agent` | text | Yes |  | Agent to retire |
 | `--requesting-agent` | text | Yes |  | Lead requesting retirement |
 
-### `minion send`
+### `minion send-local`
 
-Send a message to an agent (or 'all' for broadcast).
+Send to a LOCAL agent (same repo). Top-level alias for `minion comms send local`.
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -1178,6 +1188,16 @@ Send a message to an agent (or 'all' for broadcast).
 | `--to` | text | Yes |  |  |
 | `--message` | text | Yes |  |  |
 | `--cc` | text |  |  |  |
+
+### `minion send-global`
+
+Send to an agent in ANY repo. Top-level alias for `minion comms send global`.
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `--from` | text | Yes |  |  |
+| `--to` | text | Yes |  |  |
+| `--message` | text | Yes |  |  |
 
 ### `minion set-battle-plan`
 

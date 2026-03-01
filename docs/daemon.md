@@ -87,7 +87,7 @@ Defined in `docs/contracts/daemon-rules.json`. Injected into every agent prompt.
 
 ### Common Rules (all agents)
 - No `AskUserQuestion` — blocks in headless mode
-- Route questions to lead via `minion send`
+- Route questions to lead via `minion send-local`
 - One summary message when done
 - Task governance: check inbox, don't re-register
 

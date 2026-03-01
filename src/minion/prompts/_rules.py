@@ -27,7 +27,7 @@ def load_rules(docs_dir: Path, agent: str, role: str, capabilities: tuple[str, .
         lines = [
             "Autonomous daemon rules:",
             "- Do not use AskUserQuestion — it blocks in headless mode.",
-            f"- Route questions to lead via Bash: minion send --from {agent} --to lead --message '...'",
+            f"- Route questions to lead via Bash: minion send-local --from {agent} --to lead --message '...'",
             "- Execute exactly the incoming task.",
             "- Send one summary message when done.",
             "- Task governance: lead manages task queue and assignment ownership.",

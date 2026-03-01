@@ -29,12 +29,13 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
     Quick start:
       1. Register:  minion agent register --name <you> --class <role>
       2. Poll:      minion poll --agent <you>  (REQUIRED — no poll = no messages)
-      3. Send:      minion comms send --from <you> --to <target> --message '...'
+      3. Send:      minion comms send local  --from <you> --to <target> --message '...'
+                    minion comms send global --from <you> --to <target> --message '...'
 
     \b
     Communication:
-      LOCAL  (comms)  — same-repo agents. Messages in .work/minion.db.
-      GLOBAL (global) — cross-repo agents. Routes via ~/.minion/coordinator.db.
+      LOCAL  (comms send local)  — same-repo agents. Messages in .work/minion.db.
+      GLOBAL (comms send global) — cross-repo agents. Routes via ~/.minion/coordinator.db.
       Poll checks BOTH automatically."""
     ctx.ensure_object(dict)
     ctx.obj["human"] = human
@@ -192,23 +193,48 @@ def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
 @cli.group("comms")
 @click.pass_context
 def comms_group(ctx: click.Context) -> None:
-    """LOCAL same-repo messaging. For cross-repo, use 'minion global send'."""
+    """Messaging. Use 'send local' or 'send global' to be explicit about routing."""
     pass
 
 
-@comms_group.command("send")
+@comms_group.group("send")
+@click.pass_context
+def send_group(ctx: click.Context) -> None:
+    """Send messages to agents. Use 'local' or 'global' subcommand."""
+    pass
+
+
+@send_group.command("local")
 @click.option("--from", "from_agent", required=True)
 @click.option("--to", "to_agent", required=True)
 @click.option("--message", required=True)
 @click.option("--cc", default="")
 @click.pass_context
-def send(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str) -> None:
-    """Send a message to a LOCAL agent (same repo) or 'all' for broadcast.
+def send_local(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str) -> None:
+    """Send to a LOCAL agent (same repo) or 'all' for broadcast.
 
-    LOCAL ONLY — delivers to agents in THIS repo's .work/minion.db.
-    For cross-repo messaging, use: minion global send"""
+    \b
+    Local only — delivers to agents in THIS repo's .work/minion.db.
+    Target must be registered in the same project.
+    For cross-repo, use: minion comms send global"""
     from minion.comms import send as _send
     _output(_send(from_agent, to_agent, message, cc), ctx.obj["human"])
+
+
+@send_group.command("global")
+@click.option("--from", "from_agent", required=True)
+@click.option("--to", "to_agent", required=True)
+@click.option("--message", required=True)
+@click.pass_context
+def send_global_via_comms(ctx: click.Context, from_agent: str, to_agent: str, message: str) -> None:
+    """Send to an agent in ANY repo via the coordinator.
+
+    \b
+    Routes through ~/.minion/coordinator.db to find the target agent's
+    project and delivers to that project's .work/minion.db.
+    The target agent's poll picks it up."""
+    from minion.comms import send_global as _send_global
+    _output(_send_global(from_agent, to_agent, message), ctx.obj["human"])
 
 
 @comms_group.command("check-inbox")
@@ -1774,7 +1800,8 @@ cli.add_command(check_activity, "check-activity")
 cli.add_command(check_freshness, "check-freshness")
 
 # Comms group aliases
-cli.add_command(send, "send")
+cli.add_command(send_local, "send-local")
+cli.add_command(send_global_via_comms, "send-global")
 cli.add_command(check_inbox, "check-inbox")
 cli.add_command(purge_inbox, "purge-inbox")
 cli.add_command(list_history, "list-history")

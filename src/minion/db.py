@@ -662,7 +662,7 @@ CREATE TABLE IF NOT EXISTS agents (
     name            TEXT PRIMARY KEY,
     agent_class     TEXT NOT NULL DEFAULT 'coder',
     model           TEXT DEFAULT NULL,
-    project_path    TEXT NOT NULL,
+    project_path    TEXT,
     registered_at   TEXT,
     last_seen       TEXT,
     last_active     TEXT,
@@ -701,10 +701,13 @@ def touch_coordinator_activity(agent_name: str) -> None:
     try:
         conn = get_coordinator_db()
         try:
+            import os as _os
             now = now_iso()
             conn.execute(
-                "UPDATE agents SET last_active = ? WHERE name = ?",
-                (now, agent_name),
+                """INSERT INTO agents (name, project_path, last_active, last_seen, registered_at, status)
+                   VALUES (?, ?, ?, ?, ?, 'active')
+                   ON CONFLICT(name) DO UPDATE SET last_active = excluded.last_active""",
+                (agent_name, _os.getcwd(), now, now, now),
             )
             # Auto-prune stale agents (at most once per 10 minutes)
             wall = _time.monotonic()
@@ -719,9 +722,10 @@ def touch_coordinator_activity(agent_name: str) -> None:
                 if stale:
                     import os as _os
                     for row in stale:
-                        roster = _os.path.join(row["project_path"], ".work", ".minion-agents", row["name"])
-                        if _os.path.exists(roster):
-                            _os.remove(roster)
+                        if row["project_path"]:
+                            roster = _os.path.join(row["project_path"], ".work", ".minion-agents", row["name"])
+                            if _os.path.exists(roster):
+                                _os.remove(roster)
                     names = [row["name"] for row in stale]
                     conn.execute(
                         f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",

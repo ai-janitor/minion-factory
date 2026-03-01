@@ -124,7 +124,7 @@ minion mission spawn documentation --crew scouts \
 # Now point your CLI at that project's DB to send orders
 export MINION_DB_PATH=~/.minion_work/whisper-dictation-gpu/minion.db
 minion register --name commander --class lead --transport terminal
-minion send --from commander --to all --message "GO"
+minion send-local --from commander --to all --message "GO"
 ```
 
 Without `MINION_DB_PATH`, your messages go to the wrong DB and the daemons never see them.

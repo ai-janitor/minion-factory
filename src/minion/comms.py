@@ -423,6 +423,8 @@ def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) ->
         return None
 
     project_path = row["project_path"]
+    if not project_path:
+        return None  # agent exists globally but has no project binding
     remote_db_path = os.path.join(project_path, ".work", "minion.db")
     if not os.path.exists(remote_db_path):
         return None
@@ -491,10 +493,6 @@ def send_global(
         if unread > 0:
             return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
 
-        cursor.execute("SELECT COUNT(*) FROM battle_plan WHERE status = 'active'")
-        if cursor.fetchone()[0] == 0:
-            return {"error": "BLOCKED: No active battle plan. Lead must call set-battle-plan first."}
-
         is_stale, stale_msg = staleness_check(cursor, from_agent)
         if is_stale:
             return {"error": stale_msg}
@@ -511,6 +509,17 @@ def send_global(
             cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
             conn.commit()
             touch_coordinator_activity(from_agent)
+            # Warn if recipient doesn't have poll running
+            try:
+                from minion.polling import is_poll_alive
+                target_project = cross_result.get("target_project", "")
+                if target_project and not is_poll_alive(to_agent, target_project):
+                    cross_result["reminder"] = (
+                        f"Recipient '{to_agent}' does not have poll running. "
+                        f"Make sure they have poll in the foreground if operating from a terminal."
+                    )
+            except Exception:
+                pass
             return cross_result
 
         return {"error": f"Agent '{to_agent}' not found in coordinator DB or target project unreachable."}
@@ -633,11 +642,6 @@ def send(
         if unread > 0:
             return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
 
-        # Battle plan enforcement
-        cursor.execute("SELECT COUNT(*) FROM battle_plan WHERE status = 'active'")
-        if cursor.fetchone()[0] == 0:
-            return {"error": "BLOCKED: No active battle plan. Lead must call set-battle-plan first."}
-
         # Context freshness
         is_stale, stale_msg = staleness_check(cursor, from_agent)
         if is_stale:
@@ -649,17 +653,14 @@ def send(
             (from_agent, now, now),
         )
 
-        # Cross-repo routing: if target not in local DB, try coordinator
+        # Local-only: target must exist in this repo's DB
         if to_agent != "all":
             cursor.execute("SELECT name FROM agents WHERE name = ?", (to_agent,))
             if not cursor.fetchone():
-                cross_result = _route_cross_repo(to_agent, from_agent, message, now)
-                if cross_result:
-                    cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
-                    conn.commit()
-                    touch_coordinator_activity(from_agent)
-                    return cross_result
-                return {"error": f"Agent '{to_agent}' not found locally or in coordinator DB."}
+                return {
+                    "error": f"Agent '{to_agent}' not found in local DB. "
+                    f"For cross-repo messaging, use: minion comms send global"
+                }
 
         # Write message body to filesystem
         content_file = message_file_path(to_agent, from_agent)

@@ -19,6 +19,63 @@ from minion.db import get_db, now_iso, touch_coordinator_activity
 _reviewers = classes_with(CAP_REVIEW)
 
 
+def _poll_pidfile(agent: str) -> str:
+    """Path to the PID file for an agent's poll process."""
+    from minion.db import get_runtime_dir
+    return os.path.join(get_runtime_dir(), ".minion-poll", f"{agent}.pid")
+
+
+def _write_pidfile(agent: str) -> None:
+    pidfile = _poll_pidfile(agent)
+    os.makedirs(os.path.dirname(pidfile), exist_ok=True)
+    with open(pidfile, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def _remove_pidfile(agent: str) -> None:
+    try:
+        os.remove(_poll_pidfile(agent))
+    except OSError:
+        pass
+
+
+def _kill_existing_poll(agent: str) -> int | None:
+    """Kill any existing poll for this agent. Returns killed PID or None."""
+    import signal as _sig
+    pidfile = _poll_pidfile(agent)
+    if not os.path.exists(pidfile):
+        return None
+    try:
+        with open(pidfile) as f:
+            old_pid = int(f.read().strip())
+        if old_pid == os.getpid():
+            return None
+        os.kill(old_pid, 0)  # check alive
+        os.kill(old_pid, _sig.SIGTERM)
+        return old_pid
+    except (ValueError, ProcessLookupError, PermissionError):
+        return None
+    finally:
+        try:
+            os.remove(pidfile)
+        except OSError:
+            pass
+
+
+def is_poll_alive(agent: str, project_path: str) -> bool:
+    """Check if a poll process is running for an agent in a given project."""
+    pidfile = os.path.join(project_path, ".work", ".minion-poll", f"{agent}.pid")
+    if not os.path.exists(pidfile):
+        return False
+    try:
+        with open(pidfile) as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)  # signal 0 = check if alive
+        return True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        return False
+
+
 def _fetch_messages(agent: str) -> list[dict[str, Any]]:
     """Fetch and mark-read all unread messages (direct + broadcast). Same as check-inbox."""
     conn = get_db()
@@ -201,9 +258,27 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
       - signal: "stand_down" or "retire" (if exit_code 3)
       - transport_hint: restart reminder for terminal agents
     """
+    # Single instance: kill any existing poll for this agent
+    _kill_existing_poll(agent)
+    _write_pidfile(agent)
+
+    elapsed = 0
+    parent_pid = os.getppid()
+
+    try:
+        return _poll_inner(agent, interval, timeout, parent_pid)
+    finally:
+        _remove_pidfile(agent)
+
+
+def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dict[str, Any]:
     elapsed = 0
 
     while True:
+        # Orphan detection: parent died → exit cleanly
+        if os.getppid() != parent_pid:
+            return {"exit_code": 1}
+
         # Check signals first
         signal = _check_signals(agent)
         if signal:

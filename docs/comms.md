@@ -21,12 +21,12 @@ Agent A                    SQLite                   Agent B
 ## Send a Message
 
 ```bash
-minion send --from alice --to bob --message "auth module is ready for review"
+minion send-local --from alice --to bob --message "auth module is ready for review"
 ```
 
 With CC (copies go to charlie, lead gets auto-CC'd):
 ```bash
-minion send --from alice --to bob --message "auth fix done" --cc charlie
+minion send-local --from alice --to bob --message "auth fix done" --cc charlie
 ```
 
 ### Rules
@@ -64,7 +64,7 @@ Returns all unread messages, marks them as read. Output:
 Send to all registered agents at once:
 
 ```bash
-minion send --from leo --to all --message "everyone focus on the auth module"
+minion send-local --from leo --to all --message "everyone focus on the auth module"
 ```
 
 Broadcast tracking prevents agents from seeing the same broadcast twice — uses `broadcast_reads` table.
@@ -147,7 +147,7 @@ Messages are scanned for trigger words on send. Include the word in any message 
 Example — emergency shutdown:
 
 ```bash
-minion send --from leo --to all --message "moon_crash — everyone fenix_down NOW"
+minion send-local --from leo --to all --message "moon_crash — everyone fenix_down NOW"
 ```
 
 Clear emergency after resolution:
@@ -183,23 +183,23 @@ flags (key PK, value, set_by, set_at)
 ```bash
 # Alice finishes work, reports to lead
 minion check-inbox --agent alice
-minion send --from alice --to leo --message "task #5 complete, auth module fixed"
+minion send-local --from alice --to leo --message "task #5 complete, auth module fixed"
 ```
 
 ### Lead Assigns Work via Message
 
 ```bash
-minion send --from leo --to alice --message "pick up task #7, frontend auth form"
+minion send-local --from leo --to alice --message "pick up task #7, frontend auth form"
 ```
 
 ### Agent Asks Oracle for Help
 
 ```bash
-minion send --from alice --to donnie --message "what's the auth middleware pattern in this codebase?"
+minion send-local --from alice --to donnie --message "what's the auth middleware pattern in this codebase?"
 ```
 
 ### Broadcast Status Update
 
 ```bash
-minion send --from leo --to all --message "rally — everyone focus on the deploy pipeline"
+minion send-local --from leo --to all --message "rally — everyone focus on the deploy pipeline"
 ```

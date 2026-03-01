@@ -31,8 +31,8 @@ Two databases, two scopes:
 
 ### Routing Rules
 
-- `minion comms send` checks if the target is in your local DB first. If yes, delivers locally. If not, looks up the coordinator DB, finds the target's project_path, and delivers to that repo's `.work/minion.db`.
-- `minion global send` always routes via the coordinator.
+- `minion comms send local` — delivers to agents in THIS repo's `.work/minion.db` only. Target must be registered locally.
+- `minion comms send global` — always routes via the coordinator to the target agent's repo.
 - `minion poll` checks BOTH local and global for incoming messages every cycle.
 
 ### Registration
@@ -55,11 +55,11 @@ Common quick-reference:
 minion agent register --name <name> --class <class>
 minion poll --agent <name>                              # MUST run — no poll = no comms
 minion comms check-inbox --agent <name>
-minion comms send --from <name> --to <target> --message "..."
+minion comms send local --from <name> --to <target> --message "..."   # same-repo
+minion comms send global --from <name> --to <target> --message "..."  # cross-repo
 minion agent set-context --agent <name> --context "what you have loaded"
 minion agent who                                        # local agents
 minion global who                                       # all agents across all repos
-minion global send --from <name> --to <target> --message "..."  # cross-repo send
 minion sitrep                                           # fused view of everything
 ```
 

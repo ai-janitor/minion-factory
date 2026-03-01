@@ -83,7 +83,7 @@ def format_inbox(docs_dir: Path, poll_data: Dict[str, Any], agent: str) -> str:
         inbox_lines.extend([
             "",
             "Process the above, then send results:",
-            f"  minion send --from {agent} --to <recipient> --message '...'",
+            f"  minion send-local --from {agent} --to <recipient> --message '...'",
             "Do NOT run check-inbox or re-register.",
         ])
 

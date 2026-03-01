@@ -20,7 +20,7 @@ def load_protocol(docs_dir: Path, role: str, agent: str) -> str:
         [
             "Communication protocol — use the `minion` CLI via Bash tool:",
             f"- Check inbox: minion check-inbox --agent {agent}",
-            f"- Send message: minion send --from {agent} --to <recipient> --message '...'",
+            f"- Send message: minion send-local --from {agent} --to <recipient> --message '...'",
             f"- Set status: minion set-status --agent {agent} --status '...'",
             f"- Set context: minion set-context --agent {agent} --context '...'",
             f"- View agents: minion who",
