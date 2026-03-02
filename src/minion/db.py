@@ -691,6 +691,38 @@ _STALE_HOURS = 6
 _last_prune_check: float = 0.0
 
 
+def _prune_local_stale_agents(cutoff: str) -> None:
+    """Remove agents from the local .work/minion.db whose last_seen is older than cutoff."""
+    try:
+        local = get_db()
+        try:
+            stale = local.execute(
+                "SELECT name FROM agents WHERE last_seen IS NOT NULL AND last_seen < ?",
+                (cutoff,),
+            ).fetchall()
+            if stale:
+                # Don't prune agents with open/assigned/in_progress tasks
+                busy = set()
+                for row in stale:
+                    count = local.execute(
+                        "SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status IN ('open', 'assigned', 'in_progress')",
+                        (row["name"],),
+                    ).fetchone()[0]
+                    if count > 0:
+                        busy.add(row["name"])
+                names = [row["name"] for row in stale if row["name"] not in busy]
+                if names:
+                    local.execute(
+                        f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",
+                        names,
+                    )
+                    local.commit()
+        finally:
+            local.close()
+    except Exception:
+        pass
+
+
 def touch_coordinator_activity(agent_name: str) -> None:
     """Bump last_active for an agent in the coordinator DB. Best-effort, never raises.
 
@@ -715,6 +747,7 @@ def touch_coordinator_activity(agent_name: str) -> None:
                 _last_prune_check = wall
                 import datetime as _dt
                 cutoff = (_dt.datetime.now() - _dt.timedelta(hours=_STALE_HOURS)).isoformat()
+                # Prune coordinator DB
                 stale = conn.execute(
                     "SELECT name, project_path FROM agents WHERE last_active IS NOT NULL AND last_active < ?",
                     (cutoff,),
@@ -731,6 +764,8 @@ def touch_coordinator_activity(agent_name: str) -> None:
                         f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",
                         names,
                     )
+                # Prune local DB — same 6-hour threshold on last_seen
+                _prune_local_stale_agents(cutoff)
             conn.commit()
         finally:
             conn.close()

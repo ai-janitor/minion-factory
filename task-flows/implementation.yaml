@@ -1,0 +1,106 @@
+# =============================================================================
+# Task Flow DAG — Implementation (Greenfield)
+# =============================================================================
+#
+# For leaf implementation tasks where research/orient already happened at the
+# parent requirement level. The agent picks this up cold with a spec reference
+# and progressively builds understanding → blueprint → code → proof.
+#
+# USE WHEN:
+#   - Greenfield coding tasks from requirement decomposition
+#   - Agent has zero prior context, needs to build it via spec + plan
+#   - Work products need review gates before code is written
+#
+# DO NOT USE WHEN:
+#   - Quick config/scaffold tasks (use chore)
+#   - Bug fixes with known root cause (use bugfix/hotfix)
+#   - Research/investigation with no code output (use research)
+#
+# STAGES:
+#   open → assigned → spec → plan → implement → verify → closed
+#
+# PROGRESSIVE DEBRIEF:
+#   debrief.md is written to at every stage — not a final step.
+#   closed requires debrief.md to exist. The agent logs observations,
+#   discoveries, gotchas, and deviations as they go.
+#
+# ARTIFACTS:
+#   spec      → spec.md (what + why + interfaces + edge cases)
+#   plan      → plan.md (files, functions, signatures, test strategy)
+#   implement → code + result.md (what was built)
+#   verify    → test-report.md (proof it works)
+#   closed    → debrief.md (progressive, written throughout)
+#
+# =============================================================================
+
+name: implementation
+description: Greenfield implementation — spec → plan → implement → verify with progressive debrief
+
+stages:
+  open:
+    description: Task created, waiting for assignment
+    next: assigned
+    workers: null
+
+  assigned:
+    description: Agent assigned — read spec references, orient on the problem
+    next: spec
+    workers: null
+
+  spec:
+    description: Agent writes spec.md — what to build, why, interfaces, edge cases
+    next: plan
+    fail: assigned
+    requires: [spec.md]
+    context: specs/{task_id}-spec.md
+    workers:
+      default: [oracle, lead]
+      coder: [oracle, lead]
+      planner: [oracle, lead]
+
+  plan:
+    description: Agent writes plan.md — files, functions, signatures, test strategy
+    next: implement
+    fail: spec
+    requires: [plan.md]
+    context: specs/{task_id}-plan.md
+    workers:
+      default: [oracle, lead]
+      coder: [oracle, lead]
+      planner: [oracle, lead]
+
+  implement:
+    description: Agent writes code and result.md
+    next: verify
+    fail: plan
+    requires: [submit_result]
+    context: results/{task_id}.md
+    context_template: templates/task-result.md
+    workers: null
+
+  verify:
+    description: Compile + test — proof the code works
+    next: closed
+    fail: implement
+    context: results/{task_id}-test.md
+    context_template: templates/test-results.md
+    workers:
+      default: [builder, recon, auditor]
+      coder: [builder, recon, auditor]
+      builder: [recon, auditor]
+
+  blocked:
+    description: Agent hit a wall — parked until lead unblocks
+    next: assigned
+    parked: true
+    context: results/{task_id}-blocked.md
+    context_template: templates/block-reason.md
+    workers: [lead]
+
+  closed:
+    description: Done — debrief.md must exist (written progressively throughout)
+    terminal: true
+    requires: [debrief.md]
+    workers: [lead]
+
+dead_ends: [abandoned, stale, obsolete]

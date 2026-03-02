@@ -140,6 +140,16 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         except Exception:
             result["linked_intel"] = []
 
+        # Suggested reading — topic-based intel from task title
+        try:
+            from minion.intel import suggest as _suggest
+            s = _suggest(topic=task_row["title"], limit=3)
+            suggested = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
+            if suggested:
+                result["suggested_reading"] = suggested
+        except Exception:
+            pass
+
         return result
     finally:
         conn.close()

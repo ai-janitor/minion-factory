@@ -122,6 +122,15 @@ def register(
             import sys
             print(f"WARNING: coordinator DB registration failed: {exc}", file=sys.stderr)
 
+        # Tier 3: Register on API GLOBAL network server (if configured)
+        try:
+            from minion.network.client import get_client
+            net = get_client()
+            if net.configured:
+                net.register(agent_name, agent_class)
+        except Exception:
+            pass  # network tier is optional
+
         result: dict[str, object] = {
             "status": "registered",
             "agent": agent_name,
@@ -192,6 +201,19 @@ def register(
             "Without polling, you CANNOT receive messages or task assignments. "
             "No poll = no comms. Run: minion poll --agent " + agent_name
         )
+
+        # Suggest intel docs relevant to agent's class and zone
+        try:
+            from minion.intel import find_docs as _find_docs
+            class_docs = _find_docs(tag=agent_class)
+            doc_paths = [d["doc_path"] for d in class_docs.get("docs", [])]
+            if zone:
+                zone_docs = _find_docs(tag=zone.lower().split()[0] if zone else "")
+                doc_paths.extend(d["doc_path"] for d in zone_docs.get("docs", []))
+            if doc_paths:
+                result["suggested_reading"] = list(dict.fromkeys(doc_paths))  # dedupe
+        except Exception:
+            pass
 
         if transport == "terminal":
             result["playbook"] = {
@@ -522,7 +544,34 @@ def send_global(
                 pass
             return cross_result
 
-        return {"error": f"Agent '{to_agent}' not found in coordinator DB or target project unreachable."}
+        # Tier 3: API GLOBAL — try network server
+        try:
+            from minion.network.client import get_client
+            net = get_client()
+            if net.configured:
+                net_result = net.send(from_agent, to_agent, message)
+                if "error" not in net_result:
+                    cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                    conn.commit()
+                    touch_coordinator_activity(from_agent)
+                    net_result["routed_via"] = "network"
+                    return net_result
+                # Network send failed — queue for offline delivery
+                from minion.network.outbox import queue_message
+                queued = queue_message(from_agent, to_agent, message)
+                cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                conn.commit()
+                return {
+                    "status": "queued",
+                    "from": from_agent,
+                    "to": to_agent,
+                    "queued_file": queued,
+                    "reason": net_result.get("error", "network send failed"),
+                }
+        except Exception:
+            pass
+
+        return {"error": f"Agent '{to_agent}' not found in coordinator DB or network, or target unreachable."}
     finally:
         conn.close()
 
@@ -575,8 +624,30 @@ def deregister_global(agent_name: str) -> dict[str, object]:
         return {"error": f"Coordinator DB error: {exc}"}
 
 
+def _agent_has_active_tasks(agent_name: str, project_path: str) -> bool:
+    """Check if an agent has open/assigned/in_progress tasks in their project's local DB."""
+    local_db = os.path.join(project_path, ".work", "minion.db")
+    if not os.path.exists(local_db):
+        return False
+    try:
+        conn = sqlite3.connect(local_db, timeout=2)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status IN ('open', 'assigned', 'in_progress', 'fixed')",
+            (agent_name,),
+        ).fetchone()
+        conn.close()
+        return row[0] > 0
+    except Exception:
+        return False
+
+
 def prune_global(stale_minutes: int = 30) -> dict[str, object]:
-    """Remove agents from coordinator DB that haven't been active in N minutes. Lead-only."""
+    """Remove agents from coordinator DB that haven't been active in N minutes. Lead-only.
+
+    Agents with active tasks (open/assigned/in_progress/fixed) in their project
+    are protected from pruning regardless of staleness.
+    """
     cutoff = (datetime.datetime.now() - datetime.timedelta(minutes=stale_minutes)).isoformat()
     try:
         coord = get_coordinator_db()
@@ -586,9 +657,25 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
                 "SELECT name, project_path, last_active FROM agents WHERE last_active IS NULL OR last_active < ?",
                 (cutoff,),
             ).fetchall()
-            stale = [dict(r) for r in rows]
-            if not stale:
+            candidates = [dict(r) for r in rows]
+            if not candidates:
                 return {"status": "no stale agents", "threshold_minutes": stale_minutes}
+
+            # Protect agents with active tasks
+            stale = []
+            protected = []
+            for agent in candidates:
+                if _agent_has_active_tasks(agent["name"], agent.get("project_path", "")):
+                    protected.append(agent["name"])
+                else:
+                    stale.append(agent)
+
+            if not stale:
+                result: dict[str, object] = {"status": "no stale agents", "threshold_minutes": stale_minutes}
+                if protected:
+                    result["protected"] = protected
+                return result
+
             names = [a["name"] for a in stale]
             coord.execute(
                 f"DELETE FROM agents WHERE name IN ({','.join('?' * len(names))})",
@@ -598,11 +685,14 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
             # Clean up roster files in each pruned agent's project
             for agent in stale:
                 _remove_roster_file(agent["name"], agent["project_path"])
-            return {
+            result = {
                 "status": "pruned",
                 "threshold_minutes": stale_minutes,
                 "removed": stale,
             }
+            if protected:
+                result["protected"] = protected
+            return result
         finally:
             coord.close()
     except Exception as exc:
@@ -653,7 +743,7 @@ def send(
             (from_agent, now, now),
         )
 
-        # Local-only: target must exist in this repo's DB
+        # Local-only: target must exist in this repo's DB AND belong to this project
         if to_agent != "all":
             cursor.execute("SELECT name FROM agents WHERE name = ?", (to_agent,))
             if not cursor.fetchone():
@@ -661,6 +751,22 @@ def send(
                     "error": f"Agent '{to_agent}' not found in local DB. "
                     f"For cross-repo messaging, use: minion comms send global"
                 }
+            # Cross-check coordinator: if target's project_path differs, reject
+            try:
+                coord = get_coordinator_db()
+                try:
+                    row = coord.execute(
+                        "SELECT project_path FROM agents WHERE name = ?", (to_agent,)
+                    ).fetchone()
+                    if row and row["project_path"] and row["project_path"] != os.getcwd():
+                        return {
+                            "error": f"Agent '{to_agent}' belongs to {row['project_path']}, not this repo. "
+                            f"Use: minion comms send global --from {from_agent} --to {to_agent}"
+                        }
+                finally:
+                    coord.close()
+            except Exception:
+                pass  # Coordinator unavailable — allow local send
 
         # Write message body to filesystem
         content_file = message_file_path(to_agent, from_agent)
@@ -756,10 +862,9 @@ def check_inbox(agent_name: str) -> dict[str, object]:
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute(
-            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
-            (now, now, agent_name),
-        )
+        # ALL reads BEFORE any writes to avoid WAL snapshot isolation race.
+        # An UPDATE/INSERT starts an implicit transaction whose read snapshot
+        # would miss messages committed by another process after snapshot was taken.
 
         # Direct messages
         cursor.execute(
@@ -767,11 +872,6 @@ def check_inbox(agent_name: str) -> dict[str, object]:
             (agent_name,),
         )
         direct_msgs = [dict(row) for row in cursor.fetchall()]
-
-        if direct_msgs:
-            ids = [m["id"] for m in direct_msgs]
-            placeholders = ",".join(["?"] * len(ids))
-            cursor.execute(f"UPDATE messages SET read_flag = 1 WHERE id IN ({placeholders})", ids)
 
         # Broadcast messages
         cursor.execute(
@@ -781,6 +881,17 @@ def check_inbox(agent_name: str) -> dict[str, object]:
             (agent_name,),
         )
         broadcast_msgs = [dict(row) for row in cursor.fetchall()]
+
+        # --- Now do all writes ---
+        cursor.execute(
+            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
+            (now, now, agent_name),
+        )
+
+        if direct_msgs:
+            ids = [m["id"] for m in direct_msgs]
+            placeholders = ",".join(["?"] * len(ids))
+            cursor.execute(f"UPDATE messages SET read_flag = 1 WHERE id IN ({placeholders})", ids)
 
         for msg in broadcast_msgs:
             cursor.execute(
@@ -832,20 +943,12 @@ def check_inbox_silent(agent_name: str) -> str:
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute(
-            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
-            (now, now, agent_name),
-        )
-
+        # ALL reads before writes — WAL snapshot isolation race (see check_inbox)
         cursor.execute(
             "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0",
             (agent_name,),
         )
         direct_msgs = [dict(row) for row in cursor.fetchall()]
-        if direct_msgs:
-            ids = [m["id"] for m in direct_msgs]
-            placeholders = ",".join(["?"] * len(ids))
-            cursor.execute(f"UPDATE messages SET read_flag = 1 WHERE id IN ({placeholders})", ids)
 
         cursor.execute(
             """SELECT * FROM messages
@@ -854,6 +957,16 @@ def check_inbox_silent(agent_name: str) -> str:
             (agent_name,),
         )
         broadcast_msgs = [dict(row) for row in cursor.fetchall()]
+
+        # --- Writes ---
+        cursor.execute(
+            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
+            (now, now, agent_name),
+        )
+        if direct_msgs:
+            ids = [m["id"] for m in direct_msgs]
+            placeholders = ",".join(["?"] * len(ids))
+            cursor.execute(f"UPDATE messages SET read_flag = 1 WHERE id IN ({placeholders})", ids)
         for msg in broadcast_msgs:
             cursor.execute(
                 "INSERT OR IGNORE INTO broadcast_reads (agent_name, message_id) VALUES (?, ?)",

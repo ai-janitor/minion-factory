@@ -156,6 +156,94 @@ Clear emergency after resolution:
 minion clear-moon-crash --agent leo
 ```
 
+## Global Routing — Cross-Repo Messaging
+
+Agents in different projects communicate via the coordinator DB as a router.
+
+### Architecture
+
+```
+Coordinator DB (~/.minion/coordinator.db)
+  Role: Address book. Maps agent name → project_path.
+  NOT a message store. Zero message rows. Ever.
+
+Local DB (<project>/.work/minion.db)
+  Role: Message store + agent roster for one project.
+  poll watches this DB only. All messages live here.
+```
+
+### How Global Send Works
+
+```
+gui-coder (parakeet-app)              coordinator              gpu-coder (parakeet-gpu)
+         │                                 │                              │
+         ├── send global --to gpu-coder ──►│                              │
+         │                                 │ lookup project_path          │
+         │                                 │ = /parakeet-gpu              │
+         │                                 │                              │
+         ├── sqlite3.connect(parakeet-gpu/.work/minion.db) ──────────────►│
+         │   INSERT INTO messages (to=gpu-coder, content_file=...)        │
+         │   write .work/inbox/gpu-coder/msg.md                           │
+         │                                                                │
+         │                                 │       poll (local DB only) ──┤
+         │                                 │       sees new row, wakes up │
+```
+
+1. Sender runs `minion comms send global --from A --to B --message "..."`
+2. CLI checks sender guards (inbox discipline, staleness) against sender's local DB
+3. CLI looks up B's `project_path` in coordinator DB
+4. CLI opens B's `.work/minion.db` directly and INSERTs the message
+5. CLI writes message body to B's `.work/inbox/B/` filesystem
+6. B's poll (watching only local DB) sees the new row and wakes up
+
+### CWD Collection — How the Coordinator Learns project_path
+
+Every CLI operation heartbeats the coordinator via `touch_coordinator_activity()`, which UPSERTs the agent with `os.getcwd()` as project_path.
+
+| Entry Point | Local DB | Coordinator DB |
+|---|---|---|
+| `agent register` | INSERT/UPSERT | UPSERT with `os.getcwd()` |
+| `send` (local) | auto-register | heartbeat via `touch_coordinator_activity` |
+| `send global` | auto-register | heartbeat (on successful delivery) |
+| `check-inbox` | UPDATE last_seen | heartbeat |
+| `set-context` | UPDATE context | heartbeat |
+
+### Locality Check
+
+`send local` cross-checks the coordinator: if the target's `project_path` differs from the sender's `os.getcwd()`, the send is rejected with a suggestion to use `send global`. This prevents messages landing in dead local inboxes.
+
+### Global Commands
+
+```bash
+# Send cross-repo
+minion comms send global --from minion-coder --to gui-coder --message "..."
+
+# List all agents across all projects
+minion global who
+
+# Prune stale agents from coordinator
+minion global prune --older-than 6h
+
+# Deregister from coordinator
+minion global deregister --agent napoleon
+```
+
+### Auto-Prune
+
+Agents inactive for 6+ hours are auto-pruned from the coordinator DB (checked at most once per 10 minutes during any `touch_coordinator_activity` call). Local `.work/minion.db` agents are pruned on the same threshold.
+
+### WAL Snapshot Isolation
+
+Since sender and recipient are different processes writing/reading the same SQLite file in WAL mode, statement ordering matters. All SELECTs in `check-inbox` and `_fetch_messages` run before any UPDATEs/INSERTs. An UPDATE starts an implicit transaction whose read snapshot would miss messages committed after the snapshot was taken.
+
+### Invariants
+
+- Every message has exactly one home: the recipient's local DB
+- The coordinator DB stores zero messages (no messages table)
+- poll never queries the coordinator — everything it needs is in `.work/`
+- An agent can receive messages from any project without knowing about the sender's project
+- Agent names are globally unique across all projects (enforced at registration)
+
 ## DB Tables
 
 ```sql

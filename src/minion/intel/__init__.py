@@ -1,4 +1,4 @@
-"""Intel index — queryable knowledge layer over .work/intel/."""
+"""Intel index — queryable knowledge layer over .work/intel/ and project docs."""
 
 from .add_doc import add_doc
 from .list_docs import list_docs
@@ -8,6 +8,8 @@ from .read_doc import read_doc
 from .link_doc import link_doc
 from .for_task import intel_for_task
 from .reindex import reindex_intel
+from .suggest import suggest
+from .register_docs import register_docs
 from .war_plan import show_war_plan, set_war_plan, append_war_plan
 
 __all__ = [
@@ -19,6 +21,8 @@ __all__ = [
     "link_doc",
     "intel_for_task",
     "reindex_intel",
+    "suggest",
+    "register_docs",
     "show_war_plan",
     "set_war_plan",
     "append_war_plan",

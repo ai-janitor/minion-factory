@@ -16,6 +16,24 @@ from minion.fs import ensure_dirs
 from minion.output import output as _output
 
 
+# ---------------------------------------------------------------------------
+# Universal heartbeat — every --agent option auto-touches coordinator DB
+# ---------------------------------------------------------------------------
+
+def _store_heartbeat_agent(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    """Click callback: stash --agent value so the CLI close handler can heartbeat."""
+    if value:
+        ctx.ensure_object(dict)
+        ctx.obj["_heartbeat_agent"] = value
+    return value
+
+
+def _agent_option(**kwargs):  # noqa: ANN003
+    """Drop-in replacement for @click.option('--agent', ...) with auto heartbeat."""
+    kwargs.setdefault("callback", _store_heartbeat_agent)
+    return click.option("--agent", **kwargs)
+
+
 @click.group(epilog="Run 'minion <group> --help' to see subcommands. Run 'minion docs' for the full reference.")
 @click.version_option(package_name="minion-factory")
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON")
@@ -48,6 +66,18 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
         reset_db_path()
     init_db()
     ensure_dirs()
+
+    # Universal heartbeat: any command with --agent marks agent active in coordinator
+    def _heartbeat_on_close() -> None:
+        agent = ctx.obj.get("_heartbeat_agent")
+        if agent:
+            try:
+                from minion.db import touch_coordinator_activity
+                touch_coordinator_activity(agent)
+            except Exception:
+                pass
+
+    ctx.call_on_close(_heartbeat_on_close)
 
 
 # =========================================================================
@@ -82,7 +112,7 @@ def register(ctx: click.Context, name: str, agent_class: str, model: str, descri
 
 
 @agent_group.command("set-status")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--status", required=True)
 @click.pass_context
 def set_status(ctx: click.Context, agent: str, status: str) -> None:
@@ -92,7 +122,7 @@ def set_status(ctx: click.Context, agent: str, status: str) -> None:
 
 
 @agent_group.command("set-context")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--context", required=True)
 @click.option("--tokens-used", default=0, type=int)
 @click.option("--tokens-limit", default=0, type=int)
@@ -120,7 +150,7 @@ def who(ctx: click.Context, use_global: bool) -> None:
 
 
 @agent_group.command("update-hp")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--input-tokens", required=True, type=int)
 @click.option("--output-tokens", required=True, type=int)
 @click.option("--limit", required=True, type=int)
@@ -134,7 +164,7 @@ def update_hp(ctx: click.Context, agent: str, input_tokens: int, output_tokens: 
 
 
 @agent_group.command("cold-start")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.pass_context
 def cold_start(ctx: click.Context, agent: str) -> None:
     """Bootstrap an agent into (or back into) a session."""
@@ -143,7 +173,7 @@ def cold_start(ctx: click.Context, agent: str) -> None:
 
 
 @agent_group.command("fenix-down")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--files", required=True)
 @click.option("--manifest", default="")
 @click.pass_context
@@ -154,7 +184,7 @@ def fenix_down(ctx: click.Context, agent: str, files: str, manifest: str) -> Non
 
 
 @agent_group.command("retire")
-@click.option("--agent", required=True, help="Agent to retire")
+@_agent_option(required=True, help="Agent to retire")
 @click.option("--requesting-agent", required=True, help="Lead requesting retirement")
 @click.pass_context
 def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> None:
@@ -166,7 +196,7 @@ def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> N
 
 
 @agent_group.command("check-activity")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.pass_context
 def check_activity(ctx: click.Context, agent: str) -> None:
     """Check an agent's activity level."""
@@ -175,7 +205,7 @@ def check_activity(ctx: click.Context, agent: str) -> None:
 
 
 @agent_group.command("check-freshness")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--files", required=True)
 @click.pass_context
 def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
@@ -238,7 +268,7 @@ def send_global_via_comms(ctx: click.Context, from_agent: str, to_agent: str, me
 
 
 @comms_group.command("check-inbox")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--silent", is_flag=True, default=False,
               help="Raw message content only, no JSON. Empty output if no messages. For hooks.")
 @click.pass_context
@@ -258,7 +288,7 @@ def check_inbox(ctx: click.Context, agent: str, silent: bool) -> None:
 
 
 @comms_group.command("purge-inbox")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--older-than-hours", default=2, type=int)
 @click.pass_context
 def purge_inbox(ctx: click.Context, agent: str, older_than_hours: int) -> None:
@@ -288,14 +318,14 @@ def task_group(ctx: click.Context) -> None:
 
 
 @task_group.command("create")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--title", required=True)
 @click.option("--task-file", required=True)
 @click.option("--project", default="")
 @click.option("--zone", default="")
 @click.option("--blocked-by", default="")
 @click.option("--class-required", default="", help="Agent class required (e.g. coder, builder, recon)")
-@click.option("--type", "task_type", default="bugfix", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "investigation", "requirement", "research"]))
+@click.option("--type", "task_type", default="bugfix", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
 @click.pass_context
 def create_task(ctx: click.Context, agent: str, title: str, task_file: str, project: str, zone: str, blocked_by: str, class_required: str, task_type: str) -> None:
     """Create a new task. Lead only."""
@@ -306,7 +336,7 @@ def create_task(ctx: click.Context, agent: str, title: str, task_file: str, proj
 
 
 @task_group.command("assign")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--assigned-to", required=True)
 @click.pass_context
@@ -319,7 +349,7 @@ def assign_task(ctx: click.Context, agent: str, task_id: int, assigned_to: str) 
 
 
 @task_group.command("update")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--status", default="")
 @click.option("--progress", default="")
@@ -377,7 +407,7 @@ def task_lineage(ctx: click.Context, task_id: int) -> None:
 
 
 @task_group.command("submit-result")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--result-file", required=True)
 @click.pass_context
@@ -388,7 +418,7 @@ def submit_result(ctx: click.Context, agent: str, task_id: int, result_file: str
 
 
 @task_group.command("close")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
 def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
@@ -400,7 +430,7 @@ def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
 
 
 @task_group.command("done")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--summary", default="", help="Optional summary of externally completed work")
 @click.pass_context
@@ -413,7 +443,7 @@ def done_task_cmd(ctx: click.Context, agent: str, task_id: int, summary: str) ->
 
 
 @task_group.command("reopen")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--to-status", default="assigned", help="Target status (default: assigned)")
 @click.pass_context
@@ -424,7 +454,7 @@ def reopen_task_cmd(ctx: click.Context, agent: str, task_id: int, to_status: str
 
 
 @task_group.command("pull")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.pass_context
 def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
@@ -434,7 +464,7 @@ def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
 
 
 @task_group.command("complete-phase")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--failed", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
 @click.option("--reason", default=None, help="Required when blocking — why you're stuck")
@@ -446,7 +476,7 @@ def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: boo
 
 
 @task_group.command("check-work")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.pass_context
 def check_work_cmd(ctx: click.Context, agent: str) -> None:
     """Check if agent has available tasks. Exit 0 = work, 1 = no work."""
@@ -457,7 +487,7 @@ def check_work_cmd(ctx: click.Context, agent: str) -> None:
 
 
 @task_group.command("comment")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--message", required=True)
 @click.option("--files", default="", help="Comma-separated file paths read for context")
@@ -479,7 +509,7 @@ def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
 
 
 @task_group.command("define")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--title", required=True)
 @click.option("--description", required=True)
 @click.option("--task-type", default="feature", type=click.Choice(["feature", "bugfix", "chore"]))
@@ -497,7 +527,7 @@ def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str
 
 
 @task_group.command("result")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--summary", required=True)
 @click.option("--files-changed", default="", help="Comma-separated list of changed files")
@@ -511,7 +541,7 @@ def task_result_cmd(ctx: click.Context, agent: str, task_id: int, summary: str,
 
 
 @task_group.command("review")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--verdict", required=True, type=click.Choice(["pass", "fail"]))
 @click.option("--notes", default="")
@@ -523,7 +553,7 @@ def task_review_cmd(ctx: click.Context, agent: str, task_id: int, verdict: str, 
 
 
 @task_group.command("test")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--passed/--failed", required=True, help="Test outcome")
 @click.option("--output", "test_output", default="", help="Test output text")
@@ -537,7 +567,7 @@ def task_test_cmd(ctx: click.Context, agent: str, task_id: int, passed: bool,
 
 
 @task_group.command("block")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--task-id", required=True, type=int)
 @click.option("--reason", required=True)
 @click.pass_context
@@ -617,7 +647,7 @@ def next_status(ctx: click.Context, type_name: str, current: str, failed: bool) 
 @flow_group.command("transition")
 @click.argument("task_id", type=int)
 @click.argument("to_status")
-@click.option("--agent", required=True, help="Agent triggering transition")
+@_agent_option(required=True, help="Agent triggering transition")
 @click.pass_context
 def transition(ctx: click.Context, task_id: int, to_status: str, agent: str) -> None:
     """Manually transition a task to a new status."""
@@ -638,7 +668,7 @@ def war_group(ctx: click.Context) -> None:
 
 
 @war_group.command("set-plan")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--plan", required=True)
 @click.pass_context
 def set_battle_plan(ctx: click.Context, agent: str, plan: str) -> None:
@@ -659,7 +689,7 @@ def get_battle_plan(ctx: click.Context, status: str) -> None:
 
 
 @war_group.command("update-status")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--plan-id", required=True, type=int)
 @click.option("--status", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
 @click.pass_context
@@ -672,7 +702,7 @@ def update_battle_plan_status(ctx: click.Context, agent: str, plan_id: int, stat
 
 
 @war_group.command("log")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--entry", required=True)
 @click.option("--priority", default="normal", type=click.Choice(["low", "normal", "high", "critical"]))
 @click.pass_context
@@ -685,7 +715,7 @@ def log_raid(ctx: click.Context, agent: str, entry: str, priority: str) -> None:
 @war_group.command("list-log")
 @click.option("--priority", default=None, type=click.Choice(["low", "normal", "high", "critical"]))
 @click.option("--count", default=20, type=int)
-@click.option("--agent", default="")
+@_agent_option(default="")
 @click.pass_context
 def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
     """Read the progress log."""
@@ -705,7 +735,7 @@ def file_group(ctx: click.Context) -> None:
 
 
 @file_group.command("claim")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--file", "file_path", required=True)
 @click.pass_context
 def claim_file(ctx: click.Context, agent: str, file_path: str) -> None:
@@ -717,7 +747,7 @@ def claim_file(ctx: click.Context, agent: str, file_path: str) -> None:
 
 
 @file_group.command("release")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--file", "file_path", required=True)
 @click.option("--force", is_flag=True)
 @click.pass_context
@@ -730,7 +760,7 @@ def release_file(ctx: click.Context, agent: str, file_path: str, force: bool) ->
 
 
 @file_group.command("list")
-@click.option("--agent", default="")
+@_agent_option(default="")
 @click.pass_context
 def list_claims(ctx: click.Context, agent: str) -> None:
     """List active file claims."""
@@ -776,7 +806,7 @@ def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, ru
 
 
 @crew_group.command("stand-down")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--crew", default="")
 @click.pass_context
 def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
@@ -788,7 +818,7 @@ def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
 
 
 @crew_group.command("halt")
-@click.option("--agent", required=True, help="Lead agent issuing the halt")
+@_agent_option(required=True, help="Lead agent issuing the halt")
 @click.pass_context
 def halt_cmd(ctx: click.Context, agent: str) -> None:
     """Pause all agents — they finish current work, save state, then stop."""
@@ -884,7 +914,7 @@ def list_triggers(ctx: click.Context) -> None:
 
 
 @trigger_group.command("clear-moon-crash")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.pass_context
 def clear_moon_crash(ctx: click.Context, agent: str) -> None:
     """Clear the emergency stop flag. Lead only."""
@@ -907,7 +937,7 @@ def daemon_group(ctx: click.Context) -> None:
 
 @daemon_group.command("run", hidden=True)
 @click.option("--config", required=True, help="Path to crew YAML config")
-@click.option("--agent", required=True, help="Agent name to run")
+@_agent_option(required=True, help="Agent name to run")
 def daemon_run(config: str, agent: str) -> None:
     """Run a single agent daemon (internal — called by spawn-party)."""
     from minion.daemon.config import load_config
@@ -1126,15 +1156,26 @@ def backlog_update(ctx: click.Context, path: str, priority: str | None, status: 
 
 
 @backlog_group.command("promote")
-@click.argument("path")
+@click.argument("path", required=False, default=None)
+@click.option("--id", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
 @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
 @click.option("--slug", default=None, help="Override the auto-derived requirement slug")
 @click.option("--flow", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
               help="Lifecycle flow: 'requirement' (full 9-stage, default) or 'requirement-lite' (4-stage shortcut)")
 @click.pass_context
-def backlog_promote(ctx: click.Context, path: str, origin: str | None, slug: str | None, flow: str) -> None:
+def backlog_promote(ctx: click.Context, path: str | None, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
     """Promote a backlog item into the requirement pipeline."""
     import json
+    if not path and not item_id:
+        click.echo(json.dumps({"error": "Provide a path argument or --id <N>."}, indent=2))
+        raise SystemExit(1)
+    if item_id and not path:
+        from minion.backlog import get_item as _get_item
+        item = _get_item(item_id=item_id)
+        if "error" in item:
+            click.echo(json.dumps(item, indent=2))
+            raise SystemExit(1)
+        path = item["file_path"]
     from minion.backlog import promote as _promote
     try:
         result = _promote(path, origin, slug=slug, flow=flow)
@@ -1210,7 +1251,7 @@ def war_plan_show(ctx: click.Context) -> None:
 
 
 @war_plan_group.command("set")
-@click.option("--agent", required=True, help="Lead agent setting the war plan")
+@_agent_option(required=True, help="Lead agent setting the war plan")
 @click.option("--text", required=True, help="War plan content to write")
 @click.pass_context
 def war_plan_set(ctx: click.Context, agent: str, text: str) -> None:
@@ -1220,7 +1261,7 @@ def war_plan_set(ctx: click.Context, agent: str, text: str) -> None:
 
 
 @war_plan_group.command("append")
-@click.option("--agent", required=True, help="Lead agent appending to the war plan")
+@_agent_option(required=True, help="Lead agent appending to the war plan")
 @click.option("--text", required=True, help="Text to append")
 @click.pass_context
 def war_plan_append(ctx: click.Context, agent: str, text: str) -> None:
@@ -1322,6 +1363,27 @@ def intel_reindex(ctx: click.Context) -> None:
     _output(_reindex_intel(), ctx.obj["human"], ctx.obj["compact"])
 
 
+@intel_group.command("suggest")
+@click.option("--topic", default="", help="Topic keywords to search for")
+@click.option("--task-id", default=None, type=int, help="Infer keywords from task title")
+@click.option("--limit", default=5, type=int, help="Max results")
+@click.pass_context
+def intel_suggest(ctx: click.Context, topic: str, task_id: int | None, limit: int) -> None:
+    """Suggest relevant intel docs for a topic or task."""
+    from minion.intel import suggest as _suggest
+    _output(_suggest(topic=topic, task_id=task_id, limit=limit), ctx.obj["human"], ctx.obj["compact"])
+
+
+@intel_group.command("register-docs")
+@click.option("--scan-dir", default="docs", help="Directory to scan (default: docs/)")
+@click.option("--created-by", default="register-docs", help="Agent or user registering")
+@click.pass_context
+def intel_register_docs(ctx: click.Context, scan_dir: str, created_by: str) -> None:
+    """Bulk-scan a directory and register all .md files in the intel index."""
+    from minion.intel import register_docs as _register_docs
+    _output(_register_docs(scan_dir=scan_dir, created_by=created_by), ctx.obj["human"], ctx.obj["compact"])
+
+
 # =========================================================================
 # Requirements (already grouped — unchanged)
 # =========================================================================
@@ -1393,7 +1455,7 @@ def req_status(ctx: click.Context, path: str) -> None:
 @click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
 @click.option("--stage", required=True, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
 @click.option("--skip", "skip_stages", is_flag=True, default=False, help="Walk through all intermediate stages to reach target (lead only).")
-@click.option("--agent", default="", help="Caller agent name; must be 'lead' to use --skip.")
+@_agent_option(default="", help="Caller agent name; must be 'lead' to use --skip.")
 @click.pass_context
 def req_update(ctx: click.Context, path: str, stage: str, skip_stages: bool, agent: str) -> None:
     """Advance a requirement's stage (accepts ID or path). Use --skip --agent lead to jump multiple stages at once."""
@@ -1616,11 +1678,67 @@ def global_prune(ctx: click.Context, stale: str) -> None:
 
 
 # =========================================================================
+# Network (cross-machine comms)
+# =========================================================================
+
+@cli.group("network")
+@click.pass_context
+def network_group(ctx: click.Context) -> None:
+    """Cross-machine agent comms — API GLOBAL tier."""
+    pass
+
+
+@network_group.command("serve")
+@click.option("--port", default=8377, type=int, help="TCP port (default: 8377)")
+@click.option("--db-path", default="", help="SQLite DB path (default: ~/.minion/network.db)")
+@click.option("--token", default="", help="Cluster auth token (or set MINION_CLUSTER_TOKEN)")
+@click.pass_context
+def network_serve(ctx: click.Context, port: int, db_path: str, token: str) -> None:
+    """Start the API GLOBAL coordinator server."""
+    from minion.network.server import serve as _serve
+    _serve(port=port, db_path=db_path, token=token)
+
+
+@network_group.command("status")
+@click.pass_context
+def network_status(ctx: click.Context) -> None:
+    """Check network server health and list remote agents."""
+    from minion.network.client import get_client
+    net = get_client()
+    if not net.configured:
+        _output({"error": "MINION_NETWORK_URL not set. Network tier disabled."}, ctx.obj["human"], ctx.obj["compact"])
+        return
+    health = net.health()
+    agents = net.who()
+    _output({"health": health, "agents": agents.get("agents", [])}, ctx.obj["human"], ctx.obj["compact"])
+
+
+@network_group.command("who")
+@click.pass_context
+def network_who(ctx: click.Context) -> None:
+    """List agents registered on the network tier."""
+    from minion.network.client import get_client
+    net = get_client()
+    if not net.configured:
+        _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
+        return
+    _output(net.who(), ctx.obj["human"], ctx.obj["compact"])
+
+
+@network_group.command("outbox")
+@click.pass_context
+def network_outbox(ctx: click.Context) -> None:
+    """Show queued messages waiting for network delivery."""
+    from minion.network.outbox import outbox_count
+    _output({"queued_messages": outbox_count()}, ctx.obj["human"], ctx.obj["compact"])
+
+
+# =========================================================================
 # Top-level commands (stay ungrouped)
 # =========================================================================
 
 @cli.command()
-@click.option("--agent", required=True, help="Agent name to poll as")
+@_agent_option(required=True, help="Agent name to poll as")
 @click.option("--interval", default=5, type=int, help="Seconds between checks (default: 5)")
 @click.option("--timeout", default=0, type=int, help="Max wait in seconds. 0 = block forever until content arrives (default: 0)")
 @click.pass_context
@@ -1669,7 +1787,7 @@ def dashboard_cmd(ctx: click.Context) -> None:
 
 
 @cli.command("end-session")
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.pass_context
 def end_session(ctx: click.Context, agent: str) -> None:
     """End the current session. Lead only."""
@@ -1698,7 +1816,7 @@ def tools(ctx: click.Context, agent_class: str) -> None:
 
 
 @cli.command()
-@click.option("--agent", required=True)
+@_agent_option(required=True)
 @click.option("--debrief-file", required=True)
 @click.pass_context
 def debrief(ctx: click.Context, agent: str, debrief_file: str) -> None:
@@ -1731,7 +1849,7 @@ def rename(ctx: click.Context, old: str, new: str) -> None:
 
 
 @cli.command()
-@click.option("--agent", required=True, help="Agent to interrupt")
+@_agent_option(required=True, help="Agent to interrupt")
 @click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
 @click.pass_context
 def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
@@ -1743,7 +1861,7 @@ def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
 
 
 @cli.command()
-@click.option("--agent", required=True, help="Agent to resume")
+@_agent_option(required=True, help="Agent to resume")
 @click.option("--message", required=True, help="Message to send on resume")
 @click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
 @click.pass_context

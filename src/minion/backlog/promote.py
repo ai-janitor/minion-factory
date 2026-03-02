@@ -128,6 +128,16 @@ def promote(
             with open(backlog_readme, "a") as f:
                 f.write(f"\n{outcome_line}")
 
+        # Build DAG stage guide for the assigned flow
+        dag_guide = ""
+        try:
+            from minion.tasks.loader import load_flow
+            flow_obj = load_flow(flow)
+            stages = [s.name for s in flow_obj.stages]
+            dag_guide = " → ".join(stages)
+        except Exception:
+            dag_guide = f"(flow '{flow}' — run `minion flow show {flow}` for stages)"
+
         return {
             "status": "promoted",
             "backlog": {
@@ -138,6 +148,12 @@ def promote(
                 "promoted_to": req_rel_path,
             },
             "requirement": reg_result,
+            "next_steps": (
+                f"Follow the DAG: {dag_guide}. "
+                f"Check status: minion req status --path {req_rel_path}. "
+                f"Advance stage: minion req update --path {req_rel_path} --stage <next>. "
+                f"Decompose: minion req decompose --path {req_rel_path} --by <agent> --inline '<yaml>'"
+            ),
         }
     finally:
         conn.close()

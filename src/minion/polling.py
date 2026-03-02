@@ -82,29 +82,29 @@ def _fetch_messages(agent: str) -> list[dict[str, Any]]:
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute(
-            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
-            (now, now, agent),
-        )
-
-        # Direct messages
+        # ALL reads before writes — WAL snapshot isolation race (see comms.check_inbox)
         cursor.execute(
             "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0", (agent,),
         )
         direct = [dict(r) for r in cursor.fetchall()]
-        if direct:
-            ids = [m["id"] for m in direct]
-            cursor.execute(
-                f"UPDATE messages SET read_flag = 1 WHERE id IN ({','.join('?' * len(ids))})", ids,
-            )
 
-        # Broadcasts
         cursor.execute(
             """SELECT * FROM messages WHERE to_agent = 'all'
                AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
             (agent,),
         )
         broadcasts = [dict(r) for r in cursor.fetchall()]
+
+        # --- Writes ---
+        cursor.execute(
+            "UPDATE agents SET last_seen = ?, last_inbox_check = ? WHERE name = ?",
+            (now, now, agent),
+        )
+        if direct:
+            ids = [m["id"] for m in direct]
+            cursor.execute(
+                f"UPDATE messages SET read_flag = 1 WHERE id IN ({','.join('?' * len(ids))})", ids,
+            )
         for msg in broadcasts:
             cursor.execute(
                 "INSERT OR IGNORE INTO broadcast_reads (agent_name, message_id) VALUES (?, ?)",
@@ -215,14 +215,25 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 dag_str = flow.render_dag(task["status"])
             except Exception:
                 pass
-            result.append({
+            # Suggest relevant docs for this task
+            suggested_docs: list[str] = []
+            try:
+                from minion.intel import suggest as _suggest
+                s = _suggest(topic=task["title"], limit=3)
+                suggested_docs = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
+            except Exception:
+                pass
+            entry: dict[str, object] = {
                 "task_id": task["id"],
                 "title": task["title"],
                 "status": task["status"],
                 "task_file": task["task_file"],
                 "claim_cmd": f"minion pull-task --agent {agent} --task-id {task['id']}",
                 "dag": dag_str,
-            })
+            }
+            if suggested_docs:
+                entry["suggested_reading"] = suggested_docs
+            result.append(entry)
         return result
     finally:
         conn.close()
@@ -273,6 +284,10 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
 
 def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dict[str, Any]:
     elapsed = 0
+    seen_task_ids: set[int] = set()
+    # Heartbeat every ~30 min so idle agents don't get pruned by the 6-hour rule
+    _HEARTBEAT_INTERVAL = 1800  # seconds
+    _last_heartbeat = 0
 
     while True:
         # Orphan detection: parent died → exit cleanly
@@ -312,18 +327,43 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
         finally:
             conn.close()
 
-        # Find available tasks
-        available_tasks = _find_available_tasks(agent)
+        # Check API GLOBAL network tier for messages + drain outbox
+        network_messages: list[dict[str, Any]] = []
+        try:
+            from minion.network.client import get_client
+            net = get_client()
+            if net.configured:
+                net_inbox = net.check_inbox(agent)
+                for msg in net_inbox.get("messages", []):
+                    network_messages.append({
+                        "from_agent": msg.get("from_agent", "unknown"),
+                        "to_agent": agent,
+                        "content": msg.get("content", ""),
+                        "timestamp": msg.get("timestamp", ""),
+                        "source": "network",
+                    })
+                # Drain offline outbox
+                from minion.network.outbox import drain_outbox
+                drain_outbox(net)
+        except Exception:
+            pass
 
-        if has_messages or available_tasks:
-            # Consume messages
+        # Find available tasks — only surface NEW ones not yet seen this poll session
+        available_tasks = _find_available_tasks(agent)
+        new_tasks = [t for t in available_tasks if t["task_id"] not in seen_task_ids]
+
+        if has_messages or new_tasks or network_messages:
+            # Consume local messages
             messages = _fetch_messages(agent) if has_messages else []
+            # Append network messages
+            messages.extend(network_messages)
 
             result: dict[str, Any] = {"exit_code": 0}
             if messages:
                 result["messages"] = messages
-            if available_tasks:
-                result["tasks"] = available_tasks
+            if new_tasks:
+                result["tasks"] = new_tasks
+                seen_task_ids.update(t["task_id"] for t in new_tasks)
             if transport == "terminal":
                 result["transport_hint"] = (
                     f"RESTART POLLING: Run `minion poll --agent {agent}` in the FOREGROUND. "
@@ -333,8 +373,16 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
             touch_coordinator_activity(agent)
             return result
 
+        # Track current tasks as seen so they don't trigger on next iteration
+        seen_task_ids.update(t["task_id"] for t in available_tasks)
+
         time.sleep(interval)
         elapsed += interval
+
+        # Periodic heartbeat — keep agent alive in coordinator even when idle
+        if elapsed - _last_heartbeat >= _HEARTBEAT_INTERVAL:
+            _last_heartbeat = elapsed
+            touch_coordinator_activity(agent)
 
         if timeout > 0 and elapsed >= timeout:
             return {"exit_code": 1}

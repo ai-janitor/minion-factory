@@ -21,6 +21,14 @@ from minion.cli import cli
 BACKLOG_MD_TEMPLATE = Path(__file__).parent.parent / "task-flows" / "templates" / "backlog.md"
 
 
+def _parse_json(output: str) -> dict:
+    """Extract the first valid JSON object from CLI output (ignores stderr warnings)."""
+    decoder = json.JSONDecoder()
+    stripped = output.lstrip()
+    obj, _ = decoder.raw_decode(stripped)
+    return obj
+
+
 def _init_db(db_path: str) -> None:
     """Initialize a minimal schema with backlog + requirements tables."""
     conn = sqlite3.connect(db_path)
@@ -51,6 +59,7 @@ def _init_db(db_path: str) -> None:
             source      TEXT,
             promoted_to TEXT,
             created_by  TEXT,
+            flow_hint   TEXT DEFAULT NULL,
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
         );
@@ -454,7 +463,7 @@ class TestPromote:
     def test_creates_requirement_folder(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Memory Leak Bug")
         assert res.exit_code == 0, res.output
-        rel_path = json.loads(res.output)["file_path"]
+        rel_path = _parse_json(res.output)["file_path"]
 
         res = _run(runner, project_dir, "backlog", "promote", rel_path)
         assert res.exit_code == 0, res.output
@@ -468,7 +477,7 @@ class TestPromote:
 
         res = _run(runner, project_dir, "backlog", "promote", rel_path)
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["status"] == "promoted"
         assert data["backlog"]["promoted_to"] is not None
 
@@ -476,7 +485,7 @@ class TestPromote:
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "DB Timeout")
         res = _run(runner, project_dir, "backlog", "promote", "bugs/db-timeout")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         req_path = data["requirement"]["file_path"]
 
         conn = sqlite3.connect(db_path)
@@ -497,7 +506,7 @@ class TestPromote:
         _run(runner, project_dir, "backlog", "promote", "bugs/double-promote")
         res = _run(runner, project_dir, "backlog", "promote", "bugs/double-promote")
         assert res.exit_code == 1
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert "already promoted" in data["error"]
 
     def test_promote_killed_item_exits_nonzero(self, runner, project_dir, db_path):
@@ -509,14 +518,14 @@ class TestPromote:
         conn.close()
         res = _run(runner, project_dir, "backlog", "promote", "bugs/killed-bug")
         assert res.exit_code == 1
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert "killed" in data["error"]
 
     def test_idea_promotes_as_feature(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "New Dashboard")
         res = _run(runner, project_dir, "backlog", "promote", "ideas/new-dashboard")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["requirement"]["file_path"].startswith("features/")
 
     def test_slug_override_used_for_requirement_path(self, runner, project_dir):
@@ -528,7 +537,7 @@ class TestPromote:
             "--slug", "my-custom-slug",
         )
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["requirement"]["file_path"] == "bugs/my-custom-slug"
         req_folder = project_dir / ".work" / "requirements" / "bugs" / "my-custom-slug"
         assert req_folder.is_dir()
@@ -636,7 +645,7 @@ class TestBacklogCLI:
     def test_add_returns_json_with_id(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Test Bug")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert "id" in data
         assert data["type"] == "bug"
         assert data["title"] == "Test Bug"
@@ -652,7 +661,7 @@ class TestBacklogCLI:
             "--priority", "high",
         )
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["type"] == "idea"
 
     def test_add_invalid_type_rejected(self, runner, project_dir):
@@ -665,7 +674,7 @@ class TestBacklogCLI:
         _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Idea One")
         res = _run(runner, project_dir, "backlog", "list")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert isinstance(data, list)
         assert len(data) >= 2
 
@@ -674,15 +683,15 @@ class TestBacklogCLI:
         _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Idea Filter")
         res = _run(runner, project_dir, "backlog", "list", "--type", "bug")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert all(item["type"] == "bug" for item in data)
 
     def test_show_returns_item(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "smell", "--title", "Long Func")
-        item_path = json.loads(res.output)["file_path"]
+        item_path = _parse_json(res.output)["file_path"]
         res = _run(runner, project_dir, "backlog", "show", item_path)
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["file_path"] == item_path
 
     def test_show_missing_exits_nonzero(self, runner, project_dir):
@@ -691,10 +700,10 @@ class TestBacklogCLI:
 
     def test_update_priority(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "debt", "--title", "Old Code")
-        item_path = json.loads(res.output)["file_path"]
+        item_path = _parse_json(res.output)["file_path"]
         res = _run(runner, project_dir, "backlog", "update", item_path, "--priority", "critical")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["priority"] == "critical"
 
     def test_reindex_returns_registered_skipped(self, runner, project_dir):
@@ -702,18 +711,18 @@ class TestBacklogCLI:
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "RI Bug")
         res = _run(runner, project_dir, "backlog", "reindex")
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         # Already registered by add — should be skipped
         assert "skipped" in data or "registered" in data
 
     def test_promote_end_to_end(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "CLI Promote Bug")
         assert res.exit_code == 0, res.output
-        item_path = json.loads(res.output)["file_path"]
+        item_path = _parse_json(res.output)["file_path"]
 
         res = _run(runner, project_dir, "backlog", "promote", item_path)
         assert res.exit_code == 0, res.output
-        data = json.loads(res.output)
+        data = _parse_json(res.output)
         assert data["status"] == "promoted"
         assert "requirement" in data
 

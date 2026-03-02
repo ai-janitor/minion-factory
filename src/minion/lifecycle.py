@@ -82,6 +82,16 @@ def cold_start(agent_name: str) -> dict[str, object]:
         # Tool catalog for this class
         result["tools"] = get_tools_for_class(agent_class)
 
+        # Suggested reading — intel docs matching agent class
+        try:
+            from minion.intel import find_docs as _find_docs
+            class_docs = _find_docs(tag=agent_class)
+            doc_paths = [d["doc_path"] for d in class_docs.get("docs", [])]
+            if doc_paths:
+                result["suggested_reading"] = doc_paths
+        except Exception:
+            pass
+
         cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
         conn.commit()
 
