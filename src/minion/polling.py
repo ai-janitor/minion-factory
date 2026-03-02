@@ -193,7 +193,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
             )
             candidates.extend(dict(r) for r in cursor.fetchall())
 
-        # Filter blocked
+        # Filter blocked + filter tasks agent's class cannot advance
         result = []
         for task in candidates:
             blocked_by = task.get("blocked_by")
@@ -206,6 +206,14 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 )
                 if cursor.fetchone()[0] > 0:
                     continue
+            # Skip tasks whose current DAG stage needs a different class
+            try:
+                from minion.flow_bridge import workers_for as _workers_for
+                eligible = _workers_for(task["status"], task.get("class_required") or "", task.get("flow_type") or "bugfix")
+                if eligible is not None and agent_class not in eligible:
+                    continue
+            except Exception:
+                pass
             # Render DAG so agent sees where they are in the flow
             task_type = task.get("flow_type") or "bugfix"
             dag_str = ""
