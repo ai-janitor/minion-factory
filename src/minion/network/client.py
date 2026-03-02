@@ -15,9 +15,12 @@ import urllib.error
 class NetworkClient:
     """Client for the API GLOBAL coordinator server."""
 
-    def __init__(self, base_url: str = "", token: str = ""):
+    def __init__(self, base_url: str = "", token: str = "", insecure: bool | None = None):
         self.base_url = (base_url or os.environ.get("MINION_NETWORK_URL", "")).rstrip("/")
         self.token = token or os.environ.get("MINION_CLUSTER_TOKEN", "")
+        if insecure is None:
+            insecure = os.environ.get("MINION_NETWORK_INSECURE", "") == "1"
+        self._insecure = insecure
 
     @property
     def configured(self) -> bool:
@@ -36,7 +39,13 @@ class NetworkClient:
 
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            ssl_ctx = None
+            if self._insecure:
+                import ssl
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, timeout=10, context=ssl_ctx) as resp:
                 return json.loads(resp.read())
         except urllib.error.HTTPError as e:
             try:

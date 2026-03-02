@@ -1699,6 +1699,15 @@ def network_serve(ctx: click.Context, port: int, db_path: str, token: str) -> No
     _serve(port=port, db_path=db_path, token=token)
 
 
+@network_group.command("gen-cert")
+@click.pass_context
+def network_gen_cert(ctx: click.Context) -> None:
+    """Generate a self-signed TLS certificate for the network server."""
+    from minion.network.server import gen_cert
+    result = gen_cert()
+    _output({"status": "created", **result}, ctx.obj["human"], ctx.obj["compact"])
+
+
 @network_group.command("status")
 @click.pass_context
 def network_status(ctx: click.Context) -> None:

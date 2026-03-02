@@ -241,8 +241,42 @@ class _Handler(BaseHTTPRequestHandler):
         self._json_response(200, {"agents": agents, "source": "network"})
 
 
+def _tls_dir() -> str:
+    return os.path.join(os.path.expanduser("~"), ".minion", "tls")
+
+
+def gen_cert(common_name: str = "minion-network") -> dict[str, str]:
+    """Generate a self-signed TLS certificate for the network server.
+
+    Creates ~/.minion/tls/cert.pem and ~/.minion/tls/key.pem.
+    Uses stdlib ssl + subprocess to call openssl (available on macOS and Linux).
+    """
+    import subprocess
+
+    tls = _tls_dir()
+    os.makedirs(tls, exist_ok=True)
+    cert_path = os.path.join(tls, "cert.pem")
+    key_path = os.path.join(tls, "key.pem")
+
+    subprocess.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048",
+            "-keyout", key_path, "-out", cert_path,
+            "-days", "365", "-nodes",
+            "-subj", f"/CN={common_name}",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    os.chmod(key_path, 0o600)
+    return {"cert": cert_path, "key": key_path}
+
+
 def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
-    """Start the API GLOBAL coordinator server.
+    """Start the API GLOBAL coordinator server with TLS by default.
+
+    TLS uses ~/.minion/tls/cert.pem + key.pem (generate with gen_cert()).
+    Set MINION_NETWORK_INSECURE=1 to run plain HTTP (dev only).
 
     Args:
         port: TCP port to listen on.
@@ -262,7 +296,27 @@ def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
     _Handler.token = token
 
     server = HTTPServer(("0.0.0.0", port), _Handler)
-    print(f"minion network server listening on 0.0.0.0:{port}")
+
+    # TLS setup — default on, opt-out with MINION_NETWORK_INSECURE=1
+    insecure = os.environ.get("MINION_NETWORK_INSECURE", "") == "1"
+    protocol = "http"
+    if not insecure:
+        import ssl
+        tls = _tls_dir()
+        cert_path = os.path.join(tls, "cert.pem")
+        key_path = os.path.join(tls, "key.pem")
+        if os.path.exists(cert_path) and os.path.exists(key_path):
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert_path, key_path)
+            server.socket = ctx.wrap_socket(server.socket, server_side=True)
+            protocol = "https"
+        else:
+            print(f"WARNING: TLS certs not found at {tls}/")
+            print("  Generate with: minion network gen-cert")
+            print("  Or run insecure: MINION_NETWORK_INSECURE=1 minion network serve")
+            print("  Falling back to plain HTTP.")
+
+    print(f"minion network server listening on {protocol}://0.0.0.0:{port}")
     if token:
         print("auth: bearer token required")
     else:
