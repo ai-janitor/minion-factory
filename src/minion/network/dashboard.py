@@ -1,4 +1,4 @@
-"""Web dashboard HTML — single-page, inline CSS+JS, auto-refreshes via fetch()."""
+"""Web dashboard HTML — single-page, inline CSS+JS, token auth via localStorage."""
 
 DASHBOARD_HTML = """\
 <!DOCTYPE html>
@@ -37,25 +37,98 @@ td{padding:4px 8px;border-bottom:1px solid #21262d;white-space:nowrap;overflow:h
 .stat-label{font-size:.7em;color:#8b949e;text-transform:uppercase}
 #error{color:#f85149;font-size:12px;margin-top:4px;display:none}
 .empty{color:#484f58;padding:12px;text-align:center;font-style:italic}
+#login{display:flex;justify-content:center;align-items:center;min-height:80vh;flex-direction:column;gap:12px}
+#login h1{font-size:1.5em;margin-bottom:4px}
+#login input{background:#161b22;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:10px 14px;font-size:15px;width:280px;outline:none}
+#login input:focus{border-color:#58a6ff}
+#login button{background:#238636;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-size:14px;cursor:pointer;font-weight:600}
+#login button:hover{background:#2ea043}
+#login .login-err{color:#f85149;font-size:13px;min-height:20px}
+.logout{font-size:11px;color:#484f58;cursor:pointer;margin-left:auto}
+.logout:hover{color:#f85149}
+#app{display:none}
 </style>
 </head>
 <body>
-<h1>Minion Network <span id="clock"></span></h1>
-<div id="error"></div>
-<div class="stats" id="stats"></div>
-<div class="grid">
-  <div>
-    <h2>Agents</h2>
-    <div class="card" id="agents"><div class="empty">loading...</div></div>
-  </div>
-  <div>
-    <h2>Messages (last 20)</h2>
-    <div class="card" id="messages"><div class="empty">loading...</div></div>
+
+<div id="login">
+  <h1>Minion Network</h1>
+  <input id="token-input" type="password" placeholder="Cluster token" autofocus>
+  <button onclick="tryLogin()">Connect</button>
+  <div class="login-err" id="login-err"></div>
+</div>
+
+<div id="app">
+  <h1>Minion Network <span id="clock"></span> <span class="logout" onclick="logout()">logout</span></h1>
+  <div id="error"></div>
+  <div class="stats" id="stats"></div>
+  <div class="grid">
+    <div>
+      <h2>Agents</h2>
+      <div class="card" id="agents"><div class="empty">loading...</div></div>
+    </div>
+    <div>
+      <h2>Messages (last 20)</h2>
+      <div class="card" id="messages"><div class="empty">loading...</div></div>
+    </div>
   </div>
 </div>
+
 <script>
-const API='';
 const STALE_MIN=5*60*1000,DEAD_MIN=15*60*1000;
+let token='';
+let refreshTimer=null;
+
+function getToken(){return localStorage.getItem('minion_token')||'';}
+function setToken(t){localStorage.setItem('minion_token',t);}
+function clearToken(){localStorage.removeItem('minion_token');}
+
+function authHeaders(){
+  const h={};
+  if(token)h['Authorization']='Bearer '+token;
+  return h;
+}
+
+async function tryLogin(){
+  const input=document.getElementById('token-input');
+  const t=input.value.trim();
+  if(!t){document.getElementById('login-err').textContent='Token required';return;}
+  try{
+    const r=await fetch('/who',{headers:{'Authorization':'Bearer '+t}});
+    if(r.status===401){
+      document.getElementById('login-err').textContent='Invalid token';
+      return;
+    }
+    token=t;
+    setToken(t);
+    showApp();
+  }catch(e){
+    document.getElementById('login-err').textContent='Connection failed: '+e.message;
+  }
+}
+
+function showApp(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  refresh();
+  if(refreshTimer)clearInterval(refreshTimer);
+  refreshTimer=setInterval(refresh,2000);
+}
+
+function logout(){
+  clearToken();
+  token='';
+  if(refreshTimer)clearInterval(refreshTimer);
+  document.getElementById('app').style.display='none';
+  document.getElementById('login').style.display='flex';
+  document.getElementById('token-input').value='';
+  document.getElementById('login-err').textContent='';
+}
+
+// Enter key on token input
+document.getElementById('token-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter')tryLogin();
+});
 
 function age(ts){
   if(!ts)return Infinity;
@@ -84,9 +157,10 @@ function esc(s){
 
 async function refresh(){
   try{
+    const opts={headers:authHeaders()};
     const[agR,msgR]=await Promise.all([
-      fetch(API+'/who').then(r=>r.json()),
-      fetch(API+'/messages/recent').then(r=>r.ok?r.json():{messages:[]}).catch(()=>({messages:[]}))
+      fetch('/who',opts).then(r=>{if(r.status===401){logout();throw new Error('unauthorized');}return r.json();}),
+      fetch('/messages/recent',opts).then(r=>r.ok?r.json():{messages:[]}).catch(()=>({messages:[]}))
     ]);
     const agents=agR.agents||[];
     const msgs=msgR.messages||[];
@@ -130,13 +204,14 @@ async function refresh(){
         h+=`<div class="msg">`+
            `<span class="msg-time">${esc(t)}</span>`+
            `<span class="msg-from">${esc(m.from_agent)}</span>`+
-           ` → <span class="msg-to">${esc(m.to_agent)}</span>`+
+           ` \\u2192 <span class="msg-to">${esc(m.to_agent)}</span>`+
            `<div class="msg-content">${esc(preview)}</div></div>`;
       }
       document.getElementById('messages').innerHTML=h;
     }
     document.getElementById('error').style.display='none';
   }catch(e){
+    if(e.message==='unauthorized')return;
     const el=document.getElementById('error');
     el.textContent='Connection error: '+e.message;
     el.style.display='block';
@@ -144,8 +219,9 @@ async function refresh(){
   document.getElementById('clock').textContent=new Date().toLocaleTimeString();
 }
 
-refresh();
-setInterval(refresh,2000);
+// Auto-login if token in localStorage
+token=getToken();
+if(token){showApp();}
 </script>
 </body>
 </html>

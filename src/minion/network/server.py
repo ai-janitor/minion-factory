@@ -103,7 +103,7 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
-        # Dashboard — no auth required (read-only view)
+        # Dashboard HTML — served without auth (JS handles token via localStorage)
         if path == "" or path == "/":
             from minion.network.dashboard import DASHBOARD_HTML
             self._html_response(DASHBOARD_HTML)
