@@ -91,18 +91,35 @@ class _Handler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, ValueError):
             return None
 
+    def _html_response(self, html: str) -> None:
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        # Dashboard — no auth required (read-only view)
+        if path == "" or path == "/":
+            from minion.network.dashboard import DASHBOARD_HTML
+            self._html_response(DASHBOARD_HTML)
+            return
+
+        # API endpoints — auth required
         if not _check_token(dict(self.headers), self.token):
             self._json_response(401, {"error": "Unauthorized"})
             return
-
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/")
 
         if path == "/health":
             self._json_response(200, {"status": "ok", "timestamp": datetime.now().isoformat()})
         elif path == "/who":
             self._handle_who()
+        elif path == "/messages/recent":
+            self._handle_recent_messages()
         elif path.startswith("/inbox/"):
             agent = path[len("/inbox/"):]
             if agent:
@@ -239,6 +256,19 @@ class _Handler(BaseHTTPRequestHandler):
                 conn.close()
 
         self._json_response(200, {"agents": agents, "source": "network"})
+
+    def _handle_recent_messages(self) -> None:
+        with _DB_LOCK:
+            conn = _get_server_db(self.db_path)
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM messages ORDER BY timestamp DESC LIMIT 20"
+                ).fetchall()
+                messages = [dict(r) for r in rows]
+            finally:
+                conn.close()
+
+        self._json_response(200, {"messages": messages})
 
 
 def _tls_dir() -> str:
