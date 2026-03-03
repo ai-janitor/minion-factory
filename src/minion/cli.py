@@ -512,7 +512,7 @@ def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
 @_agent_option(required=True)
 @click.option("--title", required=True)
 @click.option("--description", required=True)
-@click.option("--task-type", default="feature", type=click.Choice(["feature", "bugfix", "chore"]))
+@click.option("--task-type", default="feature", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
 @click.option("--project", default="")
 @click.option("--zone", default="")
 @click.option("--blocked-by", default="", help="Comma-separated task IDs")
