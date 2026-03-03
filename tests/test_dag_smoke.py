@@ -243,13 +243,21 @@ def test_dag_smoke(isolated_db):
             f"Expected 'in_progress' after result, got '{_task_status(db_path, task_id)}'"
         )
 
-        # 6c. Complete in_progress → fixed (requires submit_result gate which is now satisfied)
+        # 6c. Complete in_progress → qe (QE gate between implementation and review)
         from minion.tasks.update_task import complete_phase
         phase_result = complete_phase(coder, task_id, passed=True)
         assert "error" not in phase_result, f"complete_phase (in_progress) failed: {phase_result}"
 
+        assert _task_status(db_path, task_id) == "qe", (
+            f"Expected 'qe' after complete_phase, got '{_task_status(db_path, task_id)}'"
+        )
+
+        # 6c2. QE pass → fixed
+        qe_result = complete_phase("builder-1", task_id, passed=True)
+        assert "error" not in qe_result, f"complete_phase (qe) failed: {qe_result}"
+
         assert _task_status(db_path, task_id) == "fixed", (
-            f"Expected 'fixed' after complete_phase, got '{_task_status(db_path, task_id)}'"
+            f"Expected 'fixed' after QE pass, got '{_task_status(db_path, task_id)}'"
         )
 
         # 6d. Review (pass) — oracle reviews fixed → verified

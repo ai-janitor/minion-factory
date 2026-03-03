@@ -71,12 +71,23 @@ stages:
 
   implement:
     description: Agent writes code and result.md
-    next: verify
+    next: qe
     fail: plan
     requires: [submit_result]
     context: results/{task_id}.md
     context_template: templates/task-result.md
     workers: null
+
+  qe:
+    description: Automated quality gate — tests, lint, code quality checks
+    next: verify
+    fail: implement
+    context: results/{task_id}-qe.md
+    context_template: templates/qe-report.md
+    workers:
+      default: [builder, recon, auditor]
+      coder: [builder, recon, auditor]
+      builder: [recon, auditor]
 
   verify:
     description: Compile + test — proof the code works

@@ -51,7 +51,7 @@ stages:
 
   in_progress:
     description: Agent actively working
-    next: fixed
+    next: qe
     fail: blocked
     requires: [submit_result]
     protocol: protocols/_base/in_progress.md
@@ -59,8 +59,20 @@ stages:
     context_template: templates/task-result.md
     workers: null
 
+  qe:
+    description: Automated quality gate — tests, lint, code quality checks
+    next: fixed
+    fail: in_progress
+    protocol: protocols/_base/qe.md
+    context: results/{task_id}-qe.md
+    context_template: templates/qe-report.md
+    workers:
+      default: [builder, recon, auditor]
+      coder: [builder, recon, auditor]
+      builder: [recon, auditor]
+
   fixed:
-    description: Work complete, awaiting code review
+    description: QE passed, awaiting code review
     next: verified
     fail: assigned
     protocol: protocols/_base/fixed.md
