@@ -11,7 +11,18 @@ import os
 from pathlib import Path
 from typing import Any
 
+import re
+
 import yaml
+
+
+def _slugify(title: str, max_length: int = 50) -> str:
+    """Convert a title to a filesystem-safe slug."""
+    slug = title.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug[:max_length]
 
 from minion.db import get_db, _get_db_path
 from minion.requirements.crud import register, link_task, update_stage
@@ -91,8 +102,8 @@ def decompose(parent_path: str, spec: dict, agent_name: str = "lead") -> dict[st
     # Phase 1: Create all children (folders, READMEs, register, create tasks)
     for i, child in enumerate(children_spec):
         num = f"{i + 1:03d}"
-        slug = child["slug"]
         title = child["title"]
+        slug = child.get("slug") or _slugify(title)
         description = child.get("description", title)
         task_type = child.get("task_type", "feature")
 

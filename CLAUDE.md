@@ -18,6 +18,16 @@ uv tool install --force -e /Users/hung/projects/minion-factory
 
 Without this, daemons and other agents run the stale installed binary. If you changed code and something isn't working, reinstall first.
 
+## Follow Your Own DAG
+
+When registered as a minion agent on this repo, follow the DAG flow you enforce on others:
+- Check inbox before sending (inbox discipline)
+- Set context before sending (staleness check)
+- Poll in the foreground — do not skip or fake it
+- If poll returns tasks you can't advance (wrong class for DAG stage), they should be filtered — if not, fix the filter
+- File bugs you discover immediately, don't work around them silently
+- When you own the repo, you see your own bugs first — fix them, don't ignore them
+
 ## Agent Bootstrap
 
 Read `AGENTS.md` for the universal agent playbook (boot sequence, classes, HP, hard blocks, crew lifecycle). Everything there applies regardless of runtime.

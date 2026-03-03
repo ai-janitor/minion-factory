@@ -474,6 +474,7 @@ def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) ->
         remote_conn.close()
 
     return {
+        "timestamp": now,
         "status": "sent",
         "from": from_agent,
         "to": to_agent,
@@ -555,6 +556,7 @@ def send_global(
                     conn.commit()
                     touch_coordinator_activity(from_agent)
                     net_result["routed_via"] = "network"
+                    net_result["timestamp"] = now
                     return net_result
                 # Network send failed — queue for offline delivery
                 from minion.network.outbox import queue_message
@@ -562,6 +564,7 @@ def send_global(
                 cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
                 conn.commit()
                 return {
+                    "timestamp": now,
                     "status": "queued",
                     "from": from_agent,
                     "to": to_agent,
@@ -821,6 +824,7 @@ def send(
         conn.commit()
 
         result: dict[str, object] = {
+            "timestamp": now,
             "status": "sent",
             "from": from_agent,
             "to": to_agent,

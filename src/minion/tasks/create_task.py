@@ -31,8 +31,12 @@ def create_task(
             return {"error": f"BLOCKED: Only lead-class agents can create tasks (use --type chore for self-service). '{agent_name}' is '{row['agent_class']}'."}
 
         cursor.execute("SELECT COUNT(*) FROM battle_plan WHERE status = 'active'")
-        if cursor.fetchone()[0] == 0 and task_type != "chore":
-            return {"error": "BLOCKED: No active battle plan. Lead must call set-battle-plan first."}
+        has_session_plan = cursor.fetchone()[0] > 0
+        if not has_session_plan and task_type != "chore":
+            # Also accept persistent war plan (.work/intel/WAR_PLAN.md) as context
+            from minion.intel.war_plan import _war_plan_path
+            if not os.path.exists(_war_plan_path()):
+                return {"error": "BLOCKED: No active battle plan or war plan. Set with: minion war set-plan --agent <name> --plan 'objective'"}
 
         if not os.path.exists(task_file):
             return {"error": f"BLOCKED: Task file does not exist: {task_file}"}
