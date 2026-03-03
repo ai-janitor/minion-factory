@@ -1,0 +1,135 @@
+"""Agent group — register, deregister, rename, set-context, set-status, who, cold-start.
+
+Identity and lifecycle management for individual agents.
+"""
+
+from __future__ import annotations
+
+import click
+
+from minion.cli.main import _agent_option, _output
+
+
+def register_commands(cli: click.Group) -> None:
+    """Attach the agent group and its subcommands to the root CLI."""
+
+    @cli.group("agent")
+    @click.pass_context
+    def agent_group(ctx: click.Context) -> None:
+        """Join the session, report your state, and manage your identity."""
+        pass
+
+    @agent_group.command("register")
+    @click.option("--name", required=True)
+    @click.option("--class", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
+    @click.option("--model", default="")
+    @click.option("--description", default="")
+    @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
+    @click.option("--crew", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
+    @click.pass_context
+    def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str) -> None:
+        """Register an agent into the local session AND the global coordinator DB.
+
+        After registering, you MUST start polling to receive messages:
+        minion poll --agent <name>
+
+        An agent that registers but doesn't poll is deaf — it cannot receive
+        messages or task assignments. Names must be unique across all projects."""
+        from minion.comms import register as _register
+        _output(_register(name, agent_class, model, description, transport, crew), ctx.obj["human"], ctx.obj["compact"])
+
+    @agent_group.command("set-status")
+    @_agent_option(required=True)
+    @click.option("--status", required=True)
+    @click.pass_context
+    def set_status(ctx: click.Context, agent: str, status: str) -> None:
+        """Set agent status."""
+        from minion.comms import set_status as _set_status
+        _output(_set_status(agent, status), ctx.obj["human"])
+
+    @agent_group.command("set-context")
+    @_agent_option(required=True)
+    @click.option("--context", required=True)
+    @click.option("--tokens-used", default=0, type=int)
+    @click.option("--tokens-limit", default=0, type=int)
+    @click.option("--hp", default=None, type=int, help="Self-reported HP 0-100 (skips daemon token counting)")
+    @click.option("--files-modified", default="", help="Comma-separated files modified this turn; warns if unclaimed")
+    @click.pass_context
+    def set_context(ctx: click.Context, agent: str, context: str, tokens_used: int, tokens_limit: int, hp: int | None, files_modified: str) -> None:
+        """Update context summary and health (tokens used, token limit)."""
+        from minion.comms import set_context as _set_context
+        _output(_set_context(agent, context, tokens_used, tokens_limit, hp, files_modified), ctx.obj["human"])
+
+    @agent_group.command("who")
+    @click.option("--global", "use_global", is_flag=True, default=False,
+                  help="Query the global coordinator DB (~/.minion/coordinator.db) to show agents across ALL projects, not just the current repo")
+    @click.pass_context
+    def who(ctx: click.Context, use_global: bool) -> None:
+        """List registered agents in THIS repo. Use --global for all repos."""
+        if use_global:
+            from minion.comms import who_global as _who_global
+            _output(_who_global(), ctx.obj["human"])
+        else:
+            from minion.comms import who as _who
+            _output(_who(), ctx.obj["human"])
+
+    @agent_group.command("update-hp")
+    @_agent_option(required=True)
+    @click.option("--input-tokens", required=True, type=int)
+    @click.option("--output-tokens", required=True, type=int)
+    @click.option("--limit", required=True, type=int)
+    @click.option("--turn-input", default=None, type=int, help="Per-turn input tokens (current context pressure)")
+    @click.option("--turn-output", default=None, type=int, help="Per-turn output tokens (current context pressure)")
+    @click.pass_context
+    def update_hp(ctx: click.Context, agent: str, input_tokens: int, output_tokens: int, limit: int, turn_input: int | None, turn_output: int | None) -> None:
+        """Daemon-only: record token usage and compute health score."""
+        from minion.monitoring import update_hp as _update_hp
+        _output(_update_hp(agent, input_tokens, output_tokens, limit, turn_input, turn_output), ctx.obj["human"])
+
+    @agent_group.command("cold-start")
+    @_agent_option(required=True)
+    @click.pass_context
+    def cold_start(ctx: click.Context, agent: str) -> None:
+        """Bootstrap an agent into (or back into) a session."""
+        from minion.lifecycle import cold_start as _cold_start
+        _output(_cold_start(agent), ctx.obj["human"], ctx.obj["compact"])
+
+    @agent_group.command("fenix-down")
+    @_agent_option(required=True)
+    @click.option("--files", required=True)
+    @click.option("--manifest", default="")
+    @click.pass_context
+    def fenix_down(ctx: click.Context, agent: str, files: str, manifest: str) -> None:
+        """Save session state to disk before context window runs out."""
+        from minion.lifecycle import fenix_down as _fenix_down
+        _output(_fenix_down(agent, files, manifest), ctx.obj["human"])
+
+    @agent_group.command("retire")
+    @_agent_option(required=True, help="Agent to retire")
+    @click.option("--requesting-agent", required=True, help="Lead requesting retirement")
+    @click.pass_context
+    def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> None:
+        """Signal a single daemon agent to exit gracefully. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.crew import retire_agent as _retire_agent
+        _output(_retire_agent(agent, requesting_agent), ctx.obj["human"])
+
+    @agent_group.command("check-activity")
+    @_agent_option(required=True)
+    @click.pass_context
+    def check_activity(ctx: click.Context, agent: str) -> None:
+        """Check an agent's activity level."""
+        from minion.monitoring import check_activity as _check_activity
+        _output(_check_activity(agent), ctx.obj["human"])
+
+    @agent_group.command("check-freshness")
+    @_agent_option(required=True)
+    @click.option("--files", required=True)
+    @click.pass_context
+    def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
+        """Check file freshness relative to agent's last set-context. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.monitoring import check_freshness as _check_freshness
+        _output(_check_freshness(agent, files), ctx.obj["human"])
