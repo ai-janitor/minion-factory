@@ -69,12 +69,14 @@ def set_battle_plan(agent_name: str, plan: str) -> dict[str, object]:
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute("SELECT agent_class FROM agents WHERE name = ?", (agent_name,))
-        row = cursor.fetchone()
-        if not row:
-            return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
-        if row["agent_class"] != "lead":
-            return {"error": f"BLOCKED: Only lead-class agents can set the battle plan. '{agent_name}' is '{row['agent_class']}'."}
+        # Allow human/CLI use without registration — skip auth for "human" agent
+        if agent_name != "human":
+            cursor.execute("SELECT agent_class FROM agents WHERE name = ?", (agent_name,))
+            row = cursor.fetchone()
+            if not row:
+                return {"error": f"BLOCKED: Agent '{agent_name}' not registered. Use --agent human for CLI/human use."}
+            if row["agent_class"] != "lead":
+                return {"error": f"BLOCKED: Only lead-class agents can set the battle plan. '{agent_name}' is '{row['agent_class']}'."}
 
         # Supersede previous active plans
         cursor.execute(

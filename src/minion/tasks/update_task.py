@@ -151,7 +151,14 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
         new_status = flow.next_status(current, passed)
 
         if new_status is None:
-            return {"error": f"No transition from '{current}' (passed={passed}) in flow '{task_type}'."}
+            # Show valid transitions so the agent knows what's possible
+            valid = []
+            for p in (True, False):
+                ns = flow.next_status(current, p)
+                if ns:
+                    valid.append(f"passed={p} → {ns}")
+            hint = f" Valid transitions from '{current}': {', '.join(valid)}" if valid else ""
+            return {"error": f"No transition from '{current}' (passed={passed}) in flow '{task_type}'.{hint}"}
 
         # Blocked requires a reason so lead can act on it
         if new_status == "blocked" and not reason:

@@ -75,6 +75,15 @@ def create_task(
             result["blocked_by"] = blocker_ids
         if class_required:
             result["class_required"] = class_required
+        # Echo the enrolled flow and first stages
+        try:
+            from minion.tasks.loader import load_flow
+            flow = load_flow(task_type)
+            stages = [s.name for s in flow.stages]
+            result["flow"] = task_type
+            result["dag"] = " → ".join(stages[:4]) + (" → ..." if len(stages) > 4 else "")
+        except Exception:
+            pass
         return result
     finally:
         conn.close()
