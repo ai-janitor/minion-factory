@@ -460,20 +460,36 @@ def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) ->
     atomic_write_file(content_file, message)
 
     # Insert message metadata into target project's DB
-    remote_conn = sqlite3.connect(remote_db_path, timeout=5)
-    remote_conn.row_factory = sqlite3.Row
-    remote_conn.execute("PRAGMA journal_mode=WAL")
-    remote_conn.execute("PRAGMA busy_timeout=5000")
+    db_indexed = False
     try:
+        remote_conn = sqlite3.connect(remote_db_path, timeout=5)
+        remote_conn.row_factory = sqlite3.Row
+        remote_conn.execute("PRAGMA journal_mode=WAL")
+        remote_conn.execute("PRAGMA busy_timeout=5000")
+        # Ensure messages table exists (target may not have run full init)
+        remote_conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_agent   TEXT NOT NULL,
+                to_agent     TEXT NOT NULL,
+                content_file TEXT,
+                timestamp    TEXT,
+                read_flag    INTEGER DEFAULT 0,
+                is_cc        INTEGER DEFAULT 0,
+                cc_original_to TEXT
+            )
+        """)
         remote_conn.execute(
             "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
             (from_agent, to_agent, content_file, now),
         )
         remote_conn.commit()
-    finally:
         remote_conn.close()
+        db_indexed = True
+    except Exception:
+        pass  # File delivered even if DB insert fails
 
-    return {
+    result = {
         "timestamp": now,
         "status": "sent",
         "from": from_agent,
@@ -481,6 +497,9 @@ def _route_cross_repo(to_agent: str, from_agent: str, message: str, now: str) ->
         "routed_via": "coordinator",
         "target_project": project_path,
     }
+    if not db_indexed:
+        result["warning"] = "Message file delivered but DB insert failed. Target may need 'minion init'."
+    return result
 
 
 def send_global(
@@ -904,6 +923,43 @@ def check_inbox(agent_name: str) -> dict[str, object]:
             )
 
         conn.commit()
+
+        # Recovery: scan inbox directory for files not indexed in DB
+        try:
+            from minion.db import get_runtime_dir
+            inbox_dir = os.path.join(get_runtime_dir(), "inbox", agent_name)
+            if os.path.isdir(inbox_dir):
+                known_files = set()
+                cursor.execute("SELECT content_file FROM messages WHERE to_agent = ?", (agent_name,))
+                for row in cursor.fetchall():
+                    if row["content_file"]:
+                        known_files.add(row["content_file"])
+                for fname in sorted(os.listdir(inbox_dir)):
+                    if not fname.endswith("-msg.md"):
+                        continue
+                    fpath = os.path.join(inbox_dir, fname)
+                    if fpath not in known_files:
+                        # Orphaned file — index it into DB
+                        parts = fname.replace("-msg.md", "").split("-", 2)
+                        from_name = parts[1] if len(parts) > 1 else "unknown"
+                        ts = parts[0] if parts else now
+                        cursor.execute(
+                            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
+                            (from_name, agent_name, fpath, ts),
+                        )
+                        direct_msgs.append({
+                            "id": cursor.lastrowid,
+                            "from_agent": from_name,
+                            "to_agent": agent_name,
+                            "content_file": fpath,
+                            "timestamp": ts,
+                            "read_flag": 0,
+                            "is_cc": 0,
+                        })
+                if direct_msgs:
+                    conn.commit()
+        except Exception:
+            pass
 
         all_messages = direct_msgs + broadcast_msgs
         all_messages.sort(key=lambda x: x.get("timestamp", ""))
