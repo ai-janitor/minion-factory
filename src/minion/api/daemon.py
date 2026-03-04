@@ -52,11 +52,37 @@ def _write_state(state: dict) -> None:
     tmp.rename(sf)
 
 
+def _token_file() -> Path:
+    """Separate file for token — chmod 600, not in JSON state."""
+    return _minion_dir() / ".api-token"
+
+
+def _save_token(token: str) -> None:
+    """Save token to restricted file (owner-only read/write)."""
+    tf = _token_file()
+    tf.parent.mkdir(parents=True, exist_ok=True)
+    tf.write_text(token)
+    tf.chmod(0o600)
+
+
+def _read_token() -> str:
+    """Read saved token. Returns empty string if missing."""
+    tf = _token_file()
+    if not tf.exists():
+        return ""
+    try:
+        return tf.read_text().strip()
+    except OSError:
+        return ""
+
+
 def _clear_state() -> None:
-    """Remove state file."""
+    """Remove state file and token file."""
     sf = _state_file()
     if sf.exists():
         sf.unlink()
+    # Token file persists across restarts — only cleared on explicit stop
+    # Actually keep token file for restart — don't clear it here
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -129,12 +155,16 @@ def start(port: int = 8377, token: str = "") -> dict:
 
     # Write state file
     from minion.db import now_iso
+    # Save token to separate restricted file (chmod 600) — not in JSON state
+    if token:
+        _save_token(token)
+
     state = {
         "pid": proc.pid,
         "port": port,
         "started_at": now_iso(),
         "tls_enabled": tls_enabled,
-        "token": token,
+        "auth": bool(token),
     }
     _write_state(state)
 
@@ -249,7 +279,7 @@ def restart(port: int | None = None, token: str | None = None) -> dict:
     if port is None:
         port = state.get("port", 8377) if state else 8377
     if token is None:
-        token = state.get("token", "") if state else ""
+        token = _read_token()
 
     stop_result = stop()
     # Brief pause for port release

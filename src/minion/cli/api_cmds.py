@@ -27,7 +27,7 @@ def register_commands(cli: click.Group) -> None:
 
         \b
         Quick start:
-          minion api start mytoken   # Start with auth token
+          minion api start           # Prompts for auth token
           minion api status          # Check if running + health
           minion api stop            # Graceful shutdown
 
@@ -38,16 +38,21 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @api_group.command("start")
-    @click.argument("token", required=False, default=None)
     @click.option("--port", default=8377, type=int, help="TCP port (default: 8377)")
+    @click.option("-p", "--password-file", default=None, type=click.Path(exists=True),
+                  help="Read token from file (first line). For automation/scripts.")
     @click.option("--insecure", is_flag=True, help="Allow starting without auth token (dev only)")
     @click.pass_context
-    def api_start(ctx: click.Context, token: str | None, port: int, insecure: bool) -> None:
+    def api_start(ctx: click.Context, port: int, password_file: str | None, insecure: bool) -> None:
         """Start the API server as a background daemon.
 
         \b
-        TOKEN is the cluster auth token (required). Saved to state file
-        so restart doesn't need it again. Use --insecure to skip (dev only).
+        Auth token is required (unless --insecure). Three input methods
+        in priority order:
+          1. -p /path/to/file   — reads first line (automation/scripts)
+          2. MINION_CLUSTER_TOKEN env var (CI/containers)
+          3. Interactive prompt via getpass (humans at terminal)
+        Token is hashed and saved so restart doesn't need re-entry.
 
         \b
         Forks the server to background and returns immediately.
@@ -56,20 +61,35 @@ def register_commands(cli: click.Group) -> None:
 
         \b
         Examples:
-          minion api start mytoken             # Start with auth
-          minion api start mytoken --port 9000 # Custom port
-          minion api start --insecure          # Dev mode, no auth
+          minion api start                      # Prompts for token
+          minion api start -p ~/.minion/token    # Read from file
+          minion api start --insecure            # Dev mode, no auth
         """
-        if not token and not insecure:
-            token = os.environ.get("MINION_CLUSTER_TOKEN", "")
-        if not token and not insecure:
-            raise click.UsageError(
-                "TOKEN is required. Usage: minion api start <token>\n"
-                "Or set MINION_CLUSTER_TOKEN env var.\n"
-                "Use --insecure to skip auth (dev only)."
-            )
+        import getpass
+
+        token = ""
+        if not insecure:
+            # Priority 1: -p password file
+            if password_file:
+                with open(password_file) as f:
+                    token = f.readline().strip()
+                if not token:
+                    raise click.UsageError(f"Password file '{password_file}' is empty.")
+            # Priority 2: env var
+            if not token:
+                token = os.environ.get("MINION_CLUSTER_TOKEN", "")
+            # Priority 3: interactive prompt
+            if not token:
+                token = getpass.getpass("Cluster auth token: ")
+            if not token:
+                raise click.UsageError(
+                    "Auth token is required.\n"
+                    "Provide via: -p <file>, MINION_CLUSTER_TOKEN env var, or interactive prompt.\n"
+                    "Use --insecure to skip auth (dev only)."
+                )
+
         from minion.api.daemon import start
-        result = start(port=port, token=token or "")
+        result = start(port=port, token=token)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("stop")
