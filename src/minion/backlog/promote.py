@@ -2,6 +2,7 @@
 
 Copies the backlog README.md into .work/requirements/{target}/, registers the
 requirement in the DB, and updates the backlog row to status=promoted.
+Includes DAG crew requirements and available characters on success.
 """
 
 from __future__ import annotations
@@ -17,6 +18,56 @@ from ._helpers import _get_backlog_path
 
 # Backlog types that map to the 'bug' requirement origin; everything else → 'feature'
 _BUG_TYPES = {"bug"}
+
+
+def _scan_crew_characters(needed_classes: set[str]) -> list[dict[str, str]]:
+    """Scan all crew YAMLs for characters matching needed classes.
+
+    Returns list of {name, class, crew, snippet} dicts.
+    Snippet is the first sentence of the character's system prompt.
+    """
+    import glob
+
+    import yaml
+
+    from minion.crew.spawn import _all_search_paths, _role_to_class
+
+    characters: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+
+    for search_dir in _all_search_paths():
+        for yaml_path in glob.glob(os.path.join(search_dir, "*.yaml")):
+            try:
+                with open(yaml_path) as f:
+                    crew = yaml.safe_load(f)
+                if not crew or "agents" not in crew:
+                    continue
+                crew_name = os.path.splitext(os.path.basename(yaml_path))[0]
+                for agent_name, cfg in crew.get("agents", {}).items():
+                    if agent_name in seen_names:
+                        continue
+                    role = cfg.get("role", "coder")
+                    agent_class = _role_to_class(role)
+                    if agent_class not in needed_classes:
+                        continue
+                    # Extract first sentence of system prompt as snippet
+                    system = cfg.get("system", "")
+                    snippet = ""
+                    for line in system.strip().splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("ON STARTUP") and not line.startswith("You are"):
+                            snippet = line[:80]
+                            break
+                    seen_names.add(agent_name)
+                    characters.append({
+                        "name": agent_name,
+                        "class": agent_class,
+                        "crew": crew_name,
+                        "snippet": snippet,
+                    })
+            except Exception:
+                continue
+    return characters
 
 
 def promote(
@@ -171,6 +222,26 @@ def promote(
         except Exception:
             duties_text = ""
 
+        # Extract required crew classes from DAG flow
+        required_crew: list[dict[str, Any]] = []
+        try:
+            from minion.tasks.loader import load_flow as _load_flow
+            flow_obj = _load_flow(flow)
+            class_stages = flow_obj.all_required_classes()
+            for cls, stages in sorted(class_stages.items()):
+                required_crew.append({"class": cls, "stages": stages})
+        except Exception:
+            pass
+
+        # Scan crew YAMLs for available characters matching required classes
+        available_characters: list[dict[str, str]] = []
+        try:
+            needed_classes = {r["class"] for r in required_crew}
+            if needed_classes:
+                available_characters = _scan_crew_characters(needed_classes)
+        except Exception:
+            pass
+
         result: dict[str, Any] = {
             "status": "promoted",
             "backlog": {
@@ -190,6 +261,10 @@ def promote(
         }
         if duties_text:
             result["duties_reminder"] = duties_text
+        if required_crew:
+            result["required_crew"] = required_crew
+        if available_characters:
+            result["available_characters"] = available_characters
         return result
     finally:
         conn.close()

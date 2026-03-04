@@ -71,6 +71,20 @@ class TaskFlow:
             return workers[class_required]
         return workers.get("default")
 
+    def all_required_classes(self, class_required: str = "") -> dict[str, list[str]]:
+        """Return all unique worker classes needed across all stages.
+
+        Returns dict mapping class_name → list of stage names where that class is needed.
+        Skips stages where workers is None (current assignee continues).
+        """
+        class_stages: dict[str, list[str]] = {}
+        for stage_name, stage in self.stages.items():
+            eligible = self.workers_for(stage_name, class_required)
+            if eligible is not None:
+                for cls in eligible:
+                    class_stages.setdefault(cls, []).append(stage_name)
+        return class_stages
+
     def requires(self, status: str) -> list[str]:
         """Preconditions before transitioning INTO this status."""
         stage = self.stages.get(status)
