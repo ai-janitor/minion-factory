@@ -12,7 +12,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:3001",
+      // Network server (Python) — serves both /api/* compat routes and /projects/* routes
+      "/api": "http://localhost:8377",
+      "/projects": "http://localhost:8377",
     },
   },
 })
