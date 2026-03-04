@@ -63,11 +63,14 @@ def send(
         if is_stale:
             return {"error": stale_msg}
 
-        # Auto-register unknown senders
-        cursor.execute(
-            "INSERT OR IGNORE INTO agents (name, agent_class, registered_at, last_seen) VALUES (?, 'coder', ?, ?)",
-            (from_agent, now, now),
-        )
+        # Verify sender is registered (no auto-register — prevents -C flag
+        # leaking agent presence into foreign project DBs)
+        cursor.execute("SELECT name FROM agents WHERE name = ?", (from_agent,))
+        if not cursor.fetchone():
+            return {
+                "error": f"Agent '{from_agent}' not registered in this project. "
+                f"Register first: minion agent register --name {from_agent} --class <role>"
+            }
 
         # Local-only: target must exist in this repo's DB AND belong to this project
         if to_agent != "all":
@@ -200,34 +203,37 @@ def send_global(
     cursor = conn.cursor()
     now = now_iso()
     try:
-        # Sender guards — same as send()
-        cursor.execute(
-            "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
-            (from_agent,),
-        )
-        unread_direct = cursor.fetchone()[0]
-        cursor.execute(
-            """SELECT COUNT(*) FROM messages
-               WHERE to_agent = 'all' AND from_agent != ?
-               AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
-            (from_agent, from_agent),
-        )
-        unread_broadcast = cursor.fetchone()[0]
-        unread = unread_direct + unread_broadcast
-        if unread > 0:
-            return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
+        # Check if sender is registered in THIS project's DB.
+        # If not (e.g. using -C to send from a foreign project), skip sender
+        # guards — they're meaningless against a DB the sender doesn't belong to.
+        # Critically: do NOT auto-register, which would leak presence into the
+        # foreign project and trigger stop-hook for the wrong project.
+        cursor.execute("SELECT name FROM agents WHERE name = ?", (from_agent,))
+        sender_is_local = cursor.fetchone() is not None
 
-        is_stale, stale_msg = staleness_check(cursor, from_agent)
-        if is_stale:
-            return {"error": stale_msg}
+        if sender_is_local:
+            # Sender guards — only meaningful when sender belongs to this DB
+            cursor.execute(
+                "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
+                (from_agent,),
+            )
+            unread_direct = cursor.fetchone()[0]
+            cursor.execute(
+                """SELECT COUNT(*) FROM messages
+                   WHERE to_agent = 'all' AND from_agent != ?
+                   AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
+                (from_agent, from_agent),
+            )
+            unread_broadcast = cursor.fetchone()[0]
+            unread = unread_direct + unread_broadcast
+            if unread > 0:
+                return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
 
-        # Auto-register unknown senders
-        cursor.execute(
-            "INSERT OR IGNORE INTO agents (name, agent_class, registered_at, last_seen) VALUES (?, 'coder', ?, ?)",
-            (from_agent, now, now),
-        )
+            is_stale, stale_msg = staleness_check(cursor, from_agent)
+            if is_stale:
+                return {"error": stale_msg}
 
-        # Commit sender guards + auto-register before cross-repo delivery.
+        # Commit before cross-repo delivery.
         # Without this, the open read transaction on THIS connection blocks
         # route_cross_repo() from writing to the same DB when sender and
         # recipient share a project (same-project global send).
@@ -236,8 +242,9 @@ def send_global(
         # ALWAYS route through coordinator — never check local DB for target
         cross_result = route_cross_repo(to_agent, from_agent, message, now)
         if cross_result:
-            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
-            conn.commit()
+            if sender_is_local:
+                cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                conn.commit()
             touch_coordinator_activity(from_agent)
             # Warn if recipient doesn't have poll running
             try:
@@ -259,8 +266,9 @@ def send_global(
             if net.configured:
                 net_result = net.send(from_agent, to_agent, message)
                 if "error" not in net_result:
-                    cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
-                    conn.commit()
+                    if sender_is_local:
+                        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                        conn.commit()
                     touch_coordinator_activity(from_agent)
                     net_result["routed_via"] = "network"
                     net_result["timestamp"] = now
@@ -268,8 +276,9 @@ def send_global(
                 # Network send failed — queue for offline delivery
                 from minion.network.outbox import queue_message
                 queued = queue_message(from_agent, to_agent, message)
-                cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
-                conn.commit()
+                if sender_is_local:
+                    cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
+                    conn.commit()
                 return {
                     "timestamp": now,
                     "status": "queued",
