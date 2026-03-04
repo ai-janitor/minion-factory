@@ -206,6 +206,7 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "mission list":          (VALID_CLASSES, "List available mission templates"),
     "mission suggest":       ({"lead"}, "Show resolved slots and eligible characters for a mission"),
     "mission spawn":         ({"lead"}, "Resolve mission, draft party, and spawn"),
+    "backlog promote":       ({"lead"}, "Promote a backlog item to requirement (lead only)"),
 }
 
 

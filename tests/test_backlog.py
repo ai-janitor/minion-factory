@@ -63,6 +63,21 @@ def _init_db(db_path: str) -> None:
             created_at  TEXT NOT NULL,
             updated_at  TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS agents (
+            name            TEXT PRIMARY KEY,
+            agent_class     TEXT NOT NULL DEFAULT 'coder',
+            registered_at   TEXT,
+            last_seen       TEXT,
+            last_inbox_check TEXT,
+            context_updated_at TEXT,
+            hp              INTEGER DEFAULT 100,
+            transport       TEXT DEFAULT 'terminal',
+            context         TEXT DEFAULT '',
+            status          TEXT DEFAULT 'idle',
+            model           TEXT DEFAULT NULL,
+            zone            TEXT DEFAULT NULL
+        );
+        INSERT OR IGNORE INTO agents (name, agent_class, registered_at) VALUES ('test-lead', 'lead', datetime('now'));
     """)
     conn.close()
 
@@ -465,7 +480,7 @@ class TestPromote:
         assert res.exit_code == 0, res.output
         rel_path = _parse_json(res.output)["file_path"]
 
-        res = _run(runner, project_dir, "backlog", "promote", rel_path)
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", rel_path)
         assert res.exit_code == 0, res.output
         slug = rel_path.split("/")[-1]
         req_folder = project_dir / ".work" / "requirements" / "bugs" / slug
@@ -475,7 +490,7 @@ class TestPromote:
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Login Race")
         rel_path = "bugs/login-race"
 
-        res = _run(runner, project_dir, "backlog", "promote", rel_path)
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", rel_path)
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
         assert data["status"] == "promoted"
@@ -483,7 +498,7 @@ class TestPromote:
 
     def test_requirement_registered_in_db(self, runner, project_dir, db_path):
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "DB Timeout")
-        res = _run(runner, project_dir, "backlog", "promote", "bugs/db-timeout")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/db-timeout")
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
         req_path = data["requirement"]["file_path"]
@@ -496,15 +511,15 @@ class TestPromote:
 
     def test_readme_copied_to_requirement(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Copy Bug")
-        res = _run(runner, project_dir, "backlog", "promote", "bugs/copy-bug")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/copy-bug")
         assert res.exit_code == 0, res.output
         req_readme = project_dir / ".work" / "requirements" / "bugs" / "copy-bug" / "README.md"
         assert req_readme.exists()
 
     def test_double_promote_exits_nonzero(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Double Promote")
-        _run(runner, project_dir, "backlog", "promote", "bugs/double-promote")
-        res = _run(runner, project_dir, "backlog", "promote", "bugs/double-promote")
+        _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/double-promote")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/double-promote")
         assert res.exit_code == 1
         data = _parse_json(res.output)
         assert "already promoted" in data["error"]
@@ -516,14 +531,14 @@ class TestPromote:
         conn.execute("UPDATE backlog SET status='killed' WHERE file_path='bugs/killed-bug'")
         conn.commit()
         conn.close()
-        res = _run(runner, project_dir, "backlog", "promote", "bugs/killed-bug")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/killed-bug")
         assert res.exit_code == 1
         data = _parse_json(res.output)
         assert "killed" in data["error"]
 
     def test_idea_promotes_as_feature(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "New Dashboard")
-        res = _run(runner, project_dir, "backlog", "promote", "ideas/new-dashboard")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "ideas/new-dashboard")
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
         assert data["requirement"]["file_path"].startswith("features/")
@@ -533,7 +548,7 @@ class TestPromote:
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Slug Override Bug")
         res = _run(
             runner, project_dir,
-            "backlog", "promote", "bugs/slug-override-bug",
+            "backlog", "promote", "--agent", "test-lead", "bugs/slug-override-bug",
             "--slug", "my-custom-slug",
         )
         assert res.exit_code == 0, res.output
@@ -720,7 +735,7 @@ class TestBacklogCLI:
         assert res.exit_code == 0, res.output
         item_path = _parse_json(res.output)["file_path"]
 
-        res = _run(runner, project_dir, "backlog", "promote", item_path)
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", item_path)
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
         assert data["status"] == "promoted"

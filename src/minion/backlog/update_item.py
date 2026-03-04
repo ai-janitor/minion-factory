@@ -26,6 +26,9 @@ def update_item(
         return {"error": f"Invalid priority '{priority}'. Valid: {', '.join(sorted(VALID_PRIORITIES))}"}
     if status is not None and status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Valid: {', '.join(sorted(VALID_STATUSES))}"}
+    # Block status=promoted via update — must use 'backlog promote' command instead
+    if status == "promoted":
+        return {"error": "Cannot set status to 'promoted' via update. Use 'minion backlog promote' instead — it requires lead auth and creates the requirement entry."}
 
     conn = get_db() if db is None else __import__("sqlite3").connect(db)
     if db is not None:

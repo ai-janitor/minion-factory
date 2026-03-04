@@ -25,24 +25,32 @@ def promote(
     db: str | None = None,
     slug: str | None = None,
     flow: str = "requirement",
+    agent_name: str | None = None,
 ) -> dict[str, Any]:
     """Promote an open backlog item to a requirement.
 
     file_path is relative to .work/backlog/ (e.g. 'bugs/preview-final-word-loss').
     flow selects the requirement lifecycle DAG — 'requirement' (default, 9 stages)
     or 'requirement-lite' (4 stages: seed → decomposing → tasked → completed).
+    agent_name is required — only lead class agents can promote.
 
     Steps:
-    1. Verify backlog item exists and status=open.
-    2. Infer origin (bug|feature) from backlog type if not provided.
-    3. Determine requirement target path: {origin}s/{slug} under .work/requirements/.
-    4. Create the requirement folder.
-    5. Copy the backlog README.md into the requirement folder.
-    6. Register the requirement in the DB with the selected flow_type.
-    7. Update backlog row: status=promoted, promoted_to=requirement_path, updated_at.
-    8. Append to the backlog README.md Outcome section.
-    9. Return summary dict.
+    1. Auth gate: verify agent exists and is lead class.
+    2. Verify backlog item exists and status=open.
+    3. Infer origin (bug|feature) from backlog type if not provided.
+    4. Determine requirement target path: {origin}s/{slug} under .work/requirements/.
+    5. Create the requirement folder.
+    6. Copy the backlog README.md into the requirement folder.
+    7. Register the requirement in the DB with the selected flow_type.
+    8. Update backlog row: status=promoted, promoted_to=requirement_path, updated_at.
+    9. Append to the backlog README.md Outcome section.
+    10. Inject class duties reminder from _agent-classes.yaml.
+    11. Return summary dict.
     """
+    # --- Auth gate: only lead class can promote ---
+    if not agent_name:
+        raise ValueError("--agent is required for backlog promote.")
+
     file_path = file_path.strip("/")
 
     # --- Resolve paths ---
@@ -53,6 +61,23 @@ def promote(
 
     backlog_item_dir = os.path.join(backlog_root, file_path)
     backlog_readme = os.path.join(backlog_item_dir, "README.md")
+
+    # --- Verify agent is lead class ---
+    conn = get_db()
+    try:
+        agent_row = conn.execute(
+            "SELECT agent_class FROM agents WHERE name = ?", (agent_name,)
+        ).fetchone()
+        if not agent_row:
+            raise ValueError(f"Agent '{agent_name}' not registered.")
+        agent_class = agent_row["agent_class"]
+        if agent_class != "lead":
+            raise ValueError(
+                f"BLOCKED: Agent '{agent_name}' (class '{agent_class}') cannot promote. "
+                f"Only lead class can promote backlog items."
+            )
+    finally:
+        conn.close()
 
     # --- Verify backlog item exists and is open ---
     conn = get_db()
@@ -138,7 +163,15 @@ def promote(
         except Exception:
             dag_guide = f"(flow '{flow}' — run `minion flow show {flow}` for stages)"
 
-        return {
+        # Load class duties from _agent-classes.yaml
+        duties_text = ""
+        try:
+            from minion.tasks.agent_classes import get_class_duties
+            duties_text = get_class_duties(agent_class)
+        except Exception:
+            duties_text = ""
+
+        result: dict[str, Any] = {
             "status": "promoted",
             "backlog": {
                 "id": backlog_id,
@@ -155,5 +188,8 @@ def promote(
                 f"Decompose: minion req decompose --path {req_rel_path} --by <agent> --inline '<yaml>'"
             ),
         }
+        if duties_text:
+            result["duties_reminder"] = duties_text
+        return result
     finally:
         conn.close()

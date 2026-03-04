@@ -27,6 +27,14 @@ classes:
       - gemini-pro
       - gemini-1.5-pro
       - gemini-2.0-pro
+    duties: >
+      You own this item through the FULL DAG lifecycle. Your duties:
+      1. Create a task (create-task) and assign it to the right class.
+      2. Enforce DAG stages — no skipping, no shortcuts.
+      3. Ensure qe/verify stages are completed by eligible classes (builder, recon, auditor) — NOT the implementer.
+      4. Track progress via sitrep and task lineage.
+      5. Close the task only after all stages are satisfied.
+      You are accountable for separation of duties. Do not self-close review or test stages.
 
   coder:
     capabilities: [code, engineer, monitor, memory]
@@ -38,18 +46,31 @@ classes:
       - gemini-pro
       - gemini-1.5-pro
       - gemini-2.0-pro
+    duties: >
+      Implement code changes per task spec. Submit results via submit-result.
+      Complete your phase via complete-task — the DAG routes to the next stage.
+      Do NOT self-review or self-test. Those stages require a different class.
 
   builder:
     capabilities: [code, test, build, engineer, monitor, memory]
     models: []
+    duties: >
+      Build, test, and verify implementations. You are eligible for qe and verify stages.
+      Run tests, validate builds, and report pass/fail honestly.
 
   oracle:
     capabilities: [review, monitor, memory]
     models: []
+    duties: >
+      Review code and designs for correctness. You are eligible for review stages.
+      Provide clear pass/fail verdicts with actionable notes.
 
   recon:
     capabilities: [review, test, investigate, monitor, memory]
     models: []
+    duties: >
+      Investigate, research, and review. You are eligible for qe, review, and verify stages.
+      Write findings, propose strategies, and validate implementations.
 
   planner:
     capabilities: [plan, engineer, monitor, memory]
@@ -61,7 +82,13 @@ classes:
       - gemini-pro
       - gemini-1.5-pro
       - gemini-2.0-pro
+    duties: >
+      Design architecture and decompose requirements into tasks.
+      Plan before implementing. Stub the filesystem structure first.
 
   auditor:
     capabilities: [review, test, monitor, memory]
     models: []
+    duties: >
+      Audit code for correctness, security, and compliance. You are eligible for qe, review, and verify stages.
+      Report issues honestly. Do not rubber-stamp.

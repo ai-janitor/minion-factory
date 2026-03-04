@@ -109,14 +109,15 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("promote")
     @click.argument("path", required=False, default=None)
+    @click.option("--agent", required=True, help="Agent performing the promotion (must be lead class)")
     @click.option("--id", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
     @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
     @click.option("--slug", default=None, help="Override the auto-derived requirement slug")
     @click.option("--flow", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
                   help="Lifecycle flow: 'requirement' (full 9-stage, default) or 'requirement-lite' (4-stage shortcut)")
     @click.pass_context
-    def backlog_promote(ctx: click.Context, path: str | None, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
-        """Promote a backlog item into the requirement pipeline."""
+    def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
+        """Promote a backlog item into the requirement pipeline. Requires lead class."""
         if not path and not item_id:
             click.echo(json.dumps({"error": "Provide a path argument or --id <N>."}, indent=2))
             raise SystemExit(1)
@@ -129,7 +130,7 @@ def register_commands(cli: click.Group) -> None:
             path = item["file_path"]
         from minion.backlog import promote as _promote
         try:
-            result = _promote(path, origin, slug=slug, flow=flow)
+            result = _promote(path, origin, slug=slug, flow=flow, agent_name=agent)
         except ValueError as e:
             click.echo(json.dumps({"error": str(e)}, indent=2))
             sys.exit(1)

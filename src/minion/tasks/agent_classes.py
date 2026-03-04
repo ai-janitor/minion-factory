@@ -91,3 +91,15 @@ def classes_with(capability: str) -> set[str]:
     if capability not in valid:
         raise ValueError(f"Unknown capability {capability!r}. Valid: {sorted(valid)}")
     return {cls for cls, cls_caps in caps.items() if capability in cls_caps}
+
+
+def get_class_duties(class_name: str) -> str:
+    """Return the duties text for a class from _agent-classes.yaml.
+
+    Returns empty string if class not found or no duties defined.
+    """
+    if _REGISTRY is None:
+        _load()
+    classes = _REGISTRY.get("classes", {})  # type: ignore[union-attr]
+    cfg = classes.get(class_name, {})
+    return (cfg.get("duties") or "").strip()
