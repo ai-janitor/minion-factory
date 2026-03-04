@@ -68,14 +68,15 @@ def _is_pid_alive(pid: int) -> bool:
         return False
 
 
-def start(port: int = 8377) -> dict:
+def start(port: int = 8377, token: str = "") -> dict:
     """Start the API server as a background daemon.
 
     PSEUDO: Check if already running (state file + PID alive) → error if so
     PSEUDO: Auto-generate TLS cert if missing (reduce first-time friction)
     PSEUDO: Fork child process via subprocess.Popen with start_new_session=True
     PSEUDO: Child runs `python -m minion.api.runner --port <port>`
-    PSEUDO: Write state file with pid, port, started_at, tls_enabled
+    PSEUDO: Pass token to child via MINION_CLUSTER_TOKEN env var
+    PSEUDO: Write state file with pid, port, started_at, tls_enabled, token
     PSEUDO: Return status dict
     """
     # Check if already running
@@ -107,10 +108,14 @@ def start(port: int = 8377) -> dict:
     # Runner is a separate module that imports and calls serve()
     log_fh = open(log_path, "a")  # noqa: SIM115
     env = os.environ.copy()
+    # Pass token to child process via env var
+    if token:
+        env["MINION_CLUSTER_TOKEN"] = token
     proc = subprocess.Popen(
         [sys.executable, "-m", "minion.api.runner", "--port", str(port)],
         stdout=log_fh,
         stderr=log_fh,
+        env=env,
         start_new_session=True,
     )
     # Don't close log_fh — child inherits the fd.
@@ -129,6 +134,7 @@ def start(port: int = 8377) -> dict:
         "port": port,
         "started_at": now_iso(),
         "tls_enabled": tls_enabled,
+        "token": token,
     }
     _write_state(state)
 
@@ -233,20 +239,22 @@ def status() -> dict:
     }
 
 
-def restart(port: int | None = None) -> dict:
+def restart(port: int | None = None, token: str | None = None) -> dict:
     """Restart the API server daemon.
 
-    PSEUDO: Read current port from state (unless overridden)
-    PSEUDO: stop() → start(port)
+    PSEUDO: Read current port and token from state (unless overridden)
+    PSEUDO: stop() → start(port, token)
     """
     state = _read_state()
     if port is None:
         port = state.get("port", 8377) if state else 8377
+    if token is None:
+        token = state.get("token", "") if state else ""
 
     stop_result = stop()
     # Brief pause for port release
     time.sleep(0.5)
-    start_result = start(port=port)
+    start_result = start(port=port, token=token or "")
 
     return {
         "stop": stop_result,
