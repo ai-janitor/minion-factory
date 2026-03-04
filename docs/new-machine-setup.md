@@ -16,9 +16,11 @@ The Stop hook enforces polling discipline — agents cannot go idle when message
 minion install-hooks
 ```
 
-This adds a `Stop` hook entry to `~/.claude/settings.json` pointing to `scripts/poll-on-stop.sh`. Safe to run multiple times — it merges without clobbering existing hooks.
+This copies `poll-on-stop.sh` to `~/.minion/hooks/` and adds a `Stop` hook entry to `~/.claude/settings.json` pointing there. Safe to run multiple times — replaces old entries, doesn't clobber other hooks.
 
-**What it does:** After every agent response, the hook checks the agent's inbox. If unread messages exist, it blocks the stop and forces the agent to poll. This makes the poll loop mechanical instead of relying on agents remembering.
+**What it does:** After every agent response, the hook blocks the stop and forces the agent back into `minion poll`. The agent never goes idle — it's always either working or blocked inside poll waiting for the next message.
+
+**Re-run after updates:** If the hook script changes (bug fixes, behavior changes), run `minion install-hooks` again to copy the updated version to `~/.minion/hooks/`.
 
 **Gating:** Only activates when `MINION_AGENT_NAME` env var is set. Regular (non-agent) claude-code sessions are unaffected.
 
@@ -40,7 +42,7 @@ cat ~/.claude/settings.json | jq '.hooks.Stop'
 
 - **Kill switch:** Set `MINION_HOOKS_BYPASS=1` env var to disable all hook enforcement instantly.
 - **Loop prevention:** The `stop_hook_active` field prevents infinite loops — hooks allow stop on the second cycle.
-- **Fail-open:** If the `minion` CLI fails or inbox check errors, the hook allows the stop (never bricks the session).
+- **Fail-open:** If the hook script errors, Claude Code allows the stop (never bricks the session).
 
 ## Environment Variables
 

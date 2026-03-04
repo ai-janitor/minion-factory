@@ -1,10 +1,10 @@
 #!/bin/bash
 # poll-on-stop.sh — Claude Code Stop hook that enforces polling discipline
 #
-# Purpose: When a minion agent finishes responding, check if there are unread
-#          messages in their inbox. If yes, block the stop and force the agent
-#          to poll. This makes polling mechanical — agents cannot go idle when
-#          messages are waiting.
+# Purpose: When a minion agent finishes responding, ALWAYS block the stop and
+#          force the agent back into minion poll. The agent never goes idle —
+#          it's always either working or blocked inside poll waiting for the
+#          next message.
 #
 # Hook type: Stop (fires when Claude finishes responding)
 # Can block: Yes — returns {"decision":"block","reason":"..."} to force continuation
@@ -21,9 +21,8 @@
 # PSEUDO: if MINION_HOOKS_BYPASS=1 → exit 0 (allow stop)
 # PSEUDO: if no MINION_AGENT_NAME → exit 0 (not a minion agent)
 # PSEUDO: if stop_hook_active=true → exit 0 (prevent infinite loop)
-# PSEUDO: count = minion check-inbox --agent $NAME --count-only
-# PSEUDO: if count > 0 → output {"decision":"block","reason":"..."}
-# PSEUDO: else → exit 0 (allow stop)
+# PSEUDO: ALWAYS block stop → force agent into minion poll
+# PSEUDO: agent never goes idle — poll blocks waiting for next message
 
 set -euo pipefail
 
@@ -54,37 +53,11 @@ if [ -n "$PROJECT_DIR" ]; then
     PROJECT_FLAG="-C $PROJECT_DIR"
 fi
 
-# Check inbox for unread messages via direct DB query (READ-ONLY — do not consume messages)
-# Using check-inbox would mark messages as read, eating them before the agent sees them.
-DB_PATH="$PROJECT_DIR/.work/minion.db"
-if [ ! -f "$DB_PATH" ]; then
-    exit 0  # No DB = no messages to check
-fi
-INBOX_COUNT=$(sqlite3 "$DB_PATH" \
-    "SELECT COUNT(*) FROM messages WHERE to_agent = '$AGENT_NAME' AND read_flag = 0;" 2>/dev/null) || INBOX_COUNT=0
-
-if [ "$INBOX_COUNT" -gt 0 ]; then
-    # Messages waiting — block the stop, force agent to poll
-    cat <<EOF
+# ALWAYS block the stop — force agent back into poll
+# Agent never goes idle. Poll blocks waiting for next message.
+cat <<EOF
 {
     "decision": "block",
-    "reason": "You have $INBOX_COUNT unread message(s) in your inbox. Run: minion -C $PROJECT_DIR poll --agent $AGENT_NAME"
+    "reason": "Run: minion -C $PROJECT_DIR poll --agent $AGENT_NAME"
 }
 EOF
-else
-    # Also check for open tasks assigned to this agent
-    TASK_COUNT=$(minion $PROJECT_FLAG task list 2>/dev/null \
-        | jq -r "[.tasks[] | select(.assigned_to == \"$AGENT_NAME\")] | length // 0" 2>/dev/null) || TASK_COUNT=0
-
-    if [ "$TASK_COUNT" -gt 0 ]; then
-        cat <<EOF
-{
-    "decision": "block",
-    "reason": "You have $TASK_COUNT open task(s) assigned to you. Run: minion -C $PROJECT_DIR poll --agent $AGENT_NAME"
-}
-EOF
-    else
-        # No messages, no tasks — allow stop
-        exit 0
-    fi
-fi
