@@ -1,10 +1,10 @@
 #!/bin/bash
 # poll-on-stop.sh — Claude Code Stop hook that enforces polling discipline
 #
-# Purpose: When a minion agent finishes responding, ALWAYS block the stop and
-#          force the agent back into minion poll. The agent never goes idle —
-#          it's always either working or blocked inside poll waiting for the
-#          next message.
+# Purpose: When a minion agent finishes responding, check if there are unread
+#          messages. If yes, block the stop and force the agent into poll.
+#          If inbox is empty, allow stop — poll is already running in background
+#          and will catch new messages.
 #
 # Hook type: Stop (fires when Claude finishes responding)
 # Can block: Yes — returns {"decision":"block","reason":"..."} to force continuation
@@ -21,8 +21,9 @@
 # PSEUDO: if MINION_HOOKS_BYPASS=1 → exit 0 (allow stop)
 # PSEUDO: if no MINION_AGENT_NAME → exit 0 (not a minion agent)
 # PSEUDO: if stop_hook_active=true → exit 0 (prevent infinite loop)
-# PSEUDO: ALWAYS block stop → force agent into minion poll
-# PSEUDO: agent never goes idle — poll blocks waiting for next message
+# PSEUDO: check inbox for unread messages
+# PSEUDO: if inbox empty → exit 0 (allow stop, poll catches new messages)
+# PSEUDO: if inbox has messages → block stop, force agent into poll
 
 set -euo pipefail
 
@@ -66,11 +67,33 @@ if [ -z "$PROJECT_DIR" ]; then
     PROJECT_DIR="$(pwd)"
 fi
 
-# ALWAYS block the stop — force agent back into poll
-# Agent never goes idle. Poll blocks waiting for next message.
+# Check inbox for unread messages — if empty, allow stop (poll catches new messages)
+# Use direct sqlite3 for speed — avoid full CLI overhead
+DB_PATH="$PROJECT_DIR/.work/minion.db"
+if [ -f "$DB_PATH" ]; then
+    # Count unread direct messages + unread broadcasts
+    UNREAD=$(sqlite3 "$DB_PATH" "
+        SELECT COUNT(*) FROM messages WHERE to_agent = '$AGENT_NAME' AND read_flag = 0
+    " 2>/dev/null || echo "0")
+
+    UNREAD_BROADCAST=$(sqlite3 "$DB_PATH" "
+        SELECT COUNT(*) FROM messages
+        WHERE to_agent = 'all' AND from_agent != '$AGENT_NAME'
+        AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = '$AGENT_NAME')
+    " 2>/dev/null || echo "0")
+
+    TOTAL_UNREAD=$((UNREAD + UNREAD_BROADCAST))
+
+    # Inbox empty → allow stop (poll is running and will catch new messages)
+    if [ "$TOTAL_UNREAD" -eq 0 ]; then
+        exit 0
+    fi
+fi
+
+# Unread messages exist — block stop, force agent into poll
 cat <<EOF
 {
     "decision": "block",
-    "reason": "Run: minion -C $PROJECT_DIR poll --agent $AGENT_NAME"
+    "reason": "You have $TOTAL_UNREAD unread message(s). Run: minion -C $PROJECT_DIR poll --agent $AGENT_NAME"
 }
 EOF
