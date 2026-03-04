@@ -96,6 +96,10 @@ def init_db(db_path: str) -> None:
     Safe to call on existing DBs — uses CREATE TABLE IF NOT EXISTS.
     For existing DBs that predate the expanded schema, call migrate_db() after.
     """
+    # PSEUDO: conn = sqlite3.connect(db_path)
+    # PSEUDO: conn.execute("PRAGMA journal_mode=WAL")
+    # PSEUDO: conn.executescript(SCHEMA_SQL)
+    # PSEUDO: conn.commit(); conn.close()
     conn = sqlite3.connect(db_path, timeout=5)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
@@ -111,6 +115,12 @@ def migrate_db(db_path: str) -> list[str]:
     Uses ALTER TABLE ADD COLUMN in a try/except per column — SQLite raises
     'duplicate column name' if it already exists, which we catch and skip.
     """
+    # PSEUDO: conn = sqlite3.connect(db_path)
+    # PSEUDO: added = []
+    # PSEUDO: for (col_name, col_def) in MIGRATION_COLUMNS:
+    #   try: conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_def}")
+    #   except sqlite3.OperationalError: pass  # column already exists
+    # PSEUDO: conn.commit(); conn.close(); return added
     conn = sqlite3.connect(db_path, timeout=5)
     added = []
     for col_name, col_def in MIGRATION_COLUMNS:

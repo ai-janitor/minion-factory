@@ -56,6 +56,13 @@ def get_project_db(project_path: str) -> sqlite3.Connection | None:
     Returns:
         sqlite3.Connection in read-only mode, or None if DB not found.
     """
+    # PSEUDO: if not os.path.exists(db_file) → return None
+    # PSEUDO: with _cache_lock:
+    #   if project_path in _cache and not expired → update last_accessed, return conn
+    #   if expired → close and remove from cache, fall through
+    #   if len(_cache) >= MAX → evict LRU (oldest last_accessed)
+    #   open new read-only connection (uri=True, ?mode=ro)
+    #   cache and return
     db_file = os.path.join(project_path, ".work", "minion.db")
     if not os.path.exists(db_file):
         return None
@@ -92,6 +99,7 @@ def get_project_db(project_path: str) -> sqlite3.Connection | None:
 
 def close_all() -> None:
     """Close all cached connections. Call on server shutdown."""
+    # PSEUDO: with _cache_lock: close all conns, clear cache
     with _cache_lock:
         for entry in _cache.values():
             try:
@@ -107,6 +115,7 @@ def evict_expired() -> int:
     Returns number of evicted connections. Can be called periodically
     from a maintenance thread or on each request.
     """
+    # PSEUDO: with _cache_lock: find expired (now - last_accessed > TTL), close and remove
     now = time.monotonic()
     with _cache_lock:
         expired = [k for k, v in _cache.items()

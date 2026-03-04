@@ -51,6 +51,8 @@ class AuthMixin:
         Call at the top of do_GET/do_POST — if it returns False, the 401
         response has already been sent and the caller should return immediately.
         """
+        # PSEUDO: if check_token(dict(self.headers), self.token): return True
+        # PSEUDO: self._json_response(401, {"error": "Unauthorized"}); return False
         if check_token(dict(self.headers), self.token):
             return True
         self._json_response(401, {"error": "Unauthorized"})

@@ -34,6 +34,9 @@ def discover_projects(db_path: str, db_lock: threading.Lock | None = None) -> li
         List of dicts: [{"name": "minion-factory", "path": "/Users/.../minion-factory",
                          "has_db": True, "agent_count": 3}, ...]
     """
+    # PSEUDO: SELECT project_path, COUNT(*) FROM agents WHERE project_path IS NOT NULL GROUP BY project_path
+    # PSEUDO: for each row: name = basename(path), has_db = exists(.work/minion.db)
+    # PSEUDO: return list of {name, path, has_db, agent_count}
     def _query():
         conn = sqlite3.connect(db_path, timeout=5)
         conn.row_factory = sqlite3.Row
@@ -83,6 +86,7 @@ def resolve_project_path(db_path: str, project_name: str,
     Returns:
         Absolute project_path string, or None if not found/ambiguous.
     """
+    # PSEUDO: discover all projects, filter by name, return path if unique match
     projects = discover_projects(db_path, db_lock)
     matches = [p for p in projects if p["name"] == project_name]
     if len(matches) == 1:
