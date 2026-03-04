@@ -97,91 +97,73 @@ class NetworkClient:
         """Check if the network server is reachable."""
         return self._request("GET", "/health")
 
-    # --- Dashboard / project-scoped endpoints (stubs) ---
-    # Implementation order: after server-side handlers are built.
+    # --- Dashboard / project-scoped endpoints ---
     # Each method maps 1:1 to a server endpoint defined in handlers/.
 
     def list_projects(self) -> dict:
         """GET /projects — list all discovered projects."""
-        # PSEUDO: return self._request("GET", "/projects")
-        raise NotImplementedError
+        return self._request("GET", "/projects")
 
     def project_agents(self, project_name: str) -> dict:
         """GET /projects/{name}/agents — agents from project-local DB."""
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/agents")
-        raise NotImplementedError
+        return self._request("GET", f"/projects/{project_name}/agents")
 
-    def project_tasks(self, project_name: str, **filters) -> dict:
-        """GET /projects/{name}/tasks — tasks with optional filters.
-
-        Filters: status, assigned_to, limit, offset.
-        """
-        # PSEUDO: query_string = urlencode({k: v for k, v in filters.items() if v})
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/tasks?{query_string}")
-        raise NotImplementedError
+    def project_tasks(self, project_name: str, **filters: str) -> dict:
+        """GET /projects/{name}/tasks — tasks with optional filters."""
+        qs = _build_query_string(filters)
+        return self._request("GET", f"/projects/{project_name}/tasks{qs}")
 
     def task_lineage(self, project_name: str, task_id: int) -> dict:
         """GET /projects/{name}/tasks/{id}/lineage — task detail + status history."""
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/tasks/{task_id}/lineage")
-        raise NotImplementedError
+        return self._request("GET", f"/projects/{project_name}/tasks/{task_id}/lineage")
 
-    def project_messages(self, project_name: str, **filters) -> dict:
-        """GET /projects/{name}/messages — project-local messages.
-
-        Filters: from_agent, to_agent, limit.
-        """
-        # PSEUDO: query_string = urlencode({k: v for k, v in filters.items() if v})
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/messages?{query_string}")
-        raise NotImplementedError
+    def project_messages(self, project_name: str, **filters: str) -> dict:
+        """GET /projects/{name}/messages — project-local messages."""
+        qs = _build_query_string(filters)
+        return self._request("GET", f"/projects/{project_name}/messages{qs}")
 
     def project_raid_log(self, project_name: str) -> dict:
         """GET /projects/{name}/raid-log — raid log entries."""
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/raid-log")
-        raise NotImplementedError
+        return self._request("GET", f"/projects/{project_name}/raid-log")
 
     def project_flow(self, project_name: str, flow_type: str) -> dict:
         """GET /projects/{name}/flows/{type} — parsed flow DAG definition."""
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/flows/{flow_type}")
-        raise NotImplementedError
+        return self._request("GET", f"/projects/{project_name}/flows/{flow_type}")
 
-    def project_requirements(self, project_name: str, **filters) -> dict:
-        """GET /projects/{name}/requirements — requirements with stage tracking.
-
-        Filters: stage, flow_type.
-        """
-        # PSEUDO: query_string = urlencode({k: v for k, v in filters.items() if v})
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/requirements?{query_string}")
-        raise NotImplementedError
+    def project_requirements(self, project_name: str, **filters: str) -> dict:
+        """GET /projects/{name}/requirements — requirements with stage tracking."""
+        qs = _build_query_string(filters)
+        return self._request("GET", f"/projects/{project_name}/requirements{qs}")
 
     def requirement_lineage(self, project_name: str, requirement_id: int) -> dict:
         """GET /projects/{name}/requirements/{id}/lineage — full requirement DAG history."""
-        # PSEUDO: return self._request("GET",
-        #   f"/projects/{project_name}/requirements/{requirement_id}/lineage")
-        raise NotImplementedError
+        return self._request("GET", f"/projects/{project_name}/requirements/{requirement_id}/lineage")
 
-    def project_backlog(self, project_name: str, **filters) -> dict:
-        """GET /projects/{name}/backlog — backlog items.
-
-        Filters: priority, status.
-        """
-        # PSEUDO: query_string = urlencode({k: v for k, v in filters.items() if v})
-        # PSEUDO: return self._request("GET", f"/projects/{project_name}/backlog?{query_string}")
-        raise NotImplementedError
+    def project_backlog(self, project_name: str, **filters: str) -> dict:
+        """GET /projects/{name}/backlog — backlog items."""
+        qs = _build_query_string(filters)
+        return self._request("GET", f"/projects/{project_name}/backlog{qs}")
 
     def overview(self) -> dict:
         """GET /overview — system-wide summary across all projects."""
-        # PSEUDO: return self._request("GET", "/overview")
-        raise NotImplementedError
+        return self._request("GET", "/overview")
 
     def alerts(self) -> dict:
         """GET /alerts — actionable alerts for sys-lead monitoring."""
-        # PSEUDO: return self._request("GET", "/alerts")
-        raise NotImplementedError
+        return self._request("GET", "/alerts")
 
     def capacity(self) -> dict:
         """GET /capacity — machine capacity for agent spawning."""
-        # PSEUDO: return self._request("GET", "/capacity")
-        raise NotImplementedError
+        return self._request("GET", "/capacity")
+
+
+def _build_query_string(params: dict) -> str:
+    """Build ?key=val&... from non-empty params."""
+    from urllib.parse import urlencode
+    filtered = {k: v for k, v in params.items() if v is not None and v != ""}
+    if not filtered:
+        return ""
+    return "?" + urlencode(filtered)
 
 
 def _get_machine_id() -> str:

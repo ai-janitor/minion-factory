@@ -1,6 +1,8 @@
-"""API group — start/stop/status/restart the network API server daemon.
+"""API group — server daemon + remote client CLI.
 
-Manages the API server as a background service via ~/.minion/api-server.json state.
+Server: start/stop/status/restart the network API server daemon.
+Remote: set-remote + remote-* commands for operating against remote servers.
+Manages state via ~/.minion/api-server.json and ~/.minion/remotes.json.
 """
 
 from __future__ import annotations
@@ -18,22 +20,24 @@ def register_commands(cli: click.Group) -> None:
     @cli.group("api")
     @click.pass_context
     def api_group(ctx: click.Context) -> None:
-        """API server daemon — start/stop/status/restart.
+        """API server daemon + remote client.
 
         \b
-        Manages the network API server as a background service.
-        State tracked in ~/.minion/api-server.json.
-        Logs written to ~/.minion/api-server.log.
+        Server (this machine):
+          minion api start           # Start API server daemon
+          minion api stop / status / restart
 
         \b
-        Quick start:
-          minion api start           # Prompts for auth token
-          minion api status          # Check if running + health
-          minion api stop            # Graceful shutdown
+        Remote (other machines):
+          minion api set-remote https://host:8377   # Configure remote
+          minion api remote-status [--remote name]  # Health check
+          minion api remote-agents [--remote name]  # List agents
+          minion api remote-send / remote-inbox / remote-projects / ...
 
         \b
-        TLS is enabled by default — certs auto-generated on first start.
-        Set MINION_NETWORK_INSECURE=1 to run plain HTTP (dev only).
+        Named profiles for multi-machine setups:
+          minion api set-remote https://lab1:8377 --name lab1
+          minion api remote-agents --remote lab1
         """
         pass
 
@@ -146,3 +150,139 @@ def register_commands(cli: click.Group) -> None:
         from minion.api.daemon import restart
         result = restart(port=port)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    # --- Remote client commands ---
+
+    def _resolve_token(password_file: str | None, insecure: bool) -> str:
+        """Resolve token from -p file, env var, or getpass prompt.
+
+        --insecure makes token optional but doesn't ignore -p or env var.
+        """
+        import getpass
+        token = ""
+        if password_file:
+            with open(password_file) as f:
+                token = f.readline().strip()
+            if not token:
+                raise click.UsageError(f"Password file '{password_file}' is empty.")
+        if not token:
+            token = os.environ.get("MINION_CLUSTER_TOKEN", "")
+        if not token and not insecure:
+            token = getpass.getpass("Cluster auth token: ")
+        if not token and not insecure:
+            raise click.UsageError("Auth token required. Use -p <file>, env var, or prompt.")
+        return token
+
+    @api_group.command("set-remote")
+    @click.argument("url")
+    @click.option("--name", default="default", help="Profile name (default: 'default')")
+    @click.option("-p", "--password-file", default=None, type=click.Path(exists=True),
+                  help="Read token from file (first line)")
+    @click.option("--insecure", is_flag=True, help="Skip TLS verification + no auth")
+    @click.pass_context
+    def api_set_remote(ctx: click.Context, url: str, name: str,
+                       password_file: str | None, insecure: bool) -> None:
+        """Configure a remote API server connection.
+
+        \b
+        URL is the remote server address (e.g. https://machine-a:8377).
+        Token input: -p file > MINION_CLUSTER_TOKEN env > getpass prompt.
+        Use --name for multi-machine profiles.
+
+        \b
+        Examples:
+          minion api set-remote https://server:8377
+          minion api set-remote https://lab1:8377 --name lab1 -p ~/token.txt
+          minion api set-remote http://localhost:8377 --insecure
+        """
+        token = _resolve_token(password_file, insecure)
+        from minion.api.remotes import save_remote
+        result = save_remote(name=name, url=url, token=token, insecure=insecure)
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("list-remotes")
+    @click.pass_context
+    def api_list_remotes(ctx: click.Context) -> None:
+        """List configured remote profiles."""
+        from minion.api.remotes import list_remotes
+        result = list_remotes()
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remove-remote")
+    @click.argument("name")
+    @click.pass_context
+    def api_remove_remote(ctx: click.Context, name: str) -> None:
+        """Remove a remote profile."""
+        from minion.api.remotes import remove_remote
+        result = remove_remote(name)
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    # Helper: get remote client or error
+    def _get_remote(ctx: click.Context, remote: str | None):
+        from minion.api.remotes import get_remote_client
+        client, err = get_remote_client(remote)
+        if err:
+            _output(err, ctx.obj["human"], ctx.obj["compact"])
+            raise SystemExit(1)
+        return client
+
+    @api_group.command("remote-status")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_status(ctx: click.Context, remote: str | None) -> None:
+        """Health check on remote API server."""
+        client = _get_remote(ctx, remote)
+        _output(client.health(), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-agents")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_agents(ctx: click.Context, remote: str | None) -> None:
+        """List agents on remote machine."""
+        client = _get_remote(ctx, remote)
+        _output(client.who(), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-send")
+    @click.option("--from", "from_agent", required=True, help="Sender agent name")
+    @click.option("--to", "to_agent", required=True, help="Recipient agent name")
+    @click.option("--message", "-m", required=True, help="Message text")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_send(ctx: click.Context, from_agent: str, to_agent: str,
+                        message: str, remote: str | None) -> None:
+        """Send a message via remote API server."""
+        client = _get_remote(ctx, remote)
+        _output(client.send(from_agent, to_agent, message), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-inbox")
+    @click.option("--agent", required=True, help="Agent name")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_inbox(ctx: click.Context, agent: str, remote: str | None) -> None:
+        """Check inbox on remote machine."""
+        client = _get_remote(ctx, remote)
+        _output(client.check_inbox(agent), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-projects")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_projects(ctx: click.Context, remote: str | None) -> None:
+        """List projects on remote machine."""
+        client = _get_remote(ctx, remote)
+        _output(client.list_projects(), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-overview")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_overview(ctx: click.Context, remote: str | None) -> None:
+        """Cross-project overview from remote machine."""
+        client = _get_remote(ctx, remote)
+        _output(client.overview(), ctx.obj["human"], ctx.obj["compact"])
+
+    @api_group.command("remote-alerts")
+    @click.option("--remote", default=None, help="Remote profile name")
+    @click.pass_context
+    def api_remote_alerts(ctx: click.Context, remote: str | None) -> None:
+        """Alerts from remote machine."""
+        client = _get_remote(ctx, remote)
+        _output(client.alerts(), ctx.obj["human"], ctx.obj["compact"])
