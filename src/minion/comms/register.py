@@ -32,6 +32,7 @@ def register(
     description: str = "",
     transport: str = "terminal",
     crew: str = "",
+    scope: str = "project",
 ) -> dict[str, object]:
     if transport not in ("terminal", "daemon", "daemon-ts"):
         return {"error": f"Invalid transport '{transport}'. Must be 'terminal', 'daemon', or 'daemon-ts'."}
@@ -48,18 +49,19 @@ def register(
     try:
         cursor.execute(
             """INSERT INTO agents
-                (name, agent_class, model, registered_at, last_seen, description, status, transport)
-            VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?)
+                (name, agent_class, model, registered_at, last_seen, description, status, transport, scope_mode)
+            VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 last_seen        = excluded.last_seen,
                 agent_class      = excluded.agent_class,
                 model            = COALESCE(NULLIF(excluded.model, ''), agents.model),
                 description      = COALESCE(NULLIF(excluded.description, ''), agents.description),
                 transport        = excluded.transport,
+                scope_mode       = excluded.scope_mode,
                 status           = 'waiting for work',
                 hp_alerts_fired  = NULL
             """,
-            (agent_name, agent_class, model or None, now, now, description or None, transport),
+            (agent_name, agent_class, model or None, now, now, description or None, transport, scope),
         )
 
         # Auto-mark old broadcasts as read
@@ -95,8 +97,8 @@ def register(
                         }
                 coord.execute(
                     """INSERT INTO agents
-                        (name, agent_class, model, project_path, registered_at, last_seen, last_active, description, status, transport)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting for work', ?)
+                        (name, agent_class, model, project_path, registered_at, last_seen, last_active, description, status, transport, scope_mode)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?)
                     ON CONFLICT(name) DO UPDATE SET
                         last_seen     = excluded.last_seen,
                         last_active   = excluded.last_active,
@@ -105,9 +107,10 @@ def register(
                         project_path  = excluded.project_path,
                         description   = COALESCE(NULLIF(excluded.description, ''), agents.description),
                         transport     = excluded.transport,
+                        scope_mode    = excluded.scope_mode,
                         status        = 'waiting for work'
                     """,
-                    (agent_name, agent_class, model or None, project_path, now, now, now, description or None, transport),
+                    (agent_name, agent_class, model or None, project_path, now, now, now, description or None, transport, scope),
                 )
                 coord.commit()
             finally:

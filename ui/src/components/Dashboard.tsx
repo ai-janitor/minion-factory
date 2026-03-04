@@ -1,4 +1,4 @@
-// Main dashboard layout — tabs for Pipeline, Comms, Logs, Sprint views
+// Main dashboard layout — tabs for sys-lead operational views + legacy project views
 // Agent panel always visible at top; main content area switches by tab
 import TaskBoard from "./TaskBoard"
 import RaidLog from "./RaidLog"
@@ -6,6 +6,11 @@ import AgentLogs from "./AgentLogs"
 import SprintBoard from "./SprintBoard"
 import AgentPanel from "./AgentPanel"
 import MessageFeed from "./MessageFeed"
+import SystemOverview from "./SystemOverview"
+import RequirementTracker from "./RequirementTracker"
+import CrossProjectAgentMap from "./CrossProjectAgentMap"
+import AlertPanel from "./AlertPanel"
+import BacklogPipeline from "./BacklogPipeline"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function Dashboard() {
@@ -25,15 +30,45 @@ export default function Dashboard() {
         </section>
 
         {/* Main tabbed content area */}
-        <Tabs defaultValue="tasks" className="flex-1">
+        <Tabs defaultValue="overview" className="flex-1">
           <TabsList className="mb-3 flex-wrap">
-            <TabsTrigger value="tasks">Pipeline</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="requirements">Requirements</TabsTrigger>
+            <TabsTrigger value="agents-map">Agent Map</TabsTrigger>
+            <TabsTrigger value="alerts">Alerts</TabsTrigger>
+            <TabsTrigger value="backlog">Backlog</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="messages">Comms</TabsTrigger>
             <TabsTrigger value="logs">Logs</TabsTrigger>
             <TabsTrigger value="sprint">Sprint</TabsTrigger>
           </TabsList>
 
-          {/* Kanban board */}
+          {/* System Overview */}
+          <TabsContent value="overview" className="mt-0">
+            <SystemOverview />
+          </TabsContent>
+
+          {/* Requirement Tracker */}
+          <TabsContent value="requirements" className="mt-0">
+            <RequirementTracker />
+          </TabsContent>
+
+          {/* Cross-Project Agent Map */}
+          <TabsContent value="agents-map" className="mt-0">
+            <CrossProjectAgentMap />
+          </TabsContent>
+
+          {/* Alert Panel */}
+          <TabsContent value="alerts" className="mt-0">
+            <AlertPanel />
+          </TabsContent>
+
+          {/* Backlog Pipeline */}
+          <TabsContent value="backlog" className="mt-0">
+            <BacklogPipeline />
+          </TabsContent>
+
+          {/* Task Kanban board */}
           <TabsContent value="tasks" className="mt-0">
             <TaskBoard />
           </TabsContent>

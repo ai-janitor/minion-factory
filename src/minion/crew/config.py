@@ -29,6 +29,7 @@ class AgentConfig:
     skills: tuple[str, ...] = ()
     self_dismiss: bool = False
     capabilities: tuple[str, ...] = ()
+    scope: str = "project"
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
             skills=skills,
             self_dismiss=bool(item.get("self_dismiss", False)),
             capabilities=caps,
+            scope=str(item.get("scope", "project")),
         )
 
     return SwarmConfig(
@@ -212,4 +214,5 @@ def get_agent_prompt(profile_name: str, crew_name: str) -> dict[str, Any]:
         "allowed_tools": agent.allowed_tools,
         "permission_mode": agent.permission_mode,
         "capabilities": list(agent.capabilities),
+        "scope": agent.scope,
     }

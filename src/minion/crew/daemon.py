@@ -27,6 +27,8 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
 
     resolved_db = db_path or str(cfg.comms_db)
     env = {**os.environ, "MINION_DB_PATH": resolved_db}
+    env["MINION_AGENT_NAME"] = agent_name
+    env["MINION_PROJECT_DIR"] = str(cfg.comms_db.parent.parent)  # .work/minion.db → project root
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
 

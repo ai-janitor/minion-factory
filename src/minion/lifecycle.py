@@ -1,14 +1,110 @@
-"""Lifecycle — cold_start, fenix_down, debrief, end_session."""
+"""Lifecycle — cold_start, refresh, fenix_down, debrief, end_session."""
 
 from __future__ import annotations
 
 import json
 import os
+import sqlite3
 from typing import Any
 
 from minion.auth import CLASS_BRIEFING_FILES, get_tools_for_class
 from minion.db import get_db, now_iso
 from minion.fs import read_content_file
+
+
+def _gather_operational_state(agent_name: str, cursor: sqlite3.Cursor) -> dict[str, Any]:
+    """Gather operational state for an agent — shared by cold_start() and refresh().
+
+    Returns dict with: open_tasks (with DAG position), file_claims, file_waitlist,
+    hp, staleness, inbox summary, interrupt/retire flags.
+    Read-only — no side effects on the DB.
+    """
+    result: dict[str, Any] = {}
+
+    # Open tasks — enriched with DAG position
+    cursor.execute(
+        "SELECT * FROM tasks WHERE status IN ('open', 'assigned', 'in_progress') ORDER BY created_at DESC"
+    )
+    open_tasks = []
+    for row in cursor.fetchall():
+        task = dict(row)
+        try:
+            from minion.tasks.loader import load_flow
+            flow_type = task.get("flow_type") or task.get("task_type", "bugfix")
+            flow = load_flow(flow_type)
+            task["dag_position"] = flow.render_dag(task["status"])
+        except Exception:
+            pass
+        open_tasks.append(task)
+    result["open_tasks"] = open_tasks
+
+    # File claims owned by this agent
+    cursor.execute(
+        "SELECT file_path, claimed_at FROM file_claims WHERE agent_name = ?",
+        (agent_name,),
+    )
+    result["file_claims"] = [dict(row) for row in cursor.fetchall()]
+
+    cursor.execute(
+        "SELECT file_path, added_at FROM file_waitlist WHERE agent_name = ?",
+        (agent_name,),
+    )
+    result["file_waitlist"] = [dict(row) for row in cursor.fetchall()]
+
+    # HP and staleness from agent row
+    cursor.execute("SELECT * FROM agents WHERE name = ?", (agent_name,))
+    full_row = cursor.fetchone()
+    if full_row:
+        fr = dict(full_row)
+        result["hp"] = {
+            "hp_turn_input": fr.get("hp_turn_input"),
+            "hp_tokens_limit": fr.get("hp_tokens_limit"),
+            "hp_updated_at": fr.get("hp_updated_at"),
+        }
+        result["staleness"] = {
+            "context_updated_at": fr.get("context_updated_at"),
+            "last_inbox_check": fr.get("last_inbox_check"),
+            "context_summary": fr.get("context_summary"),
+        }
+
+    # Inbox summary — count + 3 most recent unread
+    cursor.execute(
+        "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
+        (agent_name,),
+    )
+    unread_count = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT id, from_agent, timestamp, content_file FROM messages "
+        "WHERE to_agent = ? AND read_flag = 0 ORDER BY timestamp DESC LIMIT 3",
+        (agent_name,),
+    )
+    recent_unread = []
+    for msg_row in cursor.fetchall():
+        msg = dict(msg_row)
+        content = read_content_file(msg.get("content_file"))
+        msg["preview"] = content[:100] + "..." if content and len(content) > 100 else content
+        msg.pop("content_file", None)
+        recent_unread.append(msg)
+    result["inbox"] = {"unread_count": unread_count, "recent": recent_unread}
+
+    # Interrupt/retire flags
+    cursor.execute(
+        "SELECT set_at, set_by FROM agent_interrupt WHERE agent_name = ?",
+        (agent_name,),
+    )
+    interrupt_row = cursor.fetchone()
+    if interrupt_row:
+        result["interrupt_flag"] = dict(interrupt_row)
+
+    cursor.execute(
+        "SELECT set_at, set_by FROM agent_retire WHERE agent_name = ?",
+        (agent_name,),
+    )
+    retire_row = cursor.fetchone()
+    if retire_row:
+        result["retire_flag"] = dict(retire_row)
+
+    return result
 
 
 def cold_start(agent_name: str) -> dict[str, object]:
@@ -42,12 +138,6 @@ def cold_start(agent_name: str) -> dict[str, object]:
             e["entry_content"] = read_content_file(e.get("entry_file"))
             raid_entries.append(e)
         result["raid_log"] = raid_entries
-
-        # Open tasks
-        cursor.execute(
-            "SELECT * FROM tasks WHERE status IN ('open', 'assigned', 'in_progress') ORDER BY created_at DESC"
-        )
-        result["open_tasks"] = [dict(row) for row in cursor.fetchall()]
 
         # Registered agents
         cursor.execute("SELECT name, agent_class, status, last_seen FROM agents ORDER BY last_seen DESC")
@@ -91,6 +181,44 @@ def cold_start(agent_name: str) -> dict[str, object]:
                 result["suggested_reading"] = doc_paths
         except Exception:
             pass
+
+        # Operational state (tasks, claims, HP, inbox, flags)
+        result.update(_gather_operational_state(agent_name, cursor))
+
+        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
+        conn.commit()
+
+        return result
+    finally:
+        conn.close()
+
+
+def refresh(agent_name: str) -> dict[str, object]:
+    """Lightweight read-only state snapshot for mid-session context refresh.
+
+    Unlike cold_start: no fenix_down consumption, no battle plan content,
+    no raid log, no briefing files. Just operational state.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    now = now_iso()
+    try:
+        cursor.execute("SELECT name, agent_class FROM agents WHERE name = ?", (agent_name,))
+        agent_row = cursor.fetchone()
+        if not agent_row:
+            return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
+
+        result: dict[str, Any] = {
+            "agent_name": agent_name,
+            "agent_class": agent_row["agent_class"],
+        }
+
+        # Registered agents (compact — just name, class, status)
+        cursor.execute("SELECT name, agent_class, status, last_seen FROM agents ORDER BY last_seen DESC")
+        result["agents"] = [dict(row) for row in cursor.fetchall()]
+
+        # Operational state (tasks, claims, HP, inbox, flags)
+        result.update(_gather_operational_state(agent_name, cursor))
 
         cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
         conn.commit()

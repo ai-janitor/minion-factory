@@ -13,6 +13,12 @@ New endpoint — not in ui/server.js.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse, parse_qs
+
+from minion.network.server import _DB_LOCK
+from minion.network.discovery import resolve_project_path
+from minion.network.project_db import get_project_db
+
 
 def register(router) -> None:
     """Register backlog endpoints with the router dispatch table.
@@ -20,15 +26,15 @@ def register(router) -> None:
     GET /projects/{name}/backlog → handle_list_backlog
     """
     # PSEUDO: router.add_get("/projects/{name}/backlog", handle_list_backlog)
-    pass
+    router.add_get("/projects/{name}/backlog", handle_list_backlog)
 
 
-def handle_list_backlog(handler, db_path: str, project_name: str = "", **kwargs) -> None:
+def handle_list_backlog(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/backlog — backlog items with priority/status filters.
 
     Query params: ?priority=high|medium|low, ?status=open|promoted|killed|deferred
     Returns: id, file_path, type, title, priority, status, source,
-             promoted_to, timestamps.
+             promoted_to, flow_hint, timestamps.
     """
     # PSEUDO: resolve project_name → project_path
     # PSEUDO: conn = project_db.get_project_db(project_path)
@@ -37,4 +43,35 @@ def handle_list_backlog(handler, db_path: str, project_name: str = "", **kwargs)
     # PSEUDO: if ?status filter → add WHERE status=?
     # PSEUDO: ORDER BY priority DESC, created_at ASC
     # PSEUDO: return {"backlog": [...]}
-    raise NotImplementedError
+    project_path = resolve_project_path(db_path, name, _DB_LOCK)
+    if not project_path:
+        handler._json_response(404, {"error": f"Project '{name}' not found"})
+        return
+    conn = get_project_db(project_path)
+    if conn is None:
+        handler._json_response(404, {"error": f"Project '{name}' has no .work/minion.db"})
+        return
+
+    parsed = urlparse(handler.path)
+    params = parse_qs(parsed.query)
+    priority_filter = params.get("priority", [None])[0]
+    status_filter = params.get("status", [None])[0]
+
+    query = "SELECT id, file_path, type, title, priority, status, source, promoted_to, flow_hint, created_by, created_at, updated_at FROM backlog"
+    conditions = []
+    bind = []
+    if priority_filter:
+        conditions.append("priority = ?")
+        bind.append(priority_filter)
+    if status_filter:
+        conditions.append("status = ?")
+        bind.append(status_filter)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, created_at ASC"
+
+    cursor = conn.execute(query, bind)
+    cols = [d[0] for d in cursor.description]
+    rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+    handler._json_response(200, {"backlog": rows})

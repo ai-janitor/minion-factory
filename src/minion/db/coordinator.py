@@ -23,11 +23,13 @@ def init_coordinator_db() -> None:
     conn = get_coordinator_db()
     try:
         conn.executescript(_COORDINATOR_SCHEMA_SQL)
-        # Migrate: add last_active if missing (older DBs)
+        # Migrate: add columns missing in older DBs
         cols = {row[1] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
         if "last_active" not in cols:
             conn.execute("ALTER TABLE agents ADD COLUMN last_active TEXT")
-            conn.commit()
+        if "scope_mode" not in cols:
+            conn.execute("ALTER TABLE agents ADD COLUMN scope_mode TEXT DEFAULT 'project'")
+        conn.commit()
     finally:
         conn.close()
 

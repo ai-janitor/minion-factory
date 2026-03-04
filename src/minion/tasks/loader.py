@@ -182,6 +182,7 @@ def _build_stage(name: str, cfg: dict) -> Stage:
         protocol=cfg.get("protocol"),
         context=cfg.get("context"),
         context_template=cfg.get("context_template"),
+        gate=cfg.get("gate"),
     )
 
 

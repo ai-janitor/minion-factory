@@ -21,6 +21,7 @@ class Stage:
     protocol: str | None = None
     context: str | None = None
     context_template: str | None = None
+    gate: str | None = None
 
 
 @dataclass
@@ -108,6 +109,38 @@ class TaskFlow:
         if stage is None:
             return False
         return stage.terminal
+
+    def has_gate(self, gate_name: str) -> bool:
+        """Check if any stage in the flow has a gate with the given name."""
+        return any(s.gate == gate_name for s in self.stages.values())
+
+    def past_gate(self, current_status: str, gate_name: str) -> bool:
+        """Check if current_status is at or past the stage with the given gate.
+
+        Walks the happy path from the gated stage. If current_status is the
+        gated stage or any stage reachable from it, returns True.
+        """
+        # Find the stage with this gate
+        gated_stage = None
+        for name, stage in self.stages.items():
+            if stage.gate == gate_name:
+                gated_stage = name
+                break
+        if gated_stage is None:
+            return True  # no gate = always past it
+
+        # Walk from gated stage forward — if current_status is reachable, we're past
+        reachable: set[str] = {gated_stage}
+        cursor = self.stages[gated_stage].next
+        visited: set[str] = set()
+        while cursor and cursor not in visited:
+            visited.add(cursor)
+            reachable.add(cursor)
+            stage = self.stages.get(cursor)
+            if stage is None:
+                break
+            cursor = stage.next
+        return current_status in reachable
 
     def render_dag(self, current_status: str | None = None) -> str:
         """Render DAG as inline text showing phases and current position.

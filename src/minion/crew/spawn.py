@@ -226,6 +226,7 @@ def spawn_party(
             model=cfg.get("model", ""),
             transport=transport,
             crew=crew,
+            scope=cfg.get("scope", "project"),
         )
         registered.add(name)
 

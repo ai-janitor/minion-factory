@@ -67,3 +67,48 @@ def register_commands(cli: click.Group) -> None:
         """Show queued messages waiting for network delivery."""
         from minion.network.outbox import outbox_count
         _output({"queued_messages": outbox_count()}, ctx.obj["human"], ctx.obj["compact"])
+
+    @network_group.command("projects")
+    @click.pass_context
+    def network_projects(ctx: click.Context) -> None:
+        """List all projects registered on the network server."""
+        from minion.network.client import get_client
+        net = get_client()
+        if not net.configured:
+            _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(net.list_projects(), ctx.obj["human"], ctx.obj["compact"])
+
+    @network_group.command("overview")
+    @click.pass_context
+    def network_overview(ctx: click.Context) -> None:
+        """Cross-project overview — agents, tasks, alerts aggregated."""
+        from minion.network.client import get_client
+        net = get_client()
+        if not net.configured:
+            _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(net.overview(), ctx.obj["human"], ctx.obj["compact"])
+
+    @network_group.command("alerts")
+    @click.pass_context
+    def network_alerts(ctx: click.Context) -> None:
+        """Cross-project alert feed — HP warnings, stale agents, blocked tasks."""
+        from minion.network.client import get_client
+        net = get_client()
+        if not net.configured:
+            _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(net.alerts(), ctx.obj["human"], ctx.obj["compact"])
+
+    @network_group.command("project-agents")
+    @click.option("--project", required=True, help="Project name")
+    @click.pass_context
+    def network_project_agents(ctx: click.Context, project: str) -> None:
+        """List agents in a specific project via the network server."""
+        from minion.network.client import get_client
+        net = get_client()
+        if not net.configured:
+            _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(net.project_agents(project), ctx.obj["human"], ctx.obj["compact"])

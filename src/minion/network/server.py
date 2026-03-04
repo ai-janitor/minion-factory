@@ -27,29 +27,11 @@ def _get_server_db(db_path: str) -> sqlite3.Connection:
 
 
 def _init_server_db(db_path: str) -> None:
-    conn = _get_server_db(db_path)
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS agents (
-            name         TEXT PRIMARY KEY,
-            agent_class  TEXT NOT NULL DEFAULT 'coder',
-            host         TEXT,
-            project_path TEXT,
-            machine_id   TEXT,
-            registered_at TEXT,
-            last_seen    TEXT
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_agent  TEXT NOT NULL,
-            to_agent    TEXT NOT NULL,
-            content     TEXT NOT NULL,
-            timestamp   TEXT NOT NULL,
-            read_flag   INTEGER DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS idx_msg_to_unread ON messages(to_agent, read_flag);
-    """)
-    conn.commit()
-    conn.close()
+    # PSEUDO: Use db_schema.init_db() for fresh installs, then migrate_to_composite_pk() for upgrades
+    from minion.network.db_schema import init_db, migrate_db, migrate_to_composite_pk
+    init_db(db_path)
+    migrate_db(db_path)
+    migrate_to_composite_pk(db_path)
 
 
 def _check_token(headers: dict, expected: str) -> bool:

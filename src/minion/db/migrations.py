@@ -391,6 +391,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         ("crew", "TEXT DEFAULT NULL"),
         ("session_id", "TEXT DEFAULT NULL"),
         ("rss_bytes", "INTEGER DEFAULT NULL"),
+        ("scope_mode", "TEXT DEFAULT 'project'"),
     ]:
         if col not in agent_cols:
             conn.execute(f"ALTER TABLE agents ADD COLUMN {col} {typedef}")

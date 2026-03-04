@@ -178,6 +178,7 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "sitrep":                (VALID_CLASSES, "Fused COP: agents + tasks + claims + flags"),
     "update-hp":             ({"lead"}, "Daemon-only: write observed HP to SQLite"),
     "cold-start":            (VALID_CLASSES, "Bootstrap into a session, get onboarding"),
+    "refresh":               (VALID_CLASSES, "Lightweight mid-session state refresh (no side effects)"),
     "fenix-down":            (VALID_CLASSES, "Dump session knowledge before context death"),
     "debrief":               ({"lead"}, "File a session debrief"),
     "end-session":           ({"lead"}, "End the current session"),
@@ -226,6 +227,57 @@ def get_agent_class() -> str:
     return os.environ.get("MINION_CLASS", "lead")
 
 
+def get_agent_scope() -> str | None:
+    """Look up scope_mode for current agent from coordinator DB.
+
+    Returns scope_mode string ('project', 'sys', 'cross-repo') or None
+    if agent name not set or not found in coordinator.
+    """
+    # PSEUDO: read MINION_AGENT_NAME env var
+    # PSEUDO: if not set → return None (not a registered agent session)
+    # PSEUDO: query coordinator.db for scope_mode
+    # PSEUDO: return scope_mode or 'project' as default
+    agent_name = os.environ.get("MINION_AGENT_NAME")
+    if not agent_name:
+        return None
+    try:
+        from minion.db import get_coordinator_db
+        coord = get_coordinator_db()
+        try:
+            row = coord.execute(
+                "SELECT scope_mode FROM agents WHERE name = ?", (agent_name,)
+            ).fetchone()
+            return row["scope_mode"] if row and row["scope_mode"] else "project"
+        finally:
+            coord.close()
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Scope-based permission narrowing
+# ---------------------------------------------------------------------------
+# Class gives max permissions; scope narrows them.
+# sys-lead is class=lead but can only read state + send global comms.
+
+SCOPE_RESTRICTIONS: dict[str, set[str]] = {
+    "sys": {
+        # sys-lead CANNOT do these repo-level operations
+        "task create", "task assign", "task close", "task pull", "task done",
+        "task complete-phase", "task block", "task reopen", "task update",
+        "task result", "task review", "task test", "task define",
+        "file claim", "file release", "file waitlist",
+        "war set-battle-plan",
+        "crew spawn-party", "crew stand-down", "crew retire",
+        "register", "deregister",
+        "comms send local",  # sys-lead uses global only
+    },
+    # project and cross-repo scopes have no additional restrictions
+    "project": set(),
+    "cross-repo": set(),
+}
+
+
 F = TypeVar("F", bound=Callable[..., object])
 
 
@@ -245,6 +297,37 @@ def require_class(*allowed: str) -> Callable[[F], F]:
                 click.echo(
                     f"BLOCKED: Class '{cls}' cannot run this command. "
                     f"Requires: {', '.join(sorted(allowed))}",
+                    err=True,
+                )
+                sys.exit(1)
+            return func(*args, **kwargs)
+        return wrapper  # type: ignore[return-value]
+    return decorator
+
+
+def require_scope(command_path: str) -> Callable[[F], F]:
+    """Decorator that gates a CLI command based on agent scope.
+
+    Reads MINION_AGENT_NAME → looks up scope_mode in coordinator.db →
+    checks if command_path is in SCOPE_RESTRICTIONS[scope]. If blocked,
+    prints error and exits 1. If no agent name set, allows through
+    (non-agent sessions are unrestricted).
+
+    command_path: e.g. "task create", "comms send local", "file claim"
+    """
+    def decorator(func: F) -> F:
+        import functools
+
+        @functools.wraps(func)
+        def wrapper(*args: object, **kwargs: object) -> object:
+            scope = get_agent_scope()
+            if scope is None:
+                return func(*args, **kwargs)  # no agent identity = no enforcement
+            blocked = SCOPE_RESTRICTIONS.get(scope, set())
+            if command_path in blocked:
+                click.echo(
+                    f"BLOCKED: Scope '{scope}' cannot run '{command_path}'. "
+                    f"This operation is restricted for {scope}-scoped agents.",
                     err=True,
                 )
                 sys.exit(1)

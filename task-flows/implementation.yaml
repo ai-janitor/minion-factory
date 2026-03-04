@@ -62,6 +62,7 @@ stages:
     description: Agent writes plan.md — files, functions, signatures, test strategy
     next: implement
     fail: spec
+    gate: scaffolding
     requires: [plan.md]
     context: specs/{task_id}-plan.md
     workers:

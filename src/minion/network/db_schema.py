@@ -1,15 +1,17 @@
-"""Network DB schema SQL + migration for 16 new agent columns.
+"""Network DB schema SQL + migration for composite PK and 16 new agent columns.
 
 Purpose: Define the full network coordinator DB schema and provide a migration
-         path from the current 7-column agents table to the expanded 23-column
-         version with identity, environment, trust, and routing fields.
+         path from the old name-only PK to composite (machine_id, project_path, name)
+         PK, plus the expanded column set with identity, environment, trust, routing.
 Rationale: The schema was previously inline in server.py's _init_server_db.
            Extracting it allows: (a) the migration to be tested independently,
            (b) other modules to reference column names, (c) future schema changes
-           to be versioned here.
-Responsibility: Schema DDL, migration SQL, schema version tracking.
-Organization: SCHEMA_SQL constant for fresh installs, MIGRATION_SQL for upgrades,
-              init_db() and migrate_db() functions.
+           to be versioned here. The composite PK prevents agent name collisions
+           across machines/projects in the network registry.
+Responsibility: Schema DDL, migration SQL, schema version tracking, PK migration.
+Organization: SCHEMA_SQL constant for fresh installs, MIGRATION_COLUMNS for column
+              additions, migrate_db() for column upgrades, migrate_to_composite_pk()
+              for the destructive PK change (create-copy-swap pattern).
 
 Implementation order: 1st (foundation — must exist before any DB reads/writes).
 """
@@ -22,12 +24,12 @@ import sqlite3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS agents (
-    -- Core (existing 7 columns)
-    name                  TEXT PRIMARY KEY,
+    -- Core identity (composite PK: machine_id/project_path/name)
+    name                  TEXT NOT NULL,
     agent_class           TEXT NOT NULL DEFAULT 'coder',
     host                  TEXT,
-    project_path          TEXT,
-    machine_id            TEXT,
+    project_path          TEXT NOT NULL DEFAULT 'unknown',
+    machine_id            TEXT NOT NULL DEFAULT 'unknown',
     registered_at         TEXT,
     last_seen             TEXT,
 
@@ -52,7 +54,9 @@ CREATE TABLE IF NOT EXISTS agents (
 
     -- Routing
     autonomous_delegation INTEGER DEFAULT 0,
-    heartbeat_latency_ms  INTEGER
+    heartbeat_latency_ms  INTEGER,
+
+    PRIMARY KEY (machine_id, project_path, name)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -106,6 +110,108 @@ def init_db(db_path: str) -> None:
     conn.executescript(SCHEMA_SQL)
     conn.commit()
     conn.close()
+
+
+def _has_composite_pk(conn: sqlite3.Connection) -> bool:
+    """Check if the agents table already uses the composite primary key.
+
+    Inspects the table_info pragma to determine if name is the sole PK
+    (old schema) or if machine_id, project_path, name form a composite PK.
+    """
+    # PSEUDO: cursor = conn.execute("PRAGMA table_info(agents)")
+    # PSEUDO: pk_cols = [row for row in cursor if row["pk"] > 0]
+    # PSEUDO: return len(pk_cols) == 3 (composite) vs 1 (name-only)
+    rows = conn.execute("PRAGMA table_info(agents)").fetchall()
+    pk_cols = [r for r in rows if r[5] > 0]  # column index 5 is 'pk'
+    return len(pk_cols) >= 3
+
+
+def migrate_to_composite_pk(db_path: str) -> dict:
+    """Migrate agents table from name-only PK to composite PK (machine_id, project_path, name).
+
+    Uses create-copy-swap pattern:
+    1. Check if already migrated (idempotent)
+    2. Create agents_new with composite PK
+    3. Copy all rows, backfilling NULL machine_id/project_path with 'unknown'
+    4. Drop old table, rename new table
+    5. Recreate indexes
+
+    Returns dict with migration status and row count.
+    """
+    # PSEUDO: conn = sqlite3.connect(db_path)
+    # PSEUDO: if _has_composite_pk(conn): return {"status": "already_migrated"}
+    # PSEUDO: get column list from PRAGMA table_info(agents)
+    # PSEUDO: CREATE TABLE agents_new with composite PK (same columns)
+    # PSEUDO: INSERT INTO agents_new SELECT ... COALESCE(machine_id, 'unknown'), COALESCE(project_path, 'unknown') ...
+    # PSEUDO: DROP TABLE agents; ALTER TABLE agents_new RENAME TO agents
+    # PSEUDO: return {"status": "migrated", "rows": count}
+    conn = sqlite3.connect(db_path, timeout=5)
+    conn.execute("PRAGMA busy_timeout=5000")
+
+    if _has_composite_pk(conn):
+        conn.close()
+        return {"status": "already_migrated"}
+
+    # Get existing column names
+    cols_info = conn.execute("PRAGMA table_info(agents)").fetchall()
+    col_names = [r[1] for r in cols_info]
+
+    # Build the new table DDL from SCHEMA_SQL (which has the composite PK)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS agents_new (
+            name                  TEXT NOT NULL,
+            agent_class           TEXT NOT NULL DEFAULT 'coder',
+            host                  TEXT,
+            project_path          TEXT NOT NULL DEFAULT 'unknown',
+            machine_id            TEXT NOT NULL DEFAULT 'unknown',
+            registered_at         TEXT,
+            last_seen             TEXT,
+            model                 TEXT,
+            capabilities          TEXT,
+            crew_name             TEXT,
+            local_lead            TEXT,
+            machine_specs         TEXT,
+            runtimes              TEXT,
+            os_platform           TEXT,
+            session_count         INTEGER,
+            compaction_count      INTEGER,
+            crash_rate            REAL,
+            total_input_tokens    INTEGER,
+            total_output_tokens   INTEGER,
+            last_task_completed_at TEXT,
+            autonomous_delegation INTEGER DEFAULT 0,
+            heartbeat_latency_ms  INTEGER,
+            PRIMARY KEY (machine_id, project_path, name)
+        );
+    """)
+
+    # Copy data, backfilling NULLs for machine_id and project_path
+    # Build SELECT list: for each column in agents_new, pull from old table
+    # with COALESCE for machine_id and project_path
+    new_cols_info = conn.execute("PRAGMA table_info(agents_new)").fetchall()
+    new_col_names = [r[1] for r in new_cols_info]
+
+    select_parts = []
+    for col in new_col_names:
+        if col == "machine_id":
+            select_parts.append("COALESCE(machine_id, 'unknown')")
+        elif col == "project_path":
+            select_parts.append("COALESCE(project_path, 'unknown')")
+        elif col in col_names:
+            select_parts.append(col)
+        else:
+            select_parts.append("NULL")
+
+    insert_sql = f"INSERT OR IGNORE INTO agents_new ({', '.join(new_col_names)}) SELECT {', '.join(select_parts)} FROM agents"
+    conn.execute(insert_sql)
+
+    row_count = conn.execute("SELECT COUNT(*) FROM agents_new").fetchone()[0]
+
+    conn.execute("DROP TABLE agents")
+    conn.execute("ALTER TABLE agents_new RENAME TO agents")
+    conn.commit()
+    conn.close()
+    return {"status": "migrated", "rows": row_count}
 
 
 def migrate_db(db_path: str) -> list[str]:

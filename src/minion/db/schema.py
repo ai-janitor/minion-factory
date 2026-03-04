@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS agents (
     hp_turn_output      INTEGER DEFAULT NULL,
     hp_updated_at       TEXT DEFAULT NULL,
     files_read          TEXT DEFAULT NULL,
-    hp_alerts_fired     TEXT DEFAULT NULL
+    hp_alerts_fired     TEXT DEFAULT NULL,
+    scope_mode          TEXT DEFAULT 'project'
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -198,6 +199,7 @@ CREATE TABLE IF NOT EXISTS agents (
     last_active     TEXT,
     description     TEXT DEFAULT NULL,
     status          TEXT DEFAULT 'waiting for work',
-    transport       TEXT DEFAULT 'terminal'
+    transport       TEXT DEFAULT 'terminal',
+    scope_mode      TEXT DEFAULT 'project'
 );
 """

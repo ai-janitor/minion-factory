@@ -12,6 +12,12 @@ Implementation order: 8th (depends on project_db + discovery — needs all proje
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from minion.network.server import _DB_LOCK
+from minion.network.discovery import discover_projects
+from minion.network.project_db import get_project_db
+
 
 def register(router) -> None:
     """Register overview endpoints with the router dispatch table.
@@ -21,7 +27,8 @@ def register(router) -> None:
     """
     # PSEUDO: router.add_get("/overview", handle_overview)
     # PSEUDO: router.add_get("/alerts", handle_alerts)
-    pass
+    router.add_get("/overview", handle_overview)
+    router.add_get("/alerts", handle_alerts)
 
 
 def handle_overview(handler, db_path: str, **kwargs) -> None:
@@ -44,10 +51,54 @@ def handle_overview(handler, db_path: str, **kwargs) -> None:
     #       read HP, compute tier (healthy/wounded/critical)
     #       count by agent_class
     # PSEUDO: agents.total = sum across all projects
-    # PSEUDO: alerts = _compute_alerts(projects, db_path) — reuse from handle_alerts
     # PSEUDO: return {"projects": N, "backlog": {...}, "requirements": {...},
-    #                 "tasks": {...}, "agents": {...}, "alerts": [...]}
-    raise NotImplementedError
+    #                 "tasks": {...}, "agents": {...}}
+    projects = discover_projects(db_path, _DB_LOCK)
+    result = {
+        "project_count": len(projects),
+        "projects": [p["name"] for p in projects],
+        "requirements": {},
+        "tasks": {},
+        "agents": {"total": 0, "by_class": {}, "by_hp_tier": {"healthy": 0, "wounded": 0, "critical": 0, "unknown": 0}},
+    }
+
+    for proj in projects:
+        conn = get_project_db(proj["path"])
+        if not conn:
+            continue
+        try:
+            # Requirement counts by stage
+            for row in conn.execute("SELECT stage, COUNT(*) as cnt FROM requirements GROUP BY stage").fetchall():
+                stage = row["stage"]
+                result["requirements"][stage] = result["requirements"].get(stage, 0) + row["cnt"]
+
+            # Task counts by status
+            for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
+                status = row["status"]
+                result["tasks"][status] = result["tasks"].get(status, 0) + row["cnt"]
+
+            # Agent counts
+            for row in conn.execute("SELECT agent_class, hp_turn_input, hp_tokens_limit FROM agents").fetchall():
+                result["agents"]["total"] += 1
+                cls = row["agent_class"] or "unknown"
+                result["agents"]["by_class"][cls] = result["agents"]["by_class"].get(cls, 0) + 1
+                # HP tier
+                raw = row["hp_turn_input"]
+                limit = row["hp_tokens_limit"]
+                if raw is not None and limit and limit > 0:
+                    hp_pct = max(0, 100 - (raw / limit * 100))
+                    if hp_pct > 60:
+                        result["agents"]["by_hp_tier"]["healthy"] += 1
+                    elif hp_pct > 30:
+                        result["agents"]["by_hp_tier"]["wounded"] += 1
+                    else:
+                        result["agents"]["by_hp_tier"]["critical"] += 1
+                else:
+                    result["agents"]["by_hp_tier"]["unknown"] += 1
+        except Exception:
+            pass
+
+    handler._json_response(200, result)
 
 
 def handle_alerts(handler, db_path: str, **kwargs) -> None:
@@ -73,14 +124,84 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
     #   SELECT agents with HP computation, WHERE hp_pct < 30
     #   for each → alerts.append({"type": "hp_critical", ...})
     #
-    #   # Unread messages (from network DB, not project DB)
+    #   # Unread messages (from project DB)
     #   SELECT messages WHERE read_flag=0 AND timestamp < now - 30min
     #   GROUP BY to_agent → alerts.append({"type": "unread_messages", ...})
     #
-    #   # Missing flow hints
-    #   SELECT backlog WHERE flow_hint IS NULL AND status='open'
-    #   for each → alerts.append({"type": "missing_flow_hint", ...})
-    #
     # PSEUDO: sort alerts by severity (critical > warning > info)
     # PSEUDO: return {"alerts": [...]}
-    raise NotImplementedError
+    projects = discover_projects(db_path, _DB_LOCK)
+    alerts = []
+    now = datetime.now()
+    terminal_stages = {"completed", "killed", "deferred"}
+
+    for proj in projects:
+        conn = get_project_db(proj["path"])
+        if not conn:
+            continue
+        project_name = proj["name"]
+        try:
+            # Stalled requirements (>1 hour in same stage, not terminal)
+            for row in conn.execute(
+                "SELECT id, file_path, stage, updated_at FROM requirements "
+                "WHERE stage NOT IN ('completed','killed','deferred')"
+            ).fetchall():
+                try:
+                    updated = datetime.fromisoformat(row["updated_at"])
+                    age_mins = (now - updated).total_seconds() / 60
+                    if age_mins > 60:
+                        alerts.append({
+                            "type": "stalled_requirement",
+                            "severity": "warning",
+                            "project": project_name,
+                            "requirement_id": row["id"],
+                            "file_path": row["file_path"],
+                            "stage": row["stage"],
+                            "stalled_minutes": round(age_mins),
+                        })
+                except (ValueError, TypeError):
+                    pass
+
+            # HP critical agents
+            for row in conn.execute(
+                "SELECT name, hp_turn_input, hp_tokens_limit FROM agents"
+            ).fetchall():
+                raw = row["hp_turn_input"]
+                limit = row["hp_tokens_limit"]
+                if raw is not None and limit and limit > 0:
+                    hp_pct = max(0, 100 - (raw / limit * 100))
+                    if hp_pct < 30:
+                        alerts.append({
+                            "type": "hp_critical",
+                            "severity": "critical",
+                            "project": project_name,
+                            "agent": row["name"],
+                            "hp_pct": round(hp_pct),
+                        })
+
+            # Unread messages >30min old
+            for row in conn.execute(
+                "SELECT to_agent, COUNT(*) as cnt, MIN(timestamp) as oldest "
+                "FROM messages WHERE read_flag = 0 GROUP BY to_agent"
+            ).fetchall():
+                try:
+                    oldest = datetime.fromisoformat(row["oldest"])
+                    age_mins = (now - oldest).total_seconds() / 60
+                    if age_mins > 30:
+                        alerts.append({
+                            "type": "unread_messages",
+                            "severity": "warning",
+                            "project": project_name,
+                            "agent": row["to_agent"],
+                            "count": row["cnt"],
+                            "oldest_minutes": round(age_mins),
+                        })
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            pass
+
+    # Sort: critical first, then warning
+    severity_order = {"critical": 0, "warning": 1, "info": 2}
+    alerts.sort(key=lambda a: severity_order.get(a.get("severity", "info"), 2))
+    handler._json_response(200, {"alerts": alerts})

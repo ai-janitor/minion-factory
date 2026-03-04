@@ -141,6 +141,116 @@ def register_commands(cli: click.Group) -> None:
         from minion.comms import send as _send
         _output(_send(from_agent, agent, message), ctx.obj["human"])
 
+    @cli.command("install-hooks")
+    @click.pass_context
+    def install_hooks(ctx: click.Context) -> None:
+        """Install hooks for minion agent enforcement.
+
+        Installs:
+        1. Claude Code Stop hook (poll-on-stop.sh) — checks inbox after every response
+        2. Git pre-commit hook (scaffolding-gate.sh) — blocks code commits before scaffolding
+
+        Safe to run multiple times — merges without clobbering existing hooks.
+        Only activates when MINION_AGENT_NAME env var is set (spawn time)."""
+        import json as _json
+        from pathlib import Path
+
+        settings_path = Path.home() / ".claude" / "settings.json"
+        scripts_dir = Path(__file__).resolve().parents[3] / "scripts"
+
+        # Fallback: look in installed package
+        if not scripts_dir.exists():
+            import minion
+            scripts_dir = Path(minion.__file__).resolve().parents[1] / "scripts"
+
+        installed: list[str] = []
+        skipped: list[str] = []
+        errors: list[str] = []
+
+        # --- Claude Code Stop hook ---
+        # Copy script to ~/.minion/hooks/ so it doesn't depend on repo location
+        stable_hooks_dir = Path.home() / ".minion" / "hooks"
+        stable_hooks_dir.mkdir(parents=True, exist_ok=True)
+
+        stop_script_src = scripts_dir / "poll-on-stop.sh"
+        stop_script_dst = stable_hooks_dir / "poll-on-stop.sh"
+
+        if not stop_script_src.exists():
+            errors.append(f"poll-on-stop.sh not found at {stop_script_src}")
+        else:
+            import shutil
+            shutil.copy2(stop_script_src, stop_script_dst)
+            stop_script_dst.chmod(0o755)
+
+            settings: dict = {}
+            if settings_path.exists():
+                settings = _json.loads(settings_path.read_text())
+
+            hooks = settings.setdefault("hooks", {})
+            stop_hooks = hooks.setdefault("Stop", [])
+            hook_cmd = str(stop_script_dst)
+
+            # Remove any old entries pointing to repo or stale paths
+            stop_hooks[:] = [
+                entry for entry in stop_hooks
+                if not (isinstance(entry, dict) and any(
+                    "poll-on-stop.sh" in h.get("command", "")
+                    for h in entry.get("hooks", [])
+                ))
+            ]
+
+            stop_hooks.append({
+                "hooks": [{"type": "command", "command": hook_cmd}]
+            })
+            installed.append("Stop:poll-on-stop.sh")
+
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text(_json.dumps(settings, indent=2) + "\n")
+
+        # --- Git pre-commit hook (scaffolding gate) ---
+        gate_script = scripts_dir / "scaffolding-gate.sh"
+        if not gate_script.exists():
+            errors.append(f"scaffolding-gate.sh not found at {gate_script}")
+        else:
+            gate_script.chmod(0o755)
+            # Find .git/hooks directory — walk up from cwd to find .git
+            import subprocess
+            try:
+                git_root = subprocess.check_output(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    stderr=subprocess.DEVNULL,
+                ).decode().strip()
+                hooks_dir = Path(git_root) / ".git" / "hooks"
+                hooks_dir.mkdir(parents=True, exist_ok=True)
+                pre_commit = hooks_dir / "pre-commit"
+
+                if pre_commit.exists():
+                    # Check if it's already our script
+                    target = pre_commit.resolve()
+                    if target == gate_script.resolve():
+                        skipped.append("git:pre-commit (scaffolding-gate.sh)")
+                    else:
+                        # Existing pre-commit hook — don't clobber, warn
+                        errors.append(
+                            f"git pre-commit hook already exists at {pre_commit}. "
+                            f"Manually symlink: ln -sf {gate_script} {pre_commit}"
+                        )
+                else:
+                    pre_commit.symlink_to(gate_script)
+                    installed.append("git:pre-commit (scaffolding-gate.sh)")
+            except (subprocess.CalledProcessError, OSError):
+                errors.append("Not in a git repo — skipped git pre-commit hook")
+
+        result: dict[str, object] = {
+            "status": "ok",
+            "installed": installed,
+            "already_present": skipped,
+            "note": "Hooks activate when MINION_AGENT_NAME env var is set at spawn time",
+        }
+        if errors:
+            result["errors"] = errors
+        _output(result, ctx.obj["human"])
+
     @cli.command("docs")
     @click.option("--format", "fmt", type=click.Choice(["markdown", "json"]), default="markdown",
                   help="Output format")

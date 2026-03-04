@@ -227,6 +227,12 @@ def send_global(
             (from_agent, now, now),
         )
 
+        # Commit sender guards + auto-register before cross-repo delivery.
+        # Without this, the open read transaction on THIS connection blocks
+        # route_cross_repo() from writing to the same DB when sender and
+        # recipient share a project (same-project global send).
+        conn.commit()
+
         # ALWAYS route through coordinator — never check local DB for target
         cross_result = route_cross_repo(to_agent, from_agent, message, now)
         if cross_result:

@@ -18,7 +18,13 @@ def spawn_terminal(
     system_prompt = cfg.get("system", "").strip()
     full_prompt = build_terminal_prompt(system_prompt, agent)
 
-    cmd_parts = [f"cd {project_dir}", "claude --dangerously-skip-permissions"]
+    # Inject env vars so Stop hook knows which agent/project to check
+    cmd_parts = [
+        f"cd {project_dir}",
+        f"export MINION_AGENT_NAME={agent}",
+        f"export MINION_PROJECT_DIR={project_dir}",
+        "claude --dangerously-skip-permissions",
+    ]
     if full_prompt:
         prompt_file = os.path.join(
             project_dir, ".minion-swarm", "prompts", f"{agent}.md"

@@ -77,8 +77,10 @@ def route_cross_repo(
         remote_conn.commit()
         remote_conn.close()
         db_indexed = True
-    except Exception:
-        pass  # File delivered even if DB insert fails
+    except Exception as exc:
+        import sys as _sys
+        print(f"WARNING: cross-repo DB insert failed: {type(exc).__name__}: {exc}", file=_sys.stderr)
+        # File delivered even if DB insert fails
 
     result = {
         "timestamp": now,

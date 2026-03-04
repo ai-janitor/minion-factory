@@ -15,6 +15,25 @@ New endpoint — not in ui/server.js.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse, parse_qs
+
+from minion.network.server import _DB_LOCK
+from minion.network.discovery import resolve_project_path
+from minion.network.project_db import get_project_db
+
+
+def _resolve_or_404(handler, db_path: str, project_name: str):
+    """Resolve project and get DB connection, or send 404."""
+    project_path = resolve_project_path(db_path, project_name, _DB_LOCK)
+    if not project_path:
+        handler._json_response(404, {"error": f"Project '{project_name}' not found"})
+        return None, None
+    conn = get_project_db(project_path)
+    if conn is None:
+        handler._json_response(404, {"error": f"Project '{project_name}' has no .work/minion.db"})
+        return project_path, None
+    return project_path, conn
+
 
 def register(router) -> None:
     """Register requirements endpoints with the router dispatch table.
@@ -24,10 +43,11 @@ def register(router) -> None:
     """
     # PSEUDO: router.add_get("/projects/{name}/requirements", handle_list_requirements)
     # PSEUDO: router.add_get("/projects/{name}/requirements/{id}/lineage", handle_requirement_lineage)
-    pass
+    router.add_get("/projects/{name}/requirements", handle_list_requirements)
+    router.add_get("/projects/{name}/requirements/{id}/lineage", handle_requirement_lineage)
 
 
-def handle_list_requirements(handler, db_path: str, project_name: str = "", **kwargs) -> None:
+def handle_list_requirements(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/requirements — all requirements with stage tracking.
 
     Query params: ?stage=, ?flow_type=
@@ -41,17 +61,64 @@ def handle_list_requirements(handler, db_path: str, project_name: str = "", **kw
     #   count linked tasks (tasks WHERE requirement_path matches)
     #   compute completion_pct = closed_tasks / total_tasks * 100
     # PSEUDO: return {"requirements": [...]}
-    raise NotImplementedError
+    project_path, conn = _resolve_or_404(handler, db_path, name)
+    if conn is None:
+        return
+
+    parsed = urlparse(handler.path)
+    params = parse_qs(parsed.query)
+    stage_filter = params.get("stage", [None])[0]
+    flow_filter = params.get("flow_type", [None])[0]
+
+    query = "SELECT id, file_path, origin, stage, flow_type, parent_id, created_by, created_at, updated_at FROM requirements"
+    conditions = []
+    args = []
+    if stage_filter:
+        conditions.append("stage = ?")
+        args.append(stage_filter)
+    if flow_filter:
+        conditions.append("flow_type = ?")
+        args.append(flow_filter)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY id ASC"
+
+    try:
+        rows = conn.execute(query, args).fetchall()
+    except Exception as e:
+        handler._json_response(500, {"error": f"DB query failed: {e}"})
+        return
+
+    requirements = []
+    for row in rows:
+        req = dict(row)
+        # Count linked tasks
+        try:
+            task_rows = conn.execute(
+                "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed "
+                "FROM tasks WHERE requirement_id = ?",
+                (req["id"],),
+            ).fetchone()
+            total = task_rows["total"] if task_rows else 0
+            closed = task_rows["closed"] if task_rows else 0
+            req["linked_task_count"] = total
+            req["completion_pct"] = round(closed / total * 100) if total > 0 else 0
+        except Exception:
+            req["linked_task_count"] = 0
+            req["completion_pct"] = 0
+        requirements.append(req)
+
+    handler._json_response(200, {"requirements": requirements})
 
 
-def handle_requirement_lineage(handler, db_path: str, project_name: str = "",
-                               requirement_id: str = "", **kwargs) -> None:
+def handle_requirement_lineage(handler, db_path: str, name: str = "",
+                               id: str = "", **kwargs) -> None:
     """GET /projects/{name}/requirements/{id}/lineage — full requirement DAG history.
 
     Returns: requirement detail, stage_history (every transition with timestamp
     and who advanced it), children (recursive tree), linked_tasks, completion_pct.
 
-    Stage history from requirements.updated_at deltas and transition_log table.
+    Stage history from transition_log table if available.
     """
     # PSEUDO: resolve project_name → project_path
     # PSEUDO: conn = project_db.get_project_db(project_path)
@@ -60,10 +127,78 @@ def handle_requirement_lineage(handler, db_path: str, project_name: str = "",
     #   if transition_log table exists:
     #     SELECT * FROM transition_log WHERE entity_type='requirement' AND entity_id=id
     #   else:
-    #     reconstruct from requirement updated_at timestamps
-    # PSEUDO: find children: SELECT * FROM requirements WHERE parent_id=id (recursive)
-    # PSEUDO: find linked tasks: SELECT * FROM tasks WHERE requirement_path matches
+    #     return empty history
+    # PSEUDO: find children: SELECT * FROM requirements WHERE parent_id=id
+    # PSEUDO: find linked tasks: SELECT * FROM tasks WHERE requirement_id=id
     # PSEUDO: compute completion_pct
     # PSEUDO: return {"requirement": {...}, "stage_history": [...],
     #                 "children": [...], "linked_tasks": [...], "completion_pct": N}
-    raise NotImplementedError
+    project_path, conn = _resolve_or_404(handler, db_path, name)
+    if conn is None:
+        return
+
+    try:
+        req_id = int(id)
+    except (ValueError, TypeError):
+        handler._json_response(400, {"error": "Invalid requirement ID"})
+        return
+
+    try:
+        row = conn.execute("SELECT * FROM requirements WHERE id = ?", (req_id,)).fetchone()
+    except Exception as e:
+        handler._json_response(500, {"error": f"DB query failed: {e}"})
+        return
+
+    if not row:
+        handler._json_response(404, {"error": f"Requirement {req_id} not found"})
+        return
+
+    req = dict(row)
+
+    # Stage history from transition_log
+    stage_history = []
+    try:
+        history_rows = conn.execute(
+            "SELECT from_status, to_status, agent, timestamp "
+            "FROM transition_log WHERE entity_type = 'requirement' AND entity_id = ? "
+            "ORDER BY timestamp ASC",
+            (req_id,),
+        ).fetchall()
+        stage_history = [dict(r) for r in history_rows]
+    except Exception:
+        pass  # transition_log may not exist
+
+    # Children
+    children = []
+    try:
+        child_rows = conn.execute(
+            "SELECT id, file_path, stage, created_at, updated_at FROM requirements WHERE parent_id = ?",
+            (req_id,),
+        ).fetchall()
+        children = [dict(r) for r in child_rows]
+    except Exception:
+        pass
+
+    # Linked tasks
+    linked_tasks = []
+    try:
+        task_rows = conn.execute(
+            "SELECT id, title, status, assigned_to, created_at, updated_at "
+            "FROM tasks WHERE requirement_id = ?",
+            (req_id,),
+        ).fetchall()
+        linked_tasks = [dict(r) for r in task_rows]
+    except Exception:
+        pass
+
+    total = len(linked_tasks)
+    closed = sum(1 for t in linked_tasks if t.get("status") == "closed")
+    completion_pct = round(closed / total * 100) if total > 0 else 0
+
+    handler._json_response(200, {
+        "requirement": req,
+        "stage_history": stage_history,
+        "children": children,
+        "linked_tasks": linked_tasks,
+        "completion_pct": completion_pct,
+    })

@@ -26,8 +26,9 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--description", default="")
     @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
     @click.option("--crew", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
+    @click.option("--scope", default="project", type=click.Choice(["project", "sys", "cross-repo"]), help="Permission scope — narrows what commands are allowed")
     @click.pass_context
-    def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str) -> None:
+    def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str, scope: str) -> None:
         """Register an agent into the local session AND the global coordinator DB.
 
         After registering, you MUST start polling to receive messages:
@@ -36,7 +37,7 @@ def register_commands(cli: click.Group) -> None:
         An agent that registers but doesn't poll is deaf — it cannot receive
         messages or task assignments. Names must be unique across all projects."""
         from minion.comms import register as _register
-        _output(_register(name, agent_class, model, description, transport, crew), ctx.obj["human"], ctx.obj["compact"])
+        _output(_register(name, agent_class, model, description, transport, crew, scope), ctx.obj["human"], ctx.obj["compact"])
 
     @agent_group.command("set-status")
     @_agent_option(required=True)
@@ -93,6 +94,18 @@ def register_commands(cli: click.Group) -> None:
         """Bootstrap an agent into (or back into) a session."""
         from minion.lifecycle import cold_start as _cold_start
         _output(_cold_start(agent), ctx.obj["human"], ctx.obj["compact"])
+
+    @agent_group.command("refresh")
+    @_agent_option(required=True)
+    @click.pass_context
+    def refresh_cmd(ctx: click.Context, agent: str) -> None:
+        """Lightweight mid-session state refresh — no side effects.
+
+        Returns current tasks (with DAG position), inbox summary, file claims,
+        HP metrics, and interrupt/retire flags. Unlike cold-start, does not
+        consume fenix_down records or return onboarding data."""
+        from minion.lifecycle import refresh as _refresh
+        _output(_refresh(agent), ctx.obj["human"], ctx.obj["compact"])
 
     @agent_group.command("fenix-down")
     @_agent_option(required=True)
