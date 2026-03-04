@@ -153,6 +153,36 @@ stages:
 
 Use with `--type my-flow` when creating tasks.
 
+## DAG Stage Enforcement
+
+The system mechanically enforces that only eligible agent classes can work each DAG stage. This prevents implementers from self-approving their own work through qe/verify stages.
+
+### How It Works
+
+Each DAG stage can specify `workers:` — a list of agent classes allowed to work that stage. The enforcement is checked at three points:
+
+1. **`complete-task` (primary gate)** — before advancing a phase, the system checks if the agent's class is in the eligible workers list for the **current** stage. A coder trying to complete `qe` gets: `BLOCKED: Agent 'alice' (class 'coder') cannot complete stage 'qe'. Eligible classes: ['builder', 'recon', 'auditor'].`
+
+2. **`pull-task`** — when pulling a task in a restricted stage (e.g., `fixed`, `verified`), the system verifies the agent's class can work that stage before allowing the claim.
+
+3. **`task review` / `task test`** — defense-in-depth pre-checks before calling `complete-task` internally.
+
+### Stage Worker Rules
+
+- `workers: null` — current assignee continues (no restriction)
+- `workers: [oracle, recon]` — only these classes can work this stage
+- `workers: {coder: [oracle, recon], default: [lead]}` — class-specific routing
+
+### Separation of Duties
+
+The typical bugfix/feature flow enforces separation:
+
+```
+open → assigned → in_progress (coder) → fixed/qe (builder,recon,auditor) → verified (lead) → closed
+```
+
+The coder implements, but **cannot** review or verify their own work. The system rejects the attempt mechanically — no prompt-level trust required.
+
 ## Blocked Tasks
 
 Tasks can depend on other tasks:

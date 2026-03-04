@@ -46,11 +46,23 @@ if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
     exit 0
 fi
 
-# Determine project directory — use MINION_PROJECT_DIR if set, else cwd
-PROJECT_DIR="${MINION_PROJECT_DIR:-$(pwd)}"
-PROJECT_FLAG=""
-if [ -n "$PROJECT_DIR" ]; then
-    PROJECT_FLAG="-C $PROJECT_DIR"
+# Determine project directory — use MINION_PROJECT_DIR if set, else walk up from cwd
+PROJECT_DIR="${MINION_PROJECT_DIR:-}"
+if [ -z "$PROJECT_DIR" ]; then
+    # Walk up from cwd looking for .work/minion.db
+    DIR="$(pwd)"
+    while [ "$DIR" != "/" ]; do
+        if [ -f "$DIR/.work/minion.db" ]; then
+            PROJECT_DIR="$DIR"
+            break
+        fi
+        DIR="$(dirname "$DIR")"
+    done
+fi
+
+# No project found — not in a minion project, allow stop
+if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/.work/minion.db" ]; then
+    exit 0
 fi
 
 # ALWAYS block the stop — force agent back into poll

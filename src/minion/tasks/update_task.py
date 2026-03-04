@@ -127,9 +127,11 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute("SELECT name FROM agents WHERE name = ?", (agent_name,))
-        if not cursor.fetchone():
+        cursor.execute("SELECT name, agent_class FROM agents WHERE name = ?", (agent_name,))
+        agent_row = cursor.fetchone()
+        if not agent_row:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
+        agent_class = agent_row["agent_class"]
 
         cursor.execute(
             "SELECT id, status, flow_type, class_required, assigned_to, title FROM tasks WHERE id = ?",
@@ -146,6 +148,15 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
         flow = _get_flow(task_type)
         if flow.is_terminal(current):
             return {"error": f"Task #{task_id} is already in terminal status '{current}'."}
+
+        # DAG enforcement: verify agent's class is eligible to work the CURRENT stage
+        eligible_current = flow.workers_for(current, class_required)
+        if eligible_current is not None and agent_class not in eligible_current:
+            return {
+                "error": f"BLOCKED: Agent '{agent_name}' (class '{agent_class}') cannot complete "
+                f"stage '{current}'. Eligible classes: {eligible_current}. "
+                f"This stage requires a different agent."
+            }
 
         # DAG decides next status — no fallback
         new_status = flow.next_status(current, passed)

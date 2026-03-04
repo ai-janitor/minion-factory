@@ -28,7 +28,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             return {"error": f"BLOCKED: Agent '{agent_name}' not registered."}
 
         cursor.execute(
-            "SELECT id, title, task_file, status, assigned_to, blocked_by, flow_type FROM tasks WHERE id = ?",
+            "SELECT id, title, task_file, status, assigned_to, blocked_by, flow_type, class_required FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
@@ -37,10 +37,21 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
 
         task_status = task_row["status"]
         task_type = task_row["flow_type"] or "bugfix"
+        agent_class = agent_row["agent_class"]
         flow = _get_flow(task_type)
 
         if flow and flow.is_terminal(task_status):
             return {"error": f"BLOCKED: Task #{task_id} is in terminal status '{task_status}'."}
+
+        # DAG enforcement: verify agent's class is eligible to work this stage
+        if flow:
+            class_required = task_row["class_required"] or ""
+            eligible = flow.workers_for(task_status, class_required)
+            if eligible is not None and agent_class not in eligible:
+                return {
+                    "error": f"BLOCKED: Agent '{agent_name}' (class '{agent_class}') cannot pull "
+                    f"task #{task_id} in stage '{task_status}'. Eligible classes: {eligible}."
+                }
 
         # Check blockers
         blocked_by_str = task_row["blocked_by"]
