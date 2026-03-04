@@ -99,6 +99,7 @@ from minion.cli.war_plan_cmds import register_commands as _reg_war_plan  # noqa:
 from minion.cli.intel_cmds import register_commands as _reg_intel  # noqa: E402
 from minion.cli.req_cmds import register_commands as _reg_req  # noqa: E402
 from minion.cli.global_cmds import register_commands as _reg_global  # noqa: E402
+from minion.cli.api_cmds import register_commands as _reg_api  # noqa: E402
 from minion.cli.network_cmds import register_commands as _reg_network  # noqa: E402
 from minion.cli.top_level import register_commands as _reg_top  # noqa: E402
 from minion.cli.aliases import register_aliases  # noqa: E402
@@ -118,6 +119,7 @@ _reg_war_plan(cli)
 _reg_intel(cli)
 _reg_req(cli)
 _reg_global(cli)
+_reg_api(cli)
 _reg_network(cli)
 _reg_top(cli)
 register_aliases(cli)
