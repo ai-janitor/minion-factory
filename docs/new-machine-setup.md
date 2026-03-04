@@ -44,6 +44,18 @@ cat ~/.claude/settings.json | jq '.hooks.Stop'
 - **Loop prevention:** The `stop_hook_active` field prevents infinite loops — hooks allow stop on the second cycle.
 - **Fail-open:** If the hook script errors, Claude Code allows the stop (never bricks the session).
 
+## Cross-Project Agents
+
+Agents can run from any directory — even parent directories above repos (e.g., `~/projects/`). The system auto-initializes `.work/` at any location:
+
+1. `resolve_db_path()` walks up from cwd looking for existing `.work/minion.db`
+2. If none found, falls back to `cwd/.work/minion.db`
+3. `init_db()` creates the DB with full schema on first CLI call
+4. `touch_coordinator_activity()` registers the agent's `project_path` in the global coordinator
+5. Other agents can reach it via `minion comms send global`
+
+The stop hook uses the same walk-up logic with cwd fallback — cross-project agents stay enforced.
+
 ## Environment Variables
 
 | Variable | Set By | Purpose |

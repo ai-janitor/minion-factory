@@ -47,6 +47,7 @@ if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
 fi
 
 # Determine project directory — use MINION_PROJECT_DIR if set, else walk up from cwd
+# If walk-up finds nothing, use cwd as fallback — minion auto-inits .work/ on first run
 PROJECT_DIR="${MINION_PROJECT_DIR:-}"
 if [ -z "$PROJECT_DIR" ]; then
     # Walk up from cwd looking for .work/minion.db
@@ -60,9 +61,9 @@ if [ -z "$PROJECT_DIR" ]; then
     done
 fi
 
-# No project found — not in a minion project, allow stop
-if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/.work/minion.db" ]; then
-    exit 0
+# Fallback: use cwd — minion will auto-init .work/ when poll runs
+if [ -z "$PROJECT_DIR" ]; then
+    PROJECT_DIR="$(pwd)"
 fi
 
 # ALWAYS block the stop — force agent back into poll
