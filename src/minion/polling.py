@@ -297,6 +297,9 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
     _HEARTBEAT_INTERVAL = 1800  # seconds
     _last_heartbeat = 0
 
+    # Immediate heartbeat on poll start — coordinator knows agent is alive now
+    touch_coordinator_activity(agent)
+
     while True:
         # Orphan detection: parent died → exit cleanly
         if os.getppid() != parent_pid:

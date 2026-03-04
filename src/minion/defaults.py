@@ -42,7 +42,12 @@ SWARM_DIR_NAME = ".minion-swarm"
 
 
 def resolve_db_path() -> str:
-    """Resolve DB path: ENV_DB_PATH > project-local .work/minion.db."""
+    """Resolve DB path: ENV_DB_PATH > walk-up .work/minion.db > cwd fallback.
+
+    Walk-up logic: starting from cwd, walk up parent directories looking for
+    .work/minion.db. This lets agents launched from subdirectories (or parent
+    dirs with -C pointing nearby) find the project DB without explicit -C.
+    """
     explicit = os.getenv(ENV_DB_PATH)
     if explicit:
         return explicit
@@ -50,7 +55,17 @@ def resolve_db_path() -> str:
     project = os.getenv(ENV_PROJECT)
     if project:
         return os.path.expanduser(f"{WORK_ROOT}/{project}/minion.db")
-    # Default: project-local .work/minion.db
+    # Walk up from cwd looking for .work/minion.db
+    current = Path.cwd().resolve()
+    while True:
+        candidate = current / WORK_DIR_NAME / "minion.db"
+        if candidate.exists():
+            return str(candidate)
+        parent = current.parent
+        if parent == current:
+            break  # reached filesystem root
+        current = parent
+    # Fallback: project-local .work/minion.db (will be created on init)
     return os.path.join(os.getcwd(), WORK_DIR_NAME, "minion.db")
 
 
