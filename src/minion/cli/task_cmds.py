@@ -30,13 +30,14 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--blocked-by", default="")
     @click.option("--class-required", default="", help="Agent class required (e.g. coder, builder, recon)")
     @click.option("--type", "task_type", default="bugfix", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
+    @click.option("--requirement", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
     @click.pass_context
-    def create_task(ctx: click.Context, agent: str, title: str, task_file: str, project: str, zone: str, blocked_by: str, class_required: str, task_type: str) -> None:
+    def create_task(ctx: click.Context, agent: str, title: str, task_file: str, project: str, zone: str, blocked_by: str, class_required: str, task_type: str, requirement_id: int | None) -> None:
         """Create a new task. Lead only."""
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
         from minion.tasks import create_task as _create_task
-        _output(_create_task(agent, title, task_file, project, zone, blocked_by, class_required, task_type), ctx.obj["human"])
+        _output(_create_task(agent, title, task_file, project, zone, blocked_by, class_required, task_type, requirement_id=requirement_id), ctx.obj["human"])
 
     @task_group.command("assign")
     @_agent_option(required=True)
@@ -206,12 +207,13 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--blocked-by", default="", help="Comma-separated task IDs")
     @click.option("--class-required", default="")
     @click.option("--intel", default="", help="Comma-separated intel slugs to link")
+    @click.option("--requirement", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
     @click.pass_context
     def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
-                        task_type: str, project: str, zone: str, blocked_by: str, class_required: str, intel: str) -> None:
+                        task_type: str, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None) -> None:
         """Create a task spec file and task record in one command."""
         from minion.tasks.define import define_task
-        _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required, intel), ctx.obj["human"])
+        _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required, intel, requirement_id=requirement_id), ctx.obj["human"])
 
     @task_group.command("result")
     @_agent_option(required=True)

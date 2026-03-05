@@ -18,6 +18,7 @@ def create_task(
     blocked_by: str = "",
     class_required: str = "",
     task_type: str = "bugfix",
+    requirement_id: int | None = None,
 ) -> dict[str, object]:
     conn = get_db()
     cursor = conn.cursor()
@@ -58,13 +59,24 @@ def create_task(
 
         blocked_by_str = ",".join(str(i) for i in blocker_ids) if blocker_ids else None
 
+        # Resolve requirement_path from requirement_id for lineage tracing
+        req_path = None
+        if requirement_id is not None:
+            req_row = cursor.execute(
+                "SELECT file_path FROM requirements WHERE id = ?", (requirement_id,)
+            ).fetchone()
+            if req_row:
+                req_path = req_row["file_path"]
+
         cursor.execute(
             """INSERT INTO tasks
                (title, task_file, project, zone, status, blocked_by,
-                class_required, flow_type, created_by, activity_count, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?)""",
+                class_required, flow_type, created_by, activity_count,
+                requirement_id, requirement_path, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
             (title, task_file, project or None, zone or None, blocked_by_str,
-             class_required or None, task_type, agent_name, now, now),
+             class_required or None, task_type, agent_name,
+             requirement_id, req_path, now, now),
         )
         task_id = cursor.lastrowid
         _log_transition(cursor, task_id, None, "open", agent_name, now)

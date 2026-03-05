@@ -28,6 +28,7 @@ def define_task(
     blocked_by: str = "",
     class_required: str = "",
     intel: str = "",
+    requirement_id: int | None = None,
 ) -> dict[str, object]:
     """Create a task spec file and a task record in one shot."""
     work_dir = get_runtime_dir()
@@ -50,6 +51,7 @@ def define_task(
         blocked_by=blocked_by,
         class_required=class_required,
         task_type=task_type,
+        requirement_id=requirement_id,
     )
 
     # Auto-link intel docs to the new task
