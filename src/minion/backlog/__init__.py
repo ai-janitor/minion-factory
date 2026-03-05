@@ -7,6 +7,7 @@ The DB is a rebuildable index; the filesystem is the source of truth.
 from .add_item import add
 from .close_item import kill, defer, reopen
 from .get_item import get_item
+from .lineage import lineage
 from .list_items import list_items
 from .promote import promote
 from .reindex import reindex
@@ -17,6 +18,7 @@ __all__: list[str] = [
     "defer",
     "get_item",
     "kill",
+    "lineage",
     "list_items",
     "promote",
     "reindex",

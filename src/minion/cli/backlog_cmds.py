@@ -164,6 +164,23 @@ def register_commands(cli: click.Group) -> None:
             sys.exit(1)
         click.echo(json.dumps(result, indent=2))
 
+    @backlog_group.command("lineage")
+    @click.argument("path", required=False, default=None)
+    @click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID")
+    @click.pass_context
+    def backlog_lineage(ctx: click.Context, path: str | None, item_id: int | None) -> None:
+        """Full audit trail from backlog item to task closure."""
+        from minion.backlog import lineage as _lineage
+        if not path and item_id is None:
+            click.echo(json.dumps({"error": "Provide PATH or --id"}, indent=2))
+            sys.exit(1)
+        try:
+            result = _lineage(file_path=path, item_id=item_id)
+        except ValueError as e:
+            click.echo(json.dumps({"error": str(e)}, indent=2))
+            sys.exit(1)
+        click.echo(json.dumps(result, indent=2))
+
     @backlog_group.command("reindex")
     @click.pass_context
     def backlog_reindex(ctx: click.Context) -> None:

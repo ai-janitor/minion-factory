@@ -1,4 +1,4 @@
-"""Versioned schema migrations (v1 through v12).
+"""Versioned schema migrations (v1 through v13).
 
 Each migration is an idempotent callable that receives a sqlite3.Connection.
 Migrations run in order inside individual transactions — failure rolls back
@@ -320,6 +320,15 @@ def _migrate_v12(conn: sqlite3.Connection) -> None:
     log.info("v12: added flow_hint column to backlog table")
 
 
+def _migrate_v13(conn: sqlite3.Connection) -> None:
+    """Add promoted_by to backlog — records which agent promoted the item."""
+    try:
+        conn.execute("ALTER TABLE backlog ADD COLUMN promoted_by TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # column already exists (re-run safe)
+    log.info("v13: added promoted_by column to backlog table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -335,6 +344,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (10, "Drop orphan task_type column from tasks", _migrate_v10),
     (11, "Create intel_docs and intel_links tables", _migrate_v11),
     (12, "Add flow_hint column to backlog table", _migrate_v12),
+    (13, "Add promoted_by column to backlog table", _migrate_v13),
 ]
 
 

@@ -192,9 +192,17 @@ def promote(
         # --- Update backlog row ---
         now = now_iso()
         cursor.execute(
-            "UPDATE backlog SET status = 'promoted', promoted_to = ?, updated_at = ? WHERE id = ?",
-            (req_rel_path, now, backlog_id),
+            "UPDATE backlog SET status = 'promoted', promoted_to = ?, promoted_by = ?, updated_at = ? WHERE id = ?",
+            (req_rel_path, agent_name, now, backlog_id),
         )
+
+        # Log promotion to transition_log for lineage tracking
+        cursor.execute(
+            "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) "
+            "VALUES (?, 'backlog', 'open', 'promoted', ?, ?)",
+            (backlog_id, agent_name, now),
+        )
+
         conn.commit()
 
         # --- Append to backlog README Outcome section ---
