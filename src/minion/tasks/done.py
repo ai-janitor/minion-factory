@@ -10,7 +10,7 @@ import os
 
 from minion.db import get_db, now_iso
 from minion.defaults import resolve_work_dir
-from ._helpers import _log_transition
+from .flow_gates_and_validation import _log_transition
 
 
 def done_task(agent_name: str, task_id: int, summary: str = "") -> dict[str, object]:

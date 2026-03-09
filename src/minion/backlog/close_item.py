@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from minion.db import get_db
-from ._helpers import _get_backlog_path, _now_iso
+from .path_resolution_and_slug import _get_backlog_path, _now_iso
 
 
 def _read_readme(file_path: str) -> str:

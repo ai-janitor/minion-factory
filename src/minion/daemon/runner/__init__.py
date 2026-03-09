@@ -256,5 +256,10 @@ class AgentDaemon(
         handle_signal(signum, self._log, self._stop_event)
 
     def _log(self, message: str) -> None:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] [{self.agent_name}] {message}", flush=True)
+        import json as _json
+        print(_json.dumps({
+            "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "agent": self.agent_name,
+            "level": "INFO",
+            "message": message,
+        }), flush=True)

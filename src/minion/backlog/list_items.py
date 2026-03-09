@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from minion.db import get_db
-from minion.backlog._helpers import VALID_TYPES, VALID_PRIORITIES, VALID_STATUSES
+from minion.backlog.path_resolution_and_slug import VALID_TYPES, VALID_PRIORITIES, VALID_STATUSES
 
 
 def list_items(

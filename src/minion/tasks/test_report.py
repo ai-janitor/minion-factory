@@ -16,7 +16,7 @@ def create_test_report(
 ) -> dict[str, object]:
     """Write a test report to .work/test-reports/ and advance the task phase."""
     from minion.tasks.update_task import complete_phase
-    from minion.tasks._helpers import _get_flow
+    from minion.tasks.flow_gates_and_validation import _get_flow
 
     # Pre-check: verify agent's class is eligible for the current stage
     conn = get_db()

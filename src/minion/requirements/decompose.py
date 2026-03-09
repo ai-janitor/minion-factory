@@ -123,12 +123,14 @@ def decompose(parent_path: str, spec: dict, agent_name: str = "lead") -> dict[st
         if "error" in reg_result:
             return {"error": f"Failed to register child '{child_rel_path}': {reg_result['error']}"}
 
-        # 4. Create task
+        # 4. Create task (pass requirement_id for lineage tracking)
+        child_req_id = reg_result.get("id")
         task_result = create_task(
             agent_name=agent_name,
             title=title,
             task_file=str(readme_path),
             task_type=task_type,
+            requirement_id=child_req_id,
         )
         if "error" in task_result:
             return {"error": f"Failed to create task for '{child_rel_path}': {task_result['error']}"}

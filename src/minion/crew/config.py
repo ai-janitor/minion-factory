@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
 import yaml
-from minion.defaults import ENV_DB_PATH, resolve_db_path, resolve_docs_dir, resolve_path
+from minion.defaults import DEFAULT_DOCS_DIR, ENV_DB_PATH, ENV_DOCS_DIR, resolve_db_path, resolve_path
 
 ProviderName = Literal["claude", "codex", "opencode", "gemini"]
 
@@ -86,8 +86,9 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         cfg_path.parent,
     )
 
+    # docs_dir: env (ENV_DOCS_DIR) > YAML > default — consistent with daemon/config.py
     docs_dir = resolve_path(
-        str(raw.get("docs_dir", resolve_docs_dir())),
+        str(raw.get("docs_dir", os.environ.get(ENV_DOCS_DIR, DEFAULT_DOCS_DIR))),
         cfg_path.parent,
     )
 

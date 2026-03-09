@@ -1,7 +1,7 @@
 """Provider registry — maps provider name to concrete BaseProvider subclass."""
 from __future__ import annotations
 
-from .base import BaseProvider
+from .cli_provider_protocol import BaseProvider
 from .claude import ClaudeProvider
 from .codex import CodexProvider
 from .gemini import GeminiProvider

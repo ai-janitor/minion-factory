@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
-from .base import BaseProvider
+from .cli_provider_protocol import BaseProvider
 
 
 class CodexProvider(BaseProvider):

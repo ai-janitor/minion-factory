@@ -11,7 +11,7 @@ import logging
 import sqlite3
 from typing import Any
 
-from minion.db.helpers import now_iso
+from minion.db.timestamp_and_agent_registry import now_iso
 
 log = logging.getLogger(__name__)
 

@@ -99,6 +99,8 @@ def register_commands(cli: click.Group) -> None:
     @click.pass_context
     def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None, flow_hint: str | None) -> None:
         """Update priority and/or status of a backlog item."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
         from minion.backlog import update_item as _update_item
         try:
             result = _update_item(path, priority, status, flow_hint=flow_hint)
@@ -118,6 +120,8 @@ def register_commands(cli: click.Group) -> None:
     @click.pass_context
     def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
         """Promote a backlog item into the requirement pipeline. Requires lead class."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
         if not path and not item_id:
             click.echo(json.dumps({"error": "Provide a path argument or --id <N>."}, indent=2))
             raise SystemExit(1)
@@ -142,6 +146,8 @@ def register_commands(cli: click.Group) -> None:
     @click.pass_context
     def backlog_kill(ctx: click.Context, path: str, reason: str) -> None:
         """Mark a backlog item as killed."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
         from minion.backlog import kill as _kill
         try:
             result = _kill(path, reason)
@@ -156,6 +162,8 @@ def register_commands(cli: click.Group) -> None:
     @click.pass_context
     def backlog_defer(ctx: click.Context, path: str, until: str) -> None:
         """Defer a backlog item until a later date or milestone."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
         from minion.backlog import defer as _defer
         try:
             result = _defer(path, until)
@@ -185,6 +193,8 @@ def register_commands(cli: click.Group) -> None:
     @click.pass_context
     def backlog_reindex(ctx: click.Context) -> None:
         """Rebuild the backlog DB index by scanning the filesystem."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
         from minion.backlog import reindex as _reindex
         try:
             result = _reindex()

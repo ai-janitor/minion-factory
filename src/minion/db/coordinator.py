@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from minion.db.connection import get_coordinator_db, get_db
-from minion.db.helpers import now_iso
+from minion.db.timestamp_and_agent_registry import now_iso
 from minion.db.schema import _COORDINATOR_SCHEMA_SQL
 
 log = logging.getLogger(__name__)

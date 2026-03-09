@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from minion.db import get_db
-from ._helpers import _get_flow
+from .flow_gates_and_validation import _get_flow
 
 
 def _resolve_path(path: str) -> str:

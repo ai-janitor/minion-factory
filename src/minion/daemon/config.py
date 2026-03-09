@@ -1,9 +1,14 @@
+"""Daemon config loader — shares dataclasses with crew/config.py (DRY).
+
+AgentConfig and SwarmConfig are defined once in crew/config.py. Daemon
+reuses them — the extra fields (skills, scope) have defaults and are
+simply unused by daemon code.
+"""
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Dict
 
 import yaml
 from minion.defaults import (
@@ -11,66 +16,11 @@ from minion.defaults import (
     ENV_DB_PATH,
     ENV_DOCS_DIR,
     resolve_db_path,
+    resolve_path as _resolve_path,
 )
 
-ProviderName = Literal["claude", "codex", "opencode", "gemini"]
-
-
-@dataclass(frozen=True)
-class AgentConfig:
-    name: str
-    role: str
-    zone: str
-    provider: ProviderName
-    system: str
-    allowed_tools: Optional[str]
-    permission_mode: Optional[str]
-    model: Optional[str]
-    max_history_tokens: int
-    max_prompt_chars: int
-    no_output_timeout_sec: int
-    retry_backoff_sec: int
-    retry_backoff_max_sec: int
-    self_dismiss: bool = False
-    capabilities: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class SwarmConfig:
-    config_path: Path
-    project_dir: Path
-    comms_dir: Path
-    comms_db: Path
-    docs_dir: Path
-    agents: Dict[str, AgentConfig]
-
-    @property
-    def runtime_dir(self) -> Path:
-        return self.project_dir / ".minion-swarm"
-
-    @property
-    def logs_dir(self) -> Path:
-        return self.runtime_dir / "logs"
-
-    @property
-    def pids_dir(self) -> Path:
-        return self.runtime_dir / "pids"
-
-    @property
-    def state_dir(self) -> Path:
-        return self.runtime_dir / "state"
-
-    def ensure_runtime_dirs(self) -> None:
-        self.logs_dir.mkdir(parents=True, exist_ok=True)
-        self.pids_dir.mkdir(parents=True, exist_ok=True)
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-
-
-def _resolve_path(raw_value: str, base: Path) -> Path:
-    path = Path(raw_value).expanduser()
-    if not path.is_absolute():
-        path = (base / path).resolve()
-    return path
+# DRY: import shared dataclasses from crew — single source of truth
+from minion.crew.config import AgentConfig, SwarmConfig  # noqa: F401
 
 
 def load_config(config_path: str | Path) -> SwarmConfig:

@@ -49,8 +49,17 @@ class _Handler(BaseHTTPRequestHandler):
     token: str = ""
 
     def log_message(self, format, *args):
-        """Suppress default stderr logging."""
-        pass
+        """Structured HTTP request logging — method, path, status, client."""
+        import json as _json
+        from datetime import datetime
+        msg = format % args if args else format
+        print(_json.dumps({
+            "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "level": "INFO",
+            "component": "http",
+            "client": self.client_address[0],
+            "message": msg,
+        }), flush=True)
 
     def _json_response(self, status: int, data: dict) -> None:
         body = json.dumps(data, indent=2).encode()

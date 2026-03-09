@@ -13,7 +13,7 @@ from ..triggers import handle_stand_down, handle_standdown, handle_wake_from_sta
 if TYPE_CHECKING:
     from threading import Event
     from ..config import SwarmConfig, AgentConfig
-    from minion.providers.base import BaseProvider
+    from minion.providers.cli_provider_protocol import BaseProvider
 
 
 class PollingMixin:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from .base import BaseProvider
+from .cli_provider_protocol import BaseProvider
 
 
 class OpencodeProvider(BaseProvider):

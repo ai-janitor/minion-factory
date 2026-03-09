@@ -130,3 +130,59 @@ def test_daemon_group_subcommands():
     assert result.exit_code == 0
     for sub in ["start", "stop", "logs"]:
         assert sub in result.output, f"daemon group missing: {sub}"
+
+
+def test_api_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["api", "--help"])
+    assert result.exit_code == 0
+    for sub in ["start", "stop", "status", "restart", "set-remote",
+                "list-remotes", "remove-remote", "remote-status",
+                "remote-agents", "remote-send", "remote-inbox",
+                "remote-projects", "remote-overview", "remote-alerts"]:
+        assert sub in result.output, f"api group missing: {sub}"
+
+
+def test_backlog_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["backlog", "--help"])
+    assert result.exit_code == 0
+    for sub in ["add", "list", "show", "update", "promote", "kill",
+                "defer", "lineage", "reindex"]:
+        assert sub in result.output, f"backlog group missing: {sub}"
+
+
+def test_network_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["network", "--help"])
+    assert result.exit_code == 0
+    for sub in ["serve", "status", "who", "projects", "project-agents",
+                "overview", "alerts", "gen-cert", "outbox"]:
+        assert sub in result.output, f"network group missing: {sub}"
+
+
+def test_req_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["req", "--help"])
+    assert result.exit_code == 0
+    for sub in ["create", "register", "list", "status", "update", "tree",
+                "decompose", "link", "orphans", "unlinked", "reindex",
+                "report", "findings", "itemize"]:
+        assert sub in result.output, f"req group missing: {sub}"
+
+
+def test_intel_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["intel", "--help"])
+    assert result.exit_code == 0
+    for sub in ["add", "list", "get", "find", "link", "for-task",
+                "read", "suggest", "register-docs", "reindex"]:
+        assert sub in result.output, f"intel group missing: {sub}"
+
+
+def test_mission_group_subcommands():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["mission", "--help"])
+    assert result.exit_code == 0
+    for sub in ["list", "suggest", "spawn"]:
+        assert sub in result.output, f"mission group missing: {sub}"

@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from ..config import SwarmConfig, AgentConfig
     from ..buffer import RollingBuffer
-    from minion.providers.base import BaseProvider
+    from minion.providers.cli_provider_protocol import BaseProvider
 
 
 class PromptMixin:

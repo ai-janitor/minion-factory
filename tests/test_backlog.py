@@ -125,47 +125,47 @@ def _run(runner, project_dir, *args):
 
 class TestSlugify:
     def test_spaces_become_hyphens(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("hello world") == "hello-world"
 
     def test_lowercased(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("Hello World") == "hello-world"
 
     def test_special_chars_stripped(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("fix: auth@login!") == "fix-authlogin"
 
     def test_repeated_hyphens_collapsed(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("a--b---c") == "a-b-c"
 
     def test_leading_trailing_hyphens_stripped(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("--hello--") == "hello"
 
     def test_already_clean(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("my-slug-123") == "my-slug-123"
 
     def test_numbers_preserved(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         assert _slugify("GPT-4 is fast") == "gpt-4-is-fast"
 
     def test_whitespace_variants_collapsed(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         # tabs and multiple spaces both become single hyphen
         assert _slugify("a\t b") == "a-b"
 
     def test_long_title_slug_within_max_length(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         # 60-char title — slug must be <= 50 chars
         title = "This is a very long title that exceeds fifty characters total"
         slug = _slugify(title)
         assert len(slug) <= 50
 
     def test_truncation_at_word_boundary(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         # "word-" at position 50 would land mid-word; verify no trailing or mid-word hyphen cut
         title = "one two three four five six seven eight nine ten eleven twelve"
         slug = _slugify(title)
@@ -177,7 +177,7 @@ class TestSlugify:
         assert full_slug.startswith(slug)
 
     def test_custom_max_length(self):
-        from minion.backlog._helpers import _slugify
+        from minion.backlog.path_resolution_and_slug import _slugify
         slug = _slugify("alpha beta gamma delta epsilon zeta eta theta", max_length=20)
         assert len(slug) <= 20
         assert not slug.endswith("-")
@@ -185,35 +185,35 @@ class TestSlugify:
 
 class TestParseReadme:
     def test_parses_title(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         readme = tmp_path / "README.md"
         readme.write_text("# My Bug\n\n**Type:** bug\n")
         result = _parse_readme(str(readme))
         assert result["title"] == "My Bug"
 
     def test_parses_type(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         readme = tmp_path / "README.md"
         readme.write_text("# Title\n\n**Type:** idea\n")
         result = _parse_readme(str(readme))
         assert result["type"] == "idea"
 
     def test_parses_source(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         readme = tmp_path / "README.md"
         readme.write_text("# Title\n\n**Source:** agent-scout\n")
         result = _parse_readme(str(readme))
         assert result["source"] == "agent-scout"
 
     def test_parses_date(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         readme = tmp_path / "README.md"
         readme.write_text("# Title\n\n**Date:** 2026-02-22\n")
         result = _parse_readme(str(readme))
         assert result["date"] == "2026-02-22"
 
     def test_missing_fields_return_none(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         readme = tmp_path / "README.md"
         readme.write_text("# Just a title\n")
         result = _parse_readme(str(readme))
@@ -223,7 +223,7 @@ class TestParseReadme:
         assert result["date"] is None
 
     def test_nonexistent_file_returns_nones(self, tmp_path):
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         result = _parse_readme(str(tmp_path / "nope.md"))
         assert all(v is None for v in result.values())
 
@@ -232,7 +232,7 @@ class TestParseReadme:
         _parse_readme uses re.match which anchors to line start, so Type/Source/Date
         are not extracted from template-generated READMEs — only title is captured.
         """
-        from minion.backlog._helpers import _parse_readme
+        from minion.backlog.path_resolution_and_slug import _parse_readme
         content = BACKLOG_MD_TEMPLATE.read_text().format(
             title="Auth Regression",
             type="bug",

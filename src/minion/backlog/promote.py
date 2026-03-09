@@ -14,7 +14,7 @@ from typing import Any
 from minion.db import _get_db_path, get_db, now_iso
 from minion.requirements.crud import register
 
-from ._helpers import _get_backlog_path
+from .path_resolution_and_slug import _get_backlog_path
 
 # Backlog types that map to the 'bug' requirement origin; everything else → 'feature'
 _BUG_TYPES = {"bug"}

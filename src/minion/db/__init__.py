@@ -26,7 +26,7 @@ from minion.db.coordinator import (
     init_coordinator_db,
     touch_coordinator_activity,
 )
-from minion.db.helpers import (
+from minion.db.timestamp_and_agent_registry import (
     now_iso,
     register_agent_db,
 )

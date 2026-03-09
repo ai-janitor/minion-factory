@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from minion.db import get_db, now_iso, _get_db_path
-from minion.backlog._helpers import (
+from minion.backlog.path_resolution_and_slug import (
     VALID_TYPES,
     VALID_PRIORITIES,
     TYPE_TO_FOLDER,

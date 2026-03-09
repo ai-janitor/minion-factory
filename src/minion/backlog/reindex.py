@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from minion.db import get_db, now_iso
-from minion.backlog._helpers import _get_backlog_path, _parse_readme, TYPE_TO_FOLDER
+from minion.backlog.path_resolution_and_slug import _get_backlog_path, _parse_readme, TYPE_TO_FOLDER
 
 
 # Reverse mapping — folder name → type string for metadata inference

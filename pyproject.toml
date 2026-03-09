@@ -28,6 +28,7 @@ packages = ["src/minion"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--junitxml=.work/test-reports/junit.xml -q"
 
 [tool.basedpyright]
 pythonVersion = "3.10"

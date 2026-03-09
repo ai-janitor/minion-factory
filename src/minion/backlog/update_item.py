@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from minion.db import get_db, now_iso
-from minion.backlog._helpers import VALID_PRIORITIES, VALID_STATUSES
+from minion.backlog.path_resolution_and_slug import VALID_PRIORITIES, VALID_STATUSES
 
 
 def update_item(

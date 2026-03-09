@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .base import BaseProvider
+from .cli_provider_protocol import BaseProvider
 
 
 class ClaudeProvider(BaseProvider):

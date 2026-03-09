@@ -178,6 +178,36 @@ def test_decompose_spec_stdin_reads_yaml(runner, seeded_project):
 # ---------------------------------------------------------------------------
 
 
+def test_decompose_sets_requirement_id_on_tasks(runner, seeded_project):
+    """Decompose sets requirement_id on tasks for lineage tracking (bug #34)."""
+    res = _run(
+        runner, seeded_project,
+        "req", "decompose",
+        "--path", "features/genesis",
+        "--inline", _SPEC_YAML,
+        "--by", "lead",
+    )
+    assert res.exit_code == 0, res.output
+    data = json.loads(res.output)
+
+    from minion.db import get_db
+    conn = get_db()
+    for child in data["children"]:
+        task_id = child["task_id"]
+        row = conn.execute(
+            "SELECT requirement_id, requirement_path FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+        assert row is not None, f"Task {task_id} not found"
+        assert row["requirement_id"] is not None, (
+            f"Task {task_id} has NULL requirement_id — lineage broken"
+        )
+        assert row["requirement_path"] is not None, (
+            f"Task {task_id} has NULL requirement_path — lineage broken"
+        )
+    conn.close()
+
+
 def test_decompose_no_spec_no_inline_returns_error(runner, seeded_project):
     """Calling decompose without --spec or --inline produces an error."""
     res = _run(
