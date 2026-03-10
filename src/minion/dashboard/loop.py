@@ -19,7 +19,7 @@ import time
 
 from minion.db.connection import connect
 from minion.defaults import resolve_db_path
-from minion.dashboard.queries import fetch_activity, fetch_agents, fetch_tasks
+from minion.dashboard.queries import fetch_activity, fetch_agents, fetch_backlog, fetch_tasks
 from minion.dashboard.render import clear_and_print, render_screen
 
 
@@ -43,12 +43,13 @@ def run() -> None:
             tasks    = fetch_tasks(conn)
             agents   = fetch_agents(conn)
             activity = fetch_activity(conn)
+            backlog  = fetch_backlog(conn)
             conn.close()
             try:
                 width, height = os.get_terminal_size()
             except OSError:
                 width, height = 120, 40
-            screen = render_screen(tasks, agents, activity, width, height, work_dir=work_dir)
+            screen = render_screen(tasks, agents, activity, width, height, work_dir=work_dir, backlog=backlog)
             clear_and_print(screen)
         except sqlite3.OperationalError:
             # DB not yet created or locked — show waiting state

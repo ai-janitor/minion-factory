@@ -19,11 +19,17 @@ Organization: Standalone functions and/or a single class. See source."""
 # AGENTS section:
 #   Source: queries.fetch_agents() → agents table
 #   Filter: transport IN ('daemon', 'daemon-ts', 'terminal')
-#   Fields: name, agent_class, status, last_seen, registered_at,
+#   Fields: name, agent_class, model (#110), status, last_seen, registered_at,
 #           COALESCE(hp_input_tokens,0)+COALESCE(hp_output_tokens,0) (→tokens_used),
 #           COALESCE(hp_tokens_limit,0) (→tokens_limit),
 #           MAX(last_seen, context_updated_at, registered_at) (→effective_last_seen)
 #   Derived: display_status via _agent_display_status(), token_bar(), checklist via filesystem lookup
+#
+# BACKLOG section (#112):
+#   Source: queries.fetch_backlog() → backlog LEFT JOIN tasks
+#   Filter: status NOT IN ('closed', 'abandoned')
+#   Fields: id, type, title_short, priority, status, promoted_to, task_status, task_assignee
+#   Order: priority (critical > high > medium > low), then id ASC
 #
 # ACTIVITY section:
 #   Source: queries.fetch_activity() → transition_log JOIN tasks
@@ -287,6 +293,20 @@ def _agent_display_status(row: sqlite3.Row) -> tuple[str, str]:
         return (display, _DIM)
 
 
+def _short_model(model: str) -> str:
+    """Extract short display name from model ID (e.g. 'claude-opus-4-...' → 'opus').
+
+    Backlog #110: Show model column in TUI agent table.
+    """
+    if not model:
+        return ""
+    for family in ("opus", "sonnet", "haiku"):
+        if family in model:
+            return family
+    # Truncate long model IDs to fit column
+    return model[:8] if len(model) > 8 else model
+
+
 def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "") -> list[str]:
     """Render agent token bars with checklist links, capped to fit available height.
 
@@ -295,8 +315,8 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
     never heartbeated show "no hb" instead of their declared status.
     """
     lines: list[str] = [
-        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
-        "─" * 80,
+        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'MODEL':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
+        "─" * 90,
     ]
 
     visible = agents[:max_rows]
@@ -305,6 +325,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
     for row in visible:
         bar = token_bar(row["tokens_used"], row["tokens_limit"])
         display_status, status_color = _agent_display_status(row)
+        model_short = _short_model(row["model"])
 
         # Checklist link
         checklist_path = _find_checklist(row["name"], work_dir) if work_dir else None
@@ -320,6 +341,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
         lines.append(
             f"{row['name']:<14}  "
             f"{row['agent_class']:<8}  "
+            f"{_DIM}{model_short:<8}{_RESET}  "
             f"{status_color}{display_status:<10}{_RESET}  "
             f"{seen_color}{last_seen:<8}{_RESET}  "
             f"{_visible_pad(bar, 20)}  "
@@ -328,6 +350,54 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
 
     if overflow > 0:
         lines.append(f"  {_DIM}+ {overflow} more agents not shown{_RESET}")
+
+    return lines
+
+
+# Priority → display color for backlog items
+_PRIORITY_COLORS: dict[str, str] = {
+    "critical": _RED,
+    "high":     _YELLOW,
+    "medium":   _WHITE,
+    "low":      _DIM,
+    "unset":    _DIM,
+}
+
+
+def _render_backlog(backlog: list[sqlite3.Row]) -> list[str]:
+    """Render promoted backlog items with their linked task's DAG stage.
+
+    Backlog #112: TUI dashboard should show promoted backlog items.
+    Shows type, priority, title, and the task status if promoted.
+    """
+    lines: list[str] = [
+        f"{_BOLD}{'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'TITLE':<35}{_RESET}",
+        "─" * 80,
+    ]
+
+    if not backlog:
+        lines.insert(0, f"{_BOLD}BACKLOG{_RESET}")
+        lines.append(f"  {_DIM}(no active backlog items){_RESET}")
+        return lines
+
+    lines.insert(0, f"{_BOLD}BACKLOG{_RESET}")
+    for row in backlog:
+        pri_color = _PRIORITY_COLORS.get(row["priority"], _DIM)
+        # Show task stage if promoted, otherwise show backlog status
+        if row["promoted_to"]:
+            task_info = f"#{row['promoted_to']} {row['task_status']}"
+        else:
+            task_info = row["status"]
+        task_info = _truncate(task_info, 12)
+        title = row["title_short"]
+        lines.append(
+            f"{row['id']:>4}  "
+            f"{_truncate(row['type'], 8):<8}  "
+            f"{pri_color}{row['priority']:<8}{_RESET}  "
+            f"{row['status']:<10}  "
+            f"{task_info:<12}  "
+            f"{title}"
+        )
 
     return lines
 
@@ -358,10 +428,11 @@ def render_screen(
     width: int,
     height: int,
     work_dir: str = "",
+    backlog: list[sqlite3.Row] | None = None,
 ) -> str:
     """Compose the full screen string from data sections.
 
-    Layout: tasks (top half), agents (middle), activity (bottom).
+    Layout: tasks (top), agents (middle), backlog (if any), activity (bottom).
     Heights are proportional to terminal size.
     """
     lines: list[str] = []
@@ -384,6 +455,11 @@ def render_screen(
     agent_lines = _render_agents(agents, agent_max, work_dir=work_dir)
     lines.extend(agent_lines)
     lines.append("")
+
+    # Backlog section — only shown if there are active backlog items (#112)
+    if backlog:
+        lines.extend(_render_backlog(backlog))
+        lines.append("")
 
     # Activity feed — fixed 10-line block at bottom
     lines.extend(_render_activity(activity))
