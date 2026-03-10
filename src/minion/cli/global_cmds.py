@@ -36,9 +36,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_who_global(), ctx.obj["human"])
 
     @global_group.command("send")
-    @click.option("--from", "from_agent", required=True, help="Sender agent name")
-    @click.option("--to", "to_agent", required=True, help="Target agent name (can be in a different repo)")
-    @click.option("--message", required=True, help="Message content")
+    @click.option("--from", "-f", "from_agent", required=True, help="Sender agent name")
+    @click.option("--to", "-t", "to_agent", required=True, help="Target agent name (can be in a different repo)")
+    @click.option("--message", "-m", required=True, help="Message content")
     @click.pass_context
     def global_send(ctx: click.Context, from_agent: str, to_agent: str, message: str) -> None:
         """Send a message to an agent in ANY repo via the coordinator.
@@ -50,7 +50,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_send_global(from_agent, to_agent, message), ctx.obj["human"])
 
     @global_group.command("deregister")
-    @click.option("--name", required=True, help="Agent name to remove from coordinator")
+    @click.option("--name", "-n", required=True, help="Agent name to remove from coordinator")
     @click.pass_context
     def global_deregister(ctx: click.Context, name: str) -> None:
         """Remove an agent from the global coordinator DB. Lead-only.

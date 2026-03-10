@@ -68,7 +68,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_halt(agent), ctx.obj["human"])
 
     @crew_group.command("recruit")
-    @click.option("--name", required=True, help="Agent name")
+    @click.option("--name", "-n", required=True, help="Agent name")
     @click.option("--class", "agent_class", default=None, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
     @click.option("--crew", required=True, help="Running crew to join (tmux session crew-<name>)")
     @click.option("--from-crew", default="", help="Source crew YAML to pull character config from")
@@ -92,7 +92,7 @@ def register_commands(cli: click.Group) -> None:
         # --from-crew or --class is required
         if not from_crew and not agent_class:
             click.echo("BLOCKED: Provide --from-crew or --class.", err=True)
-            raise SystemExit(1)
+            raise SystemExit(2)
         from minion.crew import recruit_agent as _recruit
         project_dir = ctx.obj.get("project_dir") or "."
         _output(_recruit(

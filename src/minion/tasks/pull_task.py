@@ -1,17 +1,12 @@
-"""Claim a specific task — DAG-aware task puller.
-
-Purpose: Claim a specific task — DAG-aware task puller.
-Rationale: Extracted into own module for single-responsibility task management.
-Responsibility: Claim a specific task — DAG-aware task puller. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+"""Claim a specific task — DAG-aware task puller."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import get_db, now_iso
-from minion.crew._tmux import update_pane_task
-from .flow_gates_and_validation import _get_flow, _log_transition
+from minion.crew import update_pane_task
+from ._helpers import _get_flow, _log_transition
 from .query_task import _inline_file, _inline_requirement
 
 

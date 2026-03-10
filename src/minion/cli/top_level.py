@@ -21,8 +21,8 @@ def register_commands(cli: click.Group) -> None:
 
     @cli.command()
     @_agent_option(required=True, help="Agent name to poll as")
-    @click.option("--interval", default=5, type=int, help="Seconds between checks (default: 5)")
-    @click.option("--timeout", default=0, type=int, help="Max wait in seconds. 0 = block forever until content arrives (default: 0)")
+    @click.option("--interval", "-i", default=5, type=int, help="Seconds between checks (default: 5)")
+    @click.option("--timeout", "-T", default=0, type=int, help="Max wait in seconds. 0 = block forever until content arrives (default: 0)")
     @click.pass_context
     def poll(ctx: click.Context, agent: str, interval: int, timeout: int) -> None:
         """Block until messages or tasks arrive, then print and exit.
@@ -101,48 +101,6 @@ def register_commands(cli: click.Group) -> None:
         require_class("lead")(lambda: None)()
         from minion.lifecycle import debrief as _debrief
         _output(_debrief(agent, debrief_file), ctx.obj["human"])
-
-    @cli.command()
-    @click.option("--name", required=True)
-    @click.pass_context
-    def deregister(ctx: click.Context, name: str) -> None:
-        """Remove an agent from the registry."""
-        from minion.comms import deregister as _deregister
-        _output(_deregister(name), ctx.obj["human"])
-
-    @cli.command()
-    @click.option("--old", required=True)
-    @click.option("--new", required=True)
-    @click.pass_context
-    def rename(ctx: click.Context, old: str, new: str) -> None:
-        """Rename an agent. Lead only."""
-        from minion.auth import require_class
-        require_class("lead")(lambda: None)()
-        from minion.comms import rename as _rename
-        _output(_rename(old, new), ctx.obj["human"])
-
-    @cli.command()
-    @_agent_option(required=True, help="Agent to interrupt")
-    @click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
-    @click.pass_context
-    def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
-        """Interrupt an agent's current invocation. Lead only."""
-        from minion.auth import require_class
-        require_class("lead")(lambda: None)()
-        from minion.crew import interrupt_agent as _interrupt
-        _output(_interrupt(agent, requesting_agent), ctx.obj["human"])
-
-    @cli.command()
-    @_agent_option(required=True, help="Agent to resume")
-    @click.option("--message", required=True, help="Message to send on resume")
-    @click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
-    @click.pass_context
-    def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
-        """Send a resume message to an interrupted agent. Lead only."""
-        from minion.auth import require_class
-        require_class("lead")(lambda: None)()
-        from minion.comms import send as _send
-        _output(_send(from_agent, agent, message), ctx.obj["human"])
 
     @cli.command("install-hooks")
     @click.pass_context

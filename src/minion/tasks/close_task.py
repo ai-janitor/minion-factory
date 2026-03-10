@@ -1,15 +1,10 @@
-"""Close and reopen tasks — lifecycle boundary operations.
-
-Purpose: Close and reopen tasks — lifecycle boundary operations.
-Rationale: Extracted into own module for single-responsibility task management.
-Responsibility: Close and reopen tasks — lifecycle boundary operations. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+"""Close and reopen tasks — lifecycle boundary operations."""
 
 from __future__ import annotations
 
 from minion.db import get_db, now_iso
-from minion.crew._tmux import update_pane_task
-from .flow_gates_and_validation import _get_flow, _log_transition
+from minion.crew import update_pane_task
+from ._helpers import _get_flow, _log_transition
 
 
 def close_task(agent_name: str, task_id: int) -> dict[str, object]:
@@ -38,12 +33,12 @@ def close_task(agent_name: str, task_id: int) -> dict[str, object]:
         if not task_row["result_file"]:
             return {"error": f"BLOCKED: Task #{task_id} has no result file. Agent must call submit-result first."}
 
-        with conn:
-            cursor.execute(
-                "UPDATE tasks SET status = 'closed', updated_at = ? WHERE id = ?",
-                (now, task_id),
-            )
-            _log_transition(cursor, task_id, task_row["status"], "closed", agent_name, now)
+        cursor.execute(
+            "UPDATE tasks SET status = 'closed', updated_at = ? WHERE id = ?",
+            (now, task_id),
+        )
+        _log_transition(cursor, task_id, task_row["status"], "closed", agent_name, now)
+        conn.commit()
         # Clear pane task label for the agent who had this task
         if task_row["assigned_to"]:
             update_pane_task(task_row["assigned_to"])
@@ -82,12 +77,12 @@ def reopen_task(agent_name: str, task_id: int, to_status: str = "assigned") -> d
             return {"error": f"Cannot reopen to terminal status '{to_status}'."}
 
         old_status = task_row["status"]
-        with conn:
-            cursor.execute(
-                "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
-                (to_status, now, task_id),
-            )
-            _log_transition(cursor, task_id, old_status, to_status, agent_name, now)
+        cursor.execute(
+            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+            (to_status, now, task_id),
+        )
+        _log_transition(cursor, task_id, old_status, to_status, agent_name, now)
+        conn.commit()
 
         result: dict[str, object] = {
             "status": "reopened", "task_id": task_id,

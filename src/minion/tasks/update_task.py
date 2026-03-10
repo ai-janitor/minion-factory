@@ -1,15 +1,10 @@
-"""Update task state and complete DAG phases.
-
-Purpose: Update task state and complete DAG phases.
-Rationale: Extracted into own module for single-responsibility task management.
-Responsibility: Update task state and complete DAG phases. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+"""Update task state and complete DAG phases."""
 
 from __future__ import annotations
 
 from minion.db import get_db, now_iso, staleness_check
-from minion.crew._tmux import update_pane_task
-from .flow_gates_and_validation import _get_flow, _log_transition
+from minion.crew import update_pane_task
+from ._helpers import _get_flow, _log_transition
 
 
 def update_task(
@@ -83,16 +78,16 @@ def update_task(
             params.append(files)
 
         params.append(task_id)
-        with conn:
-            cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
+        cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
 
-            if status:
-                _log_transition(cursor, task_id, current_status, status, agent_name, now)
-
-            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
+        if status:
+            _log_transition(cursor, task_id, current_status, status, agent_name, now)
 
         cursor.execute("SELECT activity_count FROM tasks WHERE id = ?", (task_id,))
         new_count = cursor.fetchone()["activity_count"]
+
+        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
+        conn.commit()
 
         result: dict[str, object] = {
             "status": "updated",
@@ -197,10 +192,12 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
             fields.append("assigned_to = NULL")
 
         params.append(task_id)
-        with conn:
-            cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
-            _log_transition(cursor, task_id, current, new_status, agent_name, now)
-            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
+        cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
+
+        _log_transition(cursor, task_id, current, new_status, agent_name, now)
+
+        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
+        conn.commit()
 
         # Clear pane task label when agent is done with this phase
         if eligible is not None or (flow and flow.is_terminal(new_status)):

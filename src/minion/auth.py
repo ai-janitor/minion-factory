@@ -84,17 +84,10 @@ def classes_with(capability: str) -> set[str]:
 
 # ---------------------------------------------------------------------------
 # Staleness thresholds (seconds) — enforced on send()
+# Re-exported from defaults.py (canonical source) to maintain backwards compat.
 # ---------------------------------------------------------------------------
 
-CLASS_STALENESS_SECONDS: dict[str, int] = {
-    "coder": 5 * 60,
-    "builder": 5 * 60,
-    "recon": 5 * 60,
-    "lead": 15 * 60,
-    "oracle": 30 * 60,
-    "planner": 15 * 60,
-    "auditor": 5 * 60,
-}
+from minion.defaults import CLASS_STALENESS_SECONDS as CLASS_STALENESS_SECONDS  # noqa: E402,F811
 
 # ---------------------------------------------------------------------------
 # Battle plan / task / raid log enums
@@ -112,19 +105,10 @@ TASK_STATUSES = {
 
 # ---------------------------------------------------------------------------
 # Trigger words (brevity codes)
+# Re-exported from defaults.py (canonical source) to maintain backwards compat.
 # ---------------------------------------------------------------------------
 
-TRIGGER_WORDS: dict[str, str] = {
-    "fenix_down": "Dump all knowledge to disk before context death. Revival protocol.",
-    "moon_crash": "Emergency shutdown. Everyone fenix_down NOW. No new task assignments.",
-    "halt": "Finish current work, save state (fenix_down), stand down. Graceful pause — not an emergency. You will be resumed later.",
-    "sitrep": "Request status report from target agent.",
-    "rally": "All agents focus on the specified target/zone.",
-    "retreat": "Pull back from current approach, reassess.",
-    "hot_zone": "Area is dangerous/complex, proceed with caution.",
-    "stand_down": "Stop work, prepare to deregister.",
-    "recon": "Investigate before acting. Gather intel first.",
-}
+from minion.defaults import TRIGGER_WORDS as TRIGGER_WORDS  # noqa: E402,F811
 
 # ---------------------------------------------------------------------------
 # Briefing files per class (cold_start onboarding)

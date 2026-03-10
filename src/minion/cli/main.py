@@ -38,7 +38,7 @@ def _store_heartbeat_agent(ctx: click.Context, param: click.Parameter, value: st
 def _agent_option(**kwargs):  # noqa: ANN003
     """Drop-in replacement for @click.option('--agent', ...) with auto heartbeat."""
     kwargs.setdefault("callback", _store_heartbeat_agent)
-    return click.option("--agent", **kwargs)
+    return click.option("--agent", "-a", **kwargs)
 
 
 @click.group(epilog="Run 'minion <group> --help' to see subcommands. Run 'minion docs' for the full reference.")

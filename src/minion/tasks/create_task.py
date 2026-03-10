@@ -1,17 +1,12 @@
-"""Create and assign tasks.
-
-Purpose: Create and assign tasks.
-Rationale: Extracted into own module for single-responsibility task management.
-Responsibility: Create and assign tasks. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+"""Create and assign tasks."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import get_db, now_iso
-from minion.crew._tmux import update_pane_task
-from .flow_gates_and_validation import _get_flow, _log_transition
+from minion.crew import update_pane_task
+from ._helpers import _get_flow, _log_transition
 
 
 def create_task(
@@ -73,19 +68,19 @@ def create_task(
             if req_row:
                 req_path = req_row["file_path"]
 
-        with conn:
-            cursor.execute(
-                """INSERT INTO tasks
-                   (title, task_file, project, zone, status, blocked_by,
-                    class_required, flow_type, created_by, activity_count,
-                    requirement_id, requirement_path, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
-                (title, task_file, project or None, zone or None, blocked_by_str,
-                 class_required or None, task_type, agent_name,
-                 requirement_id, req_path, now, now),
-            )
-            task_id = cursor.lastrowid
-            _log_transition(cursor, task_id, None, "open", agent_name, now)
+        cursor.execute(
+            """INSERT INTO tasks
+               (title, task_file, project, zone, status, blocked_by,
+                class_required, flow_type, created_by, activity_count,
+                requirement_id, requirement_path, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
+            (title, task_file, project or None, zone or None, blocked_by_str,
+             class_required or None, task_type, agent_name,
+             requirement_id, req_path, now, now),
+        )
+        task_id = cursor.lastrowid
+        _log_transition(cursor, task_id, None, "open", agent_name, now)
+        conn.commit()
 
         result: dict[str, object] = {"status": "created", "task_id": task_id, "title": title, "task_type": task_type}
         if blocked_by_str:
@@ -150,18 +145,18 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
             if workers is not None:
                 review_stage = True
 
-        with conn:
-            if review_stage:
-                cursor.execute(
-                    "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
-                    (assigned_to, now, task_id),
-                )
-            else:
-                cursor.execute(
-                    "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
-                    (assigned_to, now, task_id),
-                )
-                _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
+        if review_stage:
+            cursor.execute(
+                "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
+                (assigned_to, now, task_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
+                (assigned_to, now, task_id),
+            )
+            _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
+        conn.commit()
         update_pane_task(assigned_to, f"T{task_id}: {task_title}")
         return {"status": "assigned", "task_id": task_id, "assigned_to": assigned_to}
     finally:

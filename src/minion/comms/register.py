@@ -155,33 +155,11 @@ def register(
         zone = ""
         capabilities: list[str] = []
         if crew:
-            from minion.crew.spawn import _find_crew_file
-            from minion.crew.config import load_config as _load_crew_config
-
-            crew_file = _find_crew_file(crew)
-            if not crew_file:
-                result["crew_warning"] = f"Crew '{crew}' not found — skipping crew context"
-            else:
-                try:
-                    crew_cfg = _load_crew_config(crew_file)
-                    agent_cfg = crew_cfg.agents.get(agent_name)
-                    if not agent_cfg:
-                        result["crew_error"] = (
-                            f"Agent '{agent_name}' not found in crew '{crew}'. "
-                            f"Available: {', '.join(sorted(crew_cfg.agents.keys()))}"
-                        )
-                    else:
-                        result["crew"] = crew
-                        if agent_cfg.zone:
-                            zone = agent_cfg.zone
-                            result["zone"] = zone
-                        if agent_cfg.capabilities:
-                            capabilities = list(agent_cfg.capabilities)
-                            result["capabilities"] = capabilities
-                        if agent_cfg.system:
-                            result["system_prompt_excerpt"] = agent_cfg.system[:200]
-                except Exception as exc:
-                    result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
+            from minion.crew import merge_crew_context
+            crew_ctx = merge_crew_context(crew, agent_name)
+            result.update(crew_ctx)
+            zone = crew_ctx.get("zone", "")
+            capabilities = list(crew_ctx.get("capabilities", []))
 
         # Write agent roster file for hook discovery
         from minion.db import get_runtime_dir

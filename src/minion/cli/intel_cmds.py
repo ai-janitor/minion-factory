@@ -68,7 +68,15 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--slug", required=True, help="Intel doc slug")
     @click.pass_context
     def intel_get(ctx: click.Context, slug: str) -> None:
-        """Get metadata and links for a registered intel doc."""
+        """Get metadata and links for a registered intel doc (alias: 'intel show')."""
+        from minion.intel import get_doc as _get_doc
+        _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
+
+    @intel_group.command("show")
+    @click.option("--slug", required=True, help="Intel doc slug")
+    @click.pass_context
+    def intel_show(ctx: click.Context, slug: str) -> None:
+        """Show metadata and links for a registered intel doc (alias for 'intel get')."""
         from minion.intel import get_doc as _get_doc
         _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
 
