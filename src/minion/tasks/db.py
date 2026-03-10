@@ -16,24 +16,36 @@ from .dag import Transition
 from .loader import load_flow
 
 
+class TaskDBClosedError(RuntimeError):
+    """Raised when TaskDB methods are called after the connection has been closed."""
+
+
 class TaskDB:
     def __init__(self, db_path: str | None = None, flows_dir: str | Path | None = None):
         # db_path ignored — factory uses unified DB via get_db()
         # Kept as parameter for API compatibility with minion-tasks consumers
         self._conn = get_db()
+        self._closed = False
         self._flows_dir = Path(flows_dir) if flows_dir else None
 
     def close(self) -> None:
-        """Explicitly close the underlying SQLite connection."""
-        if self._conn:
+        """Close the underlying DB connection. Further calls will raise TaskDBClosedError."""
+        if not self._closed:
             self._conn.close()
-            self._conn = None
+            self._closed = True
 
     def __enter__(self) -> "TaskDB":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
+
+    def _ensure_open(self) -> None:
+        """Guard: raise meaningful error if DB has been closed."""
+        if self._closed:
+            raise TaskDBClosedError(
+                "TaskDB connection is closed. Create a new TaskDB instance to continue."
+            )
 
     # --- helpers ---
 
@@ -48,6 +60,7 @@ class TaskDB:
     # --- Projects ---
 
     def create_project(self, id: str, description: str) -> dict:
+        self._ensure_open()
         self._conn.execute(
             "INSERT INTO projects (id, description) VALUES (?, ?)",
             (id, description),
@@ -56,10 +69,12 @@ class TaskDB:
         return self.get_project(id)
 
     def get_project(self, id: str) -> dict | None:
+        self._ensure_open()
         row = self._conn.execute("SELECT * FROM projects WHERE id = ?", (id,)).fetchone()
         return self._row_to_dict(row)
 
     def list_projects(self, status: str | None = None) -> list[dict]:
+        self._ensure_open()
         if status:
             rows = self._conn.execute(
                 "SELECT * FROM projects WHERE status = ?", (status,)
@@ -79,6 +94,7 @@ class TaskDB:
         file_path: str | None = None,
         class_required: str | None = None,
     ) -> dict:
+        self._ensure_open()
         self._conn.execute(
             """INSERT INTO tasks (id, project_id, flow_type, description, file_path, class_required)
                VALUES (?, ?, ?, ?, ?, ?)""",
@@ -88,6 +104,7 @@ class TaskDB:
         return self.get_task(id)
 
     def get_task(self, id: str) -> dict | None:
+        self._ensure_open()
         row = self._conn.execute("SELECT * FROM tasks WHERE id = ?", (id,)).fetchone()
         return self._row_to_dict(row)
 
@@ -98,6 +115,7 @@ class TaskDB:
         class_required: str | None = None,
         assigned_to: str | None = None,
     ) -> list[dict]:
+        self._ensure_open()
         clauses, params = [], []
         if project_id:
             clauses.append("project_id = ?")
@@ -121,6 +139,7 @@ class TaskDB:
 
     def transition_task(self, task_id: str, to_status: str, agent: str | None = None) -> dict:
         """Move task to a new status. Validates against DAG, logs with valid flag."""
+        self._ensure_open()
         task = self.get_task(task_id)
         if task is None:
             raise ValueError(f"Task '{task_id}' not found")
@@ -152,6 +171,7 @@ class TaskDB:
 
     def complete(self, task_id: str, agent: str, passed: bool = True) -> Transition | None:
         """Assignee says 'done' — DAG routes to next stage, DB updated."""
+        self._ensure_open()
         task = self.get_task(task_id)
         if task is None:
             raise ValueError(f"Task '{task_id}' not found")
@@ -174,6 +194,7 @@ class TaskDB:
         return result
 
     def get_transitions(self, task_id: str) -> list[dict]:
+        self._ensure_open()
         rows = self._conn.execute(
             "SELECT * FROM transition_log WHERE entity_id = ? AND entity_type = 'task' ORDER BY created_at, id",
             (task_id,),

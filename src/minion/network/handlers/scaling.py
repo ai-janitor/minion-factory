@@ -20,9 +20,8 @@ def register(router) -> None:
     POST /spawn    → handle_spawn
     GET  /capacity → handle_capacity
     """
-    # PSEUDO: router.add_post("/spawn", handle_spawn)
-    # PSEUDO: router.add_get("/capacity", handle_capacity)
-    pass
+    router.add_post("/spawn", handle_spawn)
+    router.add_get("/capacity", handle_capacity)
 
 
 def handle_spawn(handler, db_path: str, **kwargs) -> None:
@@ -47,7 +46,11 @@ def handle_spawn(handler, db_path: str, **kwargs) -> None:
     #   {"status": "not_implemented",
     #    "message": "Elastic spawn is not yet available",
     #    "schema": {"agent": "string", "machine": "string", "estimated_boot_time_s": "int"}}
-    raise NotImplementedError
+    handler._json_response(501, {
+        "status": "not_implemented",
+        "message": "Elastic spawn is not yet available",
+        "schema": {"agent": "string", "machine": "string", "estimated_boot_time_s": "int"},
+    })
 
 
 def handle_capacity(handler, db_path: str, **kwargs) -> None:
@@ -72,4 +75,9 @@ def handle_capacity(handler, db_path: str, **kwargs) -> None:
     #   specs = json.loads(machine_specs) if machine_specs else {}
     #   available_slots = max_agents - running
     # PSEUDO: return {"machines": [...]}
-    raise NotImplementedError
+    handler._json_response(501, {
+        "status": "not_implemented",
+        "message": "Capacity endpoint is not yet available",
+        "schema": {"machines": [{"machine_id": "string", "running_agents": "int",
+                    "max_agents": "int", "available_slots": "int", "specs": "object"}]},
+    })

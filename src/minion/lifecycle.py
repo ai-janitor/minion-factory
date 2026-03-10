@@ -38,7 +38,7 @@ def _gather_operational_state(agent_name: str, cursor: sqlite3.Cursor) -> dict[s
             flow_type = task.get("flow_type") or task.get("task_type", "bugfix")
             flow = load_flow(flow_type)
             task["dag_position"] = flow.render_dag(task["status"])
-        except Exception:
+        except (ImportError, FileNotFoundError, KeyError, ValueError):
             pass
         open_tasks.append(task)
     result["open_tasks"] = open_tasks
@@ -184,7 +184,7 @@ def cold_start(agent_name: str) -> dict[str, object]:
             doc_paths = [d["doc_path"] for d in class_docs.get("docs", [])]
             if doc_paths:
                 result["suggested_reading"] = doc_paths
-        except Exception:
+        except (ImportError, KeyError, TypeError):
             pass
 
         # Operational state (tasks, claims, HP, inbox, flags)
