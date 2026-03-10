@@ -56,6 +56,7 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         SELECT
             name,
             agent_class,
+            COALESCE(model, '')                                             AS model,
             status,
             transport,
             COALESCE(hp_input_tokens, 0)  + COALESCE(hp_output_tokens, 0)  AS tokens_used,
@@ -194,6 +195,44 @@ def get_recent_messages(conn: sqlite3.Connection, limit: int = 50) -> list[dict]
         "SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?", (limit,)
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Promoted backlog items — items that have been promoted to tasks.
+
+    Shows backlog items with their promoted_to task ID so the TUI can display
+    the DAG stage of the linked task. Only shows items with status != 'closed'.
+    Backlog #112: TUI dashboard should show promoted backlog items with DAG stage.
+    """
+    # The backlog table may not exist in older DBs — fail gracefully
+    try:
+        cursor = conn.execute("""
+            SELECT
+                b.id,
+                b.type,
+                SUBSTR(b.title, 1, 35)              AS title_short,
+                b.priority,
+                b.status,
+                b.promoted_to,
+                COALESCE(t.status, '')               AS task_status,
+                COALESCE(t.assigned_to, '')          AS task_assignee
+            FROM backlog b
+            LEFT JOIN tasks t ON b.promoted_to = CAST(t.id AS TEXT)
+            WHERE b.status NOT IN ('closed', 'abandoned')
+            ORDER BY
+                CASE b.priority
+                    WHEN 'critical' THEN 0
+                    WHEN 'high'     THEN 1
+                    WHEN 'medium'   THEN 2
+                    WHEN 'low'      THEN 3
+                    ELSE 4
+                END,
+                b.id ASC
+            LIMIT 20
+        """)
+        return cursor.fetchall()
+    except Exception:
+        return []
 
 
 def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
