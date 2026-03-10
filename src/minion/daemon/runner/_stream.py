@@ -7,7 +7,6 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from typing import Any, List, Tuple, TYPE_CHECKING
 
 from ..contracts import load_contract
@@ -84,17 +83,13 @@ class StreamMixin:
 
     def _print_stream_start(self, command_name: str) -> None:
         self._invocation += 1
-        ts = datetime.now().strftime("%H:%M:%S")
-        print(
-            f"\n=== model-stream start: agent={self.agent_name} cmd={command_name} v={self._invocation} ts={ts} ===",
-            flush=True,
-        )
+        self._log(f"stream_start: command={command_name} invocation={self._invocation}")
 
     def _print_stream_end(self, command_name: str, displayed_chars: int, hidden_chars: int) -> None:
-        ts = datetime.now().strftime("%H:%M:%S")
-        if hidden_chars > 0:
-            print(f"\n[model-stream abbreviated: {hidden_chars} chars hidden]", flush=True)
-        print(
-            f"=== model-stream end: agent={self.agent_name} cmd={command_name} v={self._invocation} ts={ts} shown={displayed_chars} chars ===",
-            flush=True,
+        self._log(
+            f"stream_end: command={command_name} invocation={self._invocation} "
+            f"displayed_chars={displayed_chars} hidden_chars={hidden_chars}"
         )
+
+    # Defined in other mixins
+    def _log(self, message: str) -> None: ...

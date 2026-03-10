@@ -146,15 +146,11 @@ class HPMixin:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
             if result.returncode != 0:
-                import sys
                 msg = f"UPDATE-HP ERROR: exit {result.returncode} stderr={result.stderr[:200]}"
                 self._log(msg)
-                print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
         except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
-            import sys
             msg = f"UPDATE-HP ERROR: {type(exc).__name__}: {exc}"
             self._log(msg)
-            print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
 
     def _record_boot_hp(self, boot_prompt: str, result: Any) -> None:
         """Log boot token usage. Overhead estimate is input_tokens minus chars/4 — not accurate."""

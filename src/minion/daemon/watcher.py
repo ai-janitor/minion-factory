@@ -75,11 +75,15 @@ class CommsWatcher:
         try:
             return _connect(self.db_path)
         except sqlite3.OperationalError as exc:
+            import json as _json
             import sys
-            print(
-                f"🚨 [{self.agent_name}] DB connect failed ({self.db_path}): {exc}",
-                file=sys.stderr, flush=True,
-            )
+            print(_json.dumps({
+                "ts": datetime.now().isoformat(),
+                "agent": self.agent_name,
+                "level": "ERROR",
+                "source": "watcher",
+                "message": f"DB connect failed ({self.db_path}): {exc}",
+            }), file=sys.stderr, flush=True)
             raise
 
     def start(self) -> None:
