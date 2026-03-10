@@ -14,6 +14,8 @@ Implementation order: 1st (no dependencies, other modules may import).
 
 from __future__ import annotations
 
+import hmac
+
 
 def check_token(headers: dict, expected: str) -> bool:
     """Validate Bearer token from Authorization header.
@@ -27,11 +29,12 @@ def check_token(headers: dict, expected: str) -> bool:
     """
     # PSEUDO: if not expected → return True (no auth configured, dev mode)
     # PSEUDO: auth = headers.get("Authorization", "")
-    # PSEUDO: return auth == f"Bearer {expected}"
+    # PSEUDO: return hmac.compare_digest(auth, expected_header) — timing-safe comparison
     if not expected:
         return True
     auth = headers.get("Authorization", "")
-    return auth == f"Bearer {expected}"
+    expected_header = f"Bearer {expected}"
+    return hmac.compare_digest(auth, expected_header)
 
 
 class AuthMixin:

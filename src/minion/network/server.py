@@ -8,6 +8,7 @@ See router.py for the full route table and handlers/ for endpoint implementation
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sqlite3
@@ -15,15 +16,13 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
+from minion.db.connection import connect as _db_connect
+
 _DB_LOCK = threading.Lock()
 
 
 def _get_server_db(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+    return _db_connect(db_path)
 
 
 def _init_server_db(db_path: str) -> None:
@@ -39,7 +38,7 @@ def _check_token(headers: dict, expected: str) -> bool:
     if not expected:
         return True  # no auth configured
     auth = headers.get("Authorization", "")
-    return auth == f"Bearer {expected}"
+    return hmac.compare_digest(auth, f"Bearer {expected}")
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -69,13 +68,32 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB — guard against DoS via large Content-Length
+
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", 0))
+        if length > self._MAX_BODY_SIZE:
+            self._json_response(413, {"error": f"Request body too large (max {self._MAX_BODY_SIZE} bytes)"})
+            return b""
         return self.rfile.read(length)
 
+    def _check_content_type_json(self) -> bool:
+        """Validate Content-Type is application/json. Returns False and sends 415 if not."""
+        ct = self.headers.get("Content-Type", "")
+        # Accept "application/json" with optional params (e.g. "; charset=utf-8")
+        if not ct.split(";")[0].strip().lower() == "application/json":
+            self._json_response(415, {"error": "Content-Type must be application/json"})
+            return False
+        return True
+
     def _parse_json_body(self) -> dict | None:
+        if not self._check_content_type_json():
+            return None
+        raw = self._read_body()
+        if not raw:
+            return None
         try:
-            return json.loads(self._read_body())
+            return json.loads(raw)
         except (json.JSONDecodeError, ValueError):
             return None
 
