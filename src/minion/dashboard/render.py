@@ -11,6 +11,7 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,12 @@ _STATUS_COLORS: dict[str, str] = {
     "verified":    _YELLOW,
     "open":        _WHITE,
     "blocked":     _RED,
+}
+
+# Map long DB status strings to short display names (max 10 chars for column width)
+_STATUS_DISPLAY: dict[str, str] = {
+    "waiting for work": "waiting",
+    "registered": "reg",
 }
 
 
@@ -143,6 +150,22 @@ def _find_checklist(agent_name: str, work_dir: str) -> str | None:
     return None
 
 
+def _parse_checklist_tally(path: str) -> str | None:
+    """Parse the tally from the first line of a checklist file.
+
+    Looks for a pattern like [32/33-0NA] in the first line.
+    Returns the tally string (e.g. '32/33-0NA') if found, None otherwise.
+    On any error (file not found, permission, etc), returns None.
+    """
+    try:
+        with open(path, "r") as f:
+            first_line = f.readline()
+        m = re.search(r"\[(\d+/\d+-\d+NA)\]", first_line)
+        return m.group(1) if m else None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def _staleness_seconds(iso_timestamp: str | None) -> float | None:
     """Return seconds since the given ISO timestamp, or None if unparseable.
 
@@ -206,12 +229,16 @@ def _agent_display_status(row: sqlite3.Row) -> tuple[str, str]:
         return ("idle?", _YELLOW)
 
     # Fresh enough — use declared status with standard colors
+    # Map long statuses to short display names that fit 10-char column
+    display = _STATUS_DISPLAY.get(agent_status, agent_status)
+    if len(display) > 10:
+        display = display[:9] + "…"
     if agent_status == "ready":
-        return (agent_status, _GREEN)
+        return (display, _GREEN)
     elif agent_status == "busy":
-        return (agent_status, _YELLOW)
+        return (display, _YELLOW)
     else:
-        return (agent_status, _DIM)
+        return (display, _DIM)
 
 
 def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "") -> list[str]:
@@ -236,7 +263,9 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
         # Checklist link
         checklist_path = _find_checklist(row["name"], work_dir) if work_dir else None
         if checklist_path:
-            checklist_col = _osc8_link(checklist_path, f"{_CYAN}checklist{_RESET}")
+            tally = _parse_checklist_tally(checklist_path)
+            display = tally if tally else "checklist"
+            checklist_col = _osc8_link(checklist_path, f"{_CYAN}{display}{_RESET}")
         else:
             checklist_col = f"{_DIM}—{_RESET}"
 
@@ -266,7 +295,7 @@ def _render_activity(activity: list[sqlite3.Row]) -> list[str]:
         return lines
 
     for row in activity:
-        ts = (row["timestamp"] or "")[-8:]  # HH:MM:SS from ISO timestamp
+        ts = _relative_time(row["timestamp"])
         from_s = row["from_status"] or "—"
         to_s = row["to_status"] or "—"
         agent = row["agent"] or "—"
@@ -291,7 +320,8 @@ def render_screen(
     """
     lines: list[str] = []
 
-    header = f"{_BOLD}{_CYAN}  ⚡ MINION DASHBOARD{_RESET}"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    header = f"{_BOLD}{_CYAN}  ⚡ MINION DASHBOARD{_RESET}  {_DIM}{now_str}{_RESET}"
     lines.append(header)
     lines.append("")
 
