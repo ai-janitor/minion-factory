@@ -192,27 +192,26 @@ def _relative_time(iso_ts: str | None) -> str:
 def _find_checklist(agent_name: str, work_dir: str) -> str | None:
     """Find checklist file for an agent. Convention-based lookup.
 
-    Search order:
-    1. ~/.minion_work/checklists/lead-<name>.md  (global, lead)
-    2. ~/.minion_work/checklists/<name>.md        (global, worker/generic)
-    3. <work_dir>/checklists/lead-<name>.md       (project-local, lead)
-    4. <work_dir>/checklists/<name>.md            (project-local, worker/generic)
+    Search order (project-local .work/checklists/ ONLY):
+    1. <work_dir>/checklists/lead-<name>.md  (lead checklist)
+    2. <work_dir>/checklists/<name>.md        (worker/generic checklist)
+
+    The TUI reads from the project's .work/checklists/ — that's the correct
+    location. Global ~/.minion_work/checklists/ is NOT searched here.
     """
-    # Build list of directories to search — global first, then project-local
-    global_checklist_dir = os.path.expanduser("~/.minion_work/checklists")
-    local_checklist_dir = os.path.join(work_dir, "checklists") if work_dir else ""
+    if not work_dir:
+        return None
 
-    search_dirs = [d for d in (global_checklist_dir, local_checklist_dir) if d]
+    checklist_dir = os.path.join(work_dir, "checklists")
 
-    for checklist_dir in search_dirs:
-        # Lead checklists: lead-<name>.md
-        lead_path = os.path.join(checklist_dir, f"lead-{agent_name}.md")
-        if os.path.exists(lead_path):
-            return lead_path
-        # Worker/generic checklists: <name>.md
-        worker_path = os.path.join(checklist_dir, f"{agent_name}.md")
-        if os.path.exists(worker_path):
-            return worker_path
+    # Lead checklists: lead-<name>.md
+    lead_path = os.path.join(checklist_dir, f"lead-{agent_name}.md")
+    if os.path.exists(lead_path):
+        return lead_path
+    # Worker/generic checklists: <name>.md
+    worker_path = os.path.join(checklist_dir, f"{agent_name}.md")
+    if os.path.exists(worker_path):
+        return worker_path
     return None
 
 
