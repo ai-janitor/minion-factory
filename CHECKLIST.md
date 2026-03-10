@@ -26,9 +26,9 @@ Timezone mismatch between timestamp writers and readers:
 ## Fix Approach
 1. Normalize `utc_now_iso()` to use naive local time (same as `now_iso()`) — all timestamps consistent
 2. Fix all `fromisoformat` + `datetime.now()` comparisons to handle both aware and naive timestamps safely
-3. Add `_parse_timestamp()` helper that strips timezone info for safe comparison with `datetime.now()`
+3. Add `_to_naive_local(dt)` helper that strips timezone info for safe comparison with `datetime.now()`
 
 - [x] Root cause identified
 - [x] Fix implemented
-- [x] Tests pass (219 passed)
+- [x] Tests pass
 - [x] Committed

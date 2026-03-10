@@ -14,6 +14,7 @@ import os
 from typing import Any
 
 from minion.db import enrich_agent_row, get_db, get_lead, now_iso
+from minion.db.agents import _to_naive_local
 from minion.fs import atomic_write_file, message_file_path, read_content_file
 
 log = logging.getLogger(__name__)
@@ -40,14 +41,12 @@ def _agent_judgment(
     These thresholds are hardcoded, not configurable. They match the staleness
     thresholds in auth.py CLASS_STALENESS_SECONDS (5min for coders, 15min for leads).
     """
-    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
-
     now = datetime.datetime.now()
 
     for mt in file_mtimes:
         if mt:
             try:
-                mtime_dt = parse_iso_to_naive_local(mt)
+                mtime_dt = _to_naive_local(datetime.datetime.fromisoformat(mt))
                 if (now - mtime_dt).total_seconds() < 5 * 60:
                     return "active"
             except (ValueError, TypeError):
@@ -55,7 +54,7 @@ def _agent_judgment(
 
     if last_seen:
         try:
-            ls = parse_iso_to_naive_local(last_seen)
+            ls = _to_naive_local(datetime.datetime.fromisoformat(last_seen))
             age_min = (now - ls).total_seconds() / 60
             if age_min < 5:
                 return "active"
@@ -67,7 +66,7 @@ def _agent_judgment(
 
     if last_task_update:
         try:
-            ltu = parse_iso_to_naive_local(last_task_update)
+            ltu = _to_naive_local(datetime.datetime.fromisoformat(last_task_update))
             age_min = (now - ltu).total_seconds() / 60
             if age_min < 5:
                 return "active"
@@ -135,8 +134,6 @@ def party_status() -> dict[str, object]:
 
 
 def check_activity(agent_name: str) -> dict[str, object]:
-    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
-
     conn = get_db()
     cursor = conn.cursor()
     now = datetime.datetime.now()
@@ -156,7 +153,7 @@ def check_activity(agent_name: str) -> dict[str, object]:
 
         if row["last_seen"]:
             try:
-                ls = parse_iso_to_naive_local(row["last_seen"])
+                ls = _to_naive_local(datetime.datetime.fromisoformat(row["last_seen"]))
                 result["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
             except (ValueError, TypeError):
                 log.warning("corrupt last_seen for %s: %r", agent_name, row["last_seen"])
@@ -238,8 +235,7 @@ def check_freshness(agent_name: str, file_paths: str) -> dict[str, object]:
             }
 
         try:
-            from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
-            context_dt = parse_iso_to_naive_local(context_updated_at)
+            context_dt = _to_naive_local(datetime.datetime.fromisoformat(context_updated_at))
             context_ts = context_dt.timestamp()
         except (ValueError, TypeError):
             return {"error": f"Invalid context_updated_at timestamp for '{agent_name}'."}
