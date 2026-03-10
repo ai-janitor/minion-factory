@@ -6,6 +6,7 @@ import os
 import threading
 from typing import Any, Optional, TYPE_CHECKING
 
+from minion.db.connection import connect as _connect
 from ._constants import utc_now_iso, _get_rss_bytes
 
 if TYPE_CHECKING:
@@ -70,11 +71,9 @@ class StateMixin:
 
         # Piggyback RSS update — measure child if alive, else last known
         if self._child_pid:
-            import sqlite3
             try:
                 rss = _get_rss_bytes(self._child_pid)
-                conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-                conn.execute("PRAGMA busy_timeout=5000")
+                conn = _connect(self.config.comms_db)
                 conn.execute(
                     "UPDATE agents SET rss_bytes = ? WHERE name = ?",
                     (rss, self.agent_name),
