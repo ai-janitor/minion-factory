@@ -220,7 +220,8 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
                 b.status,
                 b.promoted_to,
                 COALESCE(t.status, '')               AS task_status,
-                COALESCE(t.assigned_to, '')          AS task_assignee
+                COALESCE(t.assigned_to, '')          AS task_assignee,
+                b.updated_at
             FROM backlog b
             LEFT JOIN tasks t ON b.promoted_to = CAST(t.id AS TEXT)
             WHERE b.status NOT IN ('closed', 'abandoned', 'killed')

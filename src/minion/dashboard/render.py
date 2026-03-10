@@ -372,8 +372,8 @@ def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]
     Capped to max_rows visible items with overflow indicator (#230).
     """
     lines: list[str] = [
-        f"{_BOLD}{'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'TITLE':<35}{_RESET}",
-        "─" * 80,
+        f"{_BOLD}{'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'UPDATED':<8}  {'TITLE':<35}{_RESET}",
+        "─" * 88,
     ]
 
     if not backlog:
@@ -394,12 +394,14 @@ def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]
             task_info = row["status"]
         task_info = _truncate(task_info, 12)
         title = row["title_short"]
+        updated = _relative_time(row["updated_at"]) if row["updated_at"] else ""
         lines.append(
             f"{row['id']:>4}  "
             f"{_truncate(row['type'], 8):<8}  "
             f"{pri_color}{row['priority']:<8}{_RESET}  "
             f"{row['status']:<10}  "
             f"{task_info:<12}  "
+            f"{_DIM}{updated:<8}{_RESET}  "
             f"{title}"
         )
 
