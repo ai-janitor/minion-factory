@@ -15,6 +15,8 @@ import json
 import os
 import sqlite3
 import threading
+import time
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
@@ -45,18 +47,38 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
     db_path: str = ""
     token: str = ""
 
+    # Per-request start time — set by _timed_dispatch before handler runs
+    _request_start: float = 0.0
+
     def log_message(self, format, *args):
-        """Structured HTTP request logging — method, path, status, client."""
-        import json as _json
-        from datetime import datetime
-        msg = format % args if args else format
-        print(_json.dumps({
+        """Suppress default stderr logging — we emit structured JSON in _log_request instead."""
+        pass
+
+    def _log_request(self, method: str, path: str, status_code: int, duration_ms: float) -> None:
+        """Emit structured JSON log line for every HTTP request.
+
+        Fields match daemon runner format (ts, level, source, message) plus
+        HTTP-specific fields: method, path, status_code, duration_ms, client.
+        """
+        print(json.dumps({
             "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "level": "INFO",
-            "component": "http",
+            "source": "network.http",
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "duration_ms": round(duration_ms, 2),
             "client": self.client_address[0],
-            "message": msg,
+            "message": f"{method} {path} {status_code} {round(duration_ms, 1)}ms",
         }), flush=True)
+
+    # Captured response status code — set by send_response override
+    _response_status: int = 0
+
+    def send_response(self, code, message=None):
+        """Override to capture status code for structured logging."""
+        self._response_status = code
+        super().send_response(code, message)
 
     def _json_response(self, status: int, data: dict) -> None:
         body = json.dumps(data, indent=2).encode()
@@ -107,6 +129,8 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
     _router = None
 
     def do_GET(self) -> None:
+        start = time.monotonic()
+        self._response_status = 0
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
@@ -114,6 +138,7 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
         if path == "" or path == "/":
             from minion.network.dashboard import DASHBOARD_HTML
             self._html_response(DASHBOARD_HTML)
+            self._log_request("GET", path or "/", self._response_status, (time.monotonic() - start) * 1000)
             return
 
         # SU-22: Server-rendered dashboard pages — no auth (read-only views)
@@ -123,12 +148,14 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
                 html = handle_dashboard_page(path, self.db_path)
                 if html is not None:
                     self._html_response(html)
+                    self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
                     return
             except Exception:
                 pass  # Fall through to auth-required routes
 
         # API endpoints — auth required
         if not self.require_auth():
+            self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
             return
 
         # Delegate to router
@@ -136,19 +163,24 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
             handler_fn, params = self._router.route_get(path)
             if handler_fn:
                 handler_fn(self, self.db_path, **params)
+                self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
                 return
 
         self._json_response(404, {"error": f"Not found: {path}"})
+        self._log_request("GET", path, 404, (time.monotonic() - start) * 1000)
 
     # POST paths that skip auth (login must work without a token)
     _POST_NO_AUTH = {"/api/login"}
 
     def do_POST(self) -> None:
+        start = time.monotonic()
+        self._response_status = 0
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
         if path not in self._POST_NO_AUTH:
             if not self.require_auth():
+                self._log_request("POST", path, self._response_status, (time.monotonic() - start) * 1000)
                 return
 
         # Delegate to router
@@ -156,9 +188,11 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
             handler_fn, params = self._router.route_post(path)
             if handler_fn:
                 handler_fn(self, self.db_path, **params)
+                self._log_request("POST", path, self._response_status, (time.monotonic() - start) * 1000)
                 return
 
         self._json_response(404, {"error": f"Not found: {path}"})
+        self._log_request("POST", path, 404, (time.monotonic() - start) * 1000)
 
 
 def _tls_dir() -> str:
