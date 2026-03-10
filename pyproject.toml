@@ -35,6 +35,8 @@ markers = [
     "unit: Pure logic tests — no DB, no filesystem, no network. Fast.",
     "integration: Tests that touch DB, filesystem, or CLI runner. Medium speed.",
     "smoke: End-to-end flows that exercise multiple subsystems. Slowest.",
+    "slow: Tests that take >1s — subprocess calls, large data, sleep waits.",
+    "db: Tests that create or query SQLite databases.",
 ]
 
 [tool.basedpyright]

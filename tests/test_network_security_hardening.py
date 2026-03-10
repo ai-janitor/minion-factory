@@ -15,6 +15,8 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
+pytestmark = pytest.mark.unit
+
 
 # --- #46: Timing-safe token comparison ---
 

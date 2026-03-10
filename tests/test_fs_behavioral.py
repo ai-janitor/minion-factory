@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import pytest
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------

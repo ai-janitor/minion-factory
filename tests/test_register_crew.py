@@ -13,7 +13,7 @@ import pytest
 
 from minion.db import init_db, reset_db_path, register_agent_db
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 # ---------------------------------------------------------------------------

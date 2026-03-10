@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 from minion.cli import cli
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 # ---------------------------------------------------------------------------

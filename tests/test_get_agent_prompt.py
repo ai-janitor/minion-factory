@@ -14,7 +14,7 @@ import pytest
 
 from minion.crew.config import get_agent_prompt
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 @pytest.fixture()

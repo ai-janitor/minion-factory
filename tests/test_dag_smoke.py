@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, pytest.mark.integration, pytest.mark.db]
 
 from minion.db import init_db, register_agent_db, reset_db_path
 
