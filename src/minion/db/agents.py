@@ -12,6 +12,18 @@ import sqlite3
 from typing import Any
 
 
+def _to_naive_local(dt: datetime.datetime) -> datetime.datetime:
+    """Convert a possibly-aware datetime to naive local time.
+
+    Timestamps in the DB may be naive-local (from now_iso()) or
+    UTC-aware (from daemon watcher).  Normalise to naive-local so
+    subtraction against datetime.now() is always apples-to-apples.
+    """
+    if dt.tzinfo is not None:
+        return dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
 def get_lead(cursor: sqlite3.Cursor) -> str | None:
     """Return the name of the first registered lead agent, or None."""
     cursor.execute("SELECT name FROM agents WHERE agent_class = 'lead' LIMIT 1")
@@ -65,7 +77,7 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
     stale = False
     if threshold and a.get("context_updated_at"):
         try:
-            updated = datetime.datetime.fromisoformat(a["context_updated_at"])
+            updated = _to_naive_local(datetime.datetime.fromisoformat(a["context_updated_at"]))
             stale = (now - updated).total_seconds() > threshold
         except ValueError:
             import sys
@@ -76,7 +88,7 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
 
     if a.get("last_seen"):
         try:
-            ls = datetime.datetime.fromisoformat(a["last_seen"])
+            ls = _to_naive_local(datetime.datetime.fromisoformat(a["last_seen"]))
             a["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
         except ValueError:
             import sys
@@ -115,7 +127,7 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
         )
 
     try:
-        updated = datetime.datetime.fromisoformat(context_updated_at)
+        updated = _to_naive_local(datetime.datetime.fromisoformat(context_updated_at))
     except ValueError:
         import sys
         print(f"WARNING: corrupt context_updated_at for {agent_name}: {context_updated_at!r}", file=sys.stderr)

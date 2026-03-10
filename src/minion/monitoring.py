@@ -8,6 +8,7 @@ import os
 from typing import Any
 
 from minion.db import enrich_agent_row, get_db, get_lead, now_iso
+from minion.db.agents import _to_naive_local
 from minion.fs import atomic_write_file, message_file_path, read_content_file
 
 
@@ -139,7 +140,7 @@ def check_activity(agent_name: str) -> dict[str, object]:
 
         if row["last_seen"]:
             try:
-                ls = datetime.datetime.fromisoformat(row["last_seen"])
+                ls = _to_naive_local(datetime.datetime.fromisoformat(row["last_seen"]))
                 result["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
             except ValueError:
                 import sys
@@ -222,7 +223,7 @@ def check_freshness(agent_name: str, file_paths: str) -> dict[str, object]:
             }
 
         try:
-            context_dt = datetime.datetime.fromisoformat(context_updated_at)
+            context_dt = _to_naive_local(datetime.datetime.fromisoformat(context_updated_at))
             context_ts = context_dt.timestamp()
         except ValueError:
             return {"error": f"Invalid context_updated_at timestamp for '{agent_name}'."}
