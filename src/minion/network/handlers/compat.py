@@ -21,6 +21,7 @@ import os
 import re
 from urllib.parse import urlparse, parse_qs
 
+from minion.defaults import MAX_DOC_SIZE
 from minion.network.server import _DB_LOCK
 from minion.network.discovery import discover_projects, resolve_project_path
 from minion.network.handlers.projects import (
@@ -157,6 +158,9 @@ def handle_api_sprint(handler, db_path: str, **kwargs) -> None:
         return
     sprint_file = os.path.join(project_path, ".minion-swarm", "sprint.json")
     try:
+        if os.path.getsize(sprint_file) > MAX_DOC_SIZE:
+            handler._json_response(200, {"sprint": None, "phases": [], "error": "sprint.json too large"})
+            return
         with open(sprint_file, "r") as f:
             data = json.loads(f.read())
         handler._json_response(200, data)
@@ -178,7 +182,11 @@ def handle_api_logs(handler, db_path: str, **kwargs) -> None:
                 continue
             name = fname[:-4]
             try:
-                with open(os.path.join(logs_dir, fname), "r") as f:
+                log_path = os.path.join(logs_dir, fname)
+                if os.path.getsize(log_path) > MAX_DOC_SIZE:
+                    logs[name] = "(log too large)"
+                    continue
+                with open(log_path, "r") as f:
                     lines = f.read().split("\n")
                 logs[name] = "\n".join(lines[-200:])
             except OSError:
@@ -202,6 +210,9 @@ def handle_api_agent_log(handler, db_path: str, agent_name: str = "", **kwargs) 
 
     log_file = os.path.join(project_path, ".minion-swarm", "logs", f"{safe_name}.log")
     try:
+        if os.path.getsize(log_file) > MAX_DOC_SIZE:
+            handler._json_response(200, {"agent": safe_name, "lines": ["(log too large to read)"]})
+            return
         with open(log_file, "r") as f:
             lines = f.read().split("\n")
         handler._json_response(200, {"agent": safe_name, "lines": lines[-tail:]})

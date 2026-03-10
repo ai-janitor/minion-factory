@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse, parse_qs
 
+from minion.defaults import MAX_DOC_SIZE
 from minion.network.server import _DB_LOCK
 from minion.network.discovery import discover_projects, resolve_project_path
 from minion.network.project_db import get_project_db
@@ -224,9 +225,12 @@ def handle_project_messages(handler, db_path: str, name: str = "", **kwargs) -> 
         content_file = msg.get("content_file")
         if content_file:
             try:
-                with open(content_file, "r") as f:
-                    raw = f.read()
-                msg["content"] = raw[:200] + "…" if len(raw) > 200 else raw
+                if os.path.getsize(content_file) > MAX_DOC_SIZE:
+                    msg["content"] = "(file too large)"
+                else:
+                    with open(content_file, "r") as f:
+                        raw = f.read()
+                    msg["content"] = raw[:200] + "…" if len(raw) > 200 else raw
             except OSError:
                 msg["content"] = "(file not found)"
         messages.append(msg)
@@ -255,8 +259,11 @@ def handle_project_raid_log(handler, db_path: str, name: str = "", **kwargs) -> 
         entry_file = entry.get("entry_file")
         if entry_file:
             try:
-                with open(entry_file, "r") as f:
-                    entry["content"] = f.read()
+                if os.path.getsize(entry_file) > MAX_DOC_SIZE:
+                    entry["content"] = "(file too large)"
+                else:
+                    with open(entry_file, "r") as f:
+                        entry["content"] = f.read()
             except OSError:
                 entry["content"] = "(file not found)"
         entries.append(entry)

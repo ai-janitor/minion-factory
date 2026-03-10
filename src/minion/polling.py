@@ -18,6 +18,7 @@ from typing import Any
 
 from minion.auth import CAP_REVIEW, classes_with
 from minion.db import get_db, now_iso, touch_coordinator_activity
+from minion.defaults import MAX_DOC_SIZE
 
 _reviewers = classes_with(CAP_REVIEW)
 
@@ -123,8 +124,11 @@ def _fetch_messages(agent: str) -> list[dict[str, Any]]:
         for msg in all_msgs:
             cf = msg.get("content_file")
             if cf and os.path.exists(cf):
-                with open(cf) as f:
-                    msg["content"] = f.read()
+                if os.path.getsize(cf) > MAX_DOC_SIZE:
+                    msg["content"] = f"(content file too large: {cf})"
+                else:
+                    with open(cf) as f:
+                        msg["content"] = f.read()
             else:
                 msg["content"] = ""
             if msg.get("is_cc"):
