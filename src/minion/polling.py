@@ -430,6 +430,82 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
             return {"exit_code": 1}
 
 
+def multi_project_poll(agent_name: str, project_paths: list[str] | None = None) -> dict[str, Any]:
+    """Poll for messages and tasks across multiple projects.
+
+    SU-19: Cross-project coordination — iterates project DBs and aggregates results.
+
+    Step 1: Discover project paths from args, MINION_PROJECTS env var, or coordinator DB.
+    Step 2: For each project, check for unread messages and available tasks.
+    Step 3: Return aggregated results.
+
+    Time complexity: O(P * (M + T)) where P = projects, M = messages per project,
+    T = tasks per project. Each project requires one DB connection open + close.
+    """
+    import sqlite3
+
+    from minion.db import connect
+    from minion.defaults import get_project_paths
+
+    # Step 1: Discover project paths
+    if not project_paths:
+        project_paths = get_project_paths()
+    if not project_paths:
+        # Fallback: query coordinator DB for known project paths
+        try:
+            from minion.db import get_coordinator_db
+            coord = get_coordinator_db()
+            try:
+                rows = coord.execute("SELECT DISTINCT project_path FROM agents").fetchall()
+                project_paths = [r[0] for r in rows if r[0] and r[0] != "unknown"]
+            finally:
+                coord.close()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+            pass
+
+    if not project_paths:
+        # No projects discovered — fall back to single-project poll
+        return {"projects": [], "note": "No project paths discovered. Use MINION_PROJECTS env var or coordinator DB."}
+
+    # Step 2: Poll each project
+    projects_result = []
+    for path in project_paths:
+        if not os.path.isdir(path):
+            continue
+        db_path = os.path.join(path, ".work", "minion.db")
+        if not os.path.exists(db_path):
+            continue
+        proj_data: dict[str, Any] = {"path": path, "messages": [], "tasks": []}
+        try:
+            conn = connect(db_path, timeout=2)
+            conn.row_factory = sqlite3.Row
+            # Unread messages for this agent
+            rows = conn.execute(
+                "SELECT id, from_agent, content, timestamp FROM messages "
+                "WHERE to_agent = ? AND read_flag = 0 ORDER BY timestamp ASC",
+                (agent_name,),
+            ).fetchall()
+            proj_data["messages"] = [dict(r) for r in rows]
+
+            # Available tasks (open + assigned to this agent)
+            rows = conn.execute(
+                "SELECT id, title, status, flow_type FROM tasks "
+                "WHERE (assigned_to = ? AND status IN ('assigned', 'in_progress')) "
+                "   OR (status = 'open' AND assigned_to IS NULL) "
+                "ORDER BY created_at ASC LIMIT 20",
+                (agent_name,),
+            ).fetchall()
+            proj_data["tasks"] = [dict(r) for r in rows]
+            conn.close()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
+            proj_data["error"] = "DB unavailable"
+
+        projects_result.append(proj_data)
+
+    # Step 3: Aggregate
+    return {"projects": projects_result}
+
+
 def poll_status(agent_name: str) -> dict[str, Any]:
     """Diagnostic: report poll health for an agent.
 
