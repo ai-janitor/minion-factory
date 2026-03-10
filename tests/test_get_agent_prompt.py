@@ -9,6 +9,8 @@ import pytest
 
 from minion.crew.config import get_agent_prompt
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture()
 def crew_dir(tmp_path, monkeypatch):

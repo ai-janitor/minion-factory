@@ -1,5 +1,8 @@
 """Verify the minion console script entry point resolves."""
+import pytest
 from minion.cli import cli
+
+pytestmark = pytest.mark.unit
 
 
 def test_cli_callable():

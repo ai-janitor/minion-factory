@@ -8,6 +8,8 @@ import pytest
 
 from minion.db import init_db, reset_db_path, get_db
 
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # DB isolation fixture

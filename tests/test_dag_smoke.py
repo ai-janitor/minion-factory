@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.smoke
+
 from minion.db import init_db, register_agent_db, reset_db_path
 
 

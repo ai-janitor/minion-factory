@@ -1,4 +1,7 @@
 """Verify every module imports cleanly with no errors."""
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 def test_import_minion():

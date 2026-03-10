@@ -11,12 +11,13 @@ Exercises the full task DAG with two agents and blocked_by dependencies:
 
 from __future__ import annotations
 
+import pytest
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from minion.db import init_db, register_agent_db, reset_db_path
+
+pytestmark = pytest.mark.smoke
 
 
 # ---------------------------------------------------------------------------

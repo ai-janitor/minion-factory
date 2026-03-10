@@ -1,7 +1,10 @@
 """CLI group smoke tests."""
+import pytest
 import click
 from click.testing import CliRunner
 from minion.cli import cli
+
+pytestmark = pytest.mark.unit
 
 
 def test_cli_is_group():
