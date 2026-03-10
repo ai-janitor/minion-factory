@@ -8,6 +8,7 @@ No external dependencies — pure ANSI escape codes.
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timezone
 
 # ANSI escape codes
 _RESET  = "\033[0m"
@@ -89,8 +90,81 @@ def _render_tasks(tasks: list[sqlite3.Row], width: int) -> list[str]:
     return lines
 
 
+def _staleness_seconds(iso_timestamp: str | None) -> float | None:
+    """Return seconds since the given ISO timestamp, or None if unparseable.
+
+    Handles both naive (assumed UTC) and timezone-aware ISO strings.
+    """
+    if not iso_timestamp:
+        return None
+    try:
+        # Handle ISO format with or without timezone info
+        ts = iso_timestamp.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - dt
+        return delta.total_seconds()
+    except (ValueError, TypeError):
+        return None
+
+
+def _agent_display_status(row: sqlite3.Row) -> tuple[str, str]:
+    """Compute display status and ANSI color for an agent row.
+
+    Returns (display_status, ansi_color) based on:
+    - effective_last_seen staleness
+    - whether the agent has ever heartbeated (last_seen is set)
+    - the agent's declared status field
+
+    Thresholds:
+    - No heartbeat ever + registered <10min ago: "no hb" (dim)
+    - No heartbeat ever + registered >=10min ago: "no hb" (red)
+    - Last seen <2min ago: use declared status (green/yellow/dim)
+    - Last seen 2-5min ago: "idle?" (yellow)
+    - Last seen >5min ago: "stale" (red)
+    """
+    agent_status = row["status"] or "unknown"
+    last_seen = row["last_seen"]
+    effective = row["effective_last_seen"]
+    stale_secs = _staleness_seconds(effective)
+
+    # — Agent has never heartbeated (last_seen is NULL) —
+    if not last_seen:
+        if stale_secs is not None and stale_secs < 600:
+            # Registered recently, just hasn't heartbeated yet
+            return ("no hb", _DIM)
+        else:
+            # Registered a long time ago and never heartbeated — likely dead
+            return ("no hb", _RED)
+
+    # — Agent has heartbeated at some point — use effective_last_seen for staleness —
+    if stale_secs is None:
+        # Can't parse timestamp — fall through to declared status
+        pass
+    elif stale_secs > 300:
+        # Over 5 minutes since last activity — stale
+        return ("stale", _RED)
+    elif stale_secs > 120:
+        # 2-5 minutes — possibly idle
+        return ("idle?", _YELLOW)
+
+    # Fresh enough — use declared status with standard colors
+    if agent_status == "ready":
+        return (agent_status, _GREEN)
+    elif agent_status == "busy":
+        return (agent_status, _YELLOW)
+    else:
+        return (agent_status, _DIM)
+
+
 def _render_agents(agents: list[sqlite3.Row], max_rows: int) -> list[str]:
-    """Render agent HP bars, capped to fit available height."""
+    """Render agent HP bars, capped to fit available height.
+
+    Uses effective_last_seen (COALESCE of last_seen, context_updated_at,
+    registered_at) to determine staleness. Agents that registered but
+    never heartbeated show "no hb" instead of their declared status.
+    """
     lines: list[str] = [
         f"{_BOLD}{'AGENT':<14}  {'CLASS':<8}  {'STATUS':<10}  HP{_RESET}",
         "─" * 60,
@@ -101,12 +175,11 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int) -> list[str]:
 
     for row in visible:
         bar = hp_bar(row["tokens_used"], row["tokens_limit"])
-        agent_status = row["status"] or "unknown"
-        status_color = _GREEN if agent_status == "ready" else _YELLOW if agent_status == "busy" else _DIM
+        display_status, status_color = _agent_display_status(row)
         lines.append(
             f"{row['name']:<14}  "
             f"{row['agent_class']:<8}  "
-            f"{status_color}{agent_status:<10}{_RESET}  "
+            f"{status_color}{display_status:<10}{_RESET}  "
             f"{bar}"
         )
 
