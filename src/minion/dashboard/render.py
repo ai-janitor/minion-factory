@@ -364,11 +364,12 @@ _PRIORITY_COLORS: dict[str, str] = {
 }
 
 
-def _render_backlog(backlog: list[sqlite3.Row]) -> list[str]:
+def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]:
     """Render promoted backlog items with their linked task's DAG stage.
 
     Backlog #112: TUI dashboard should show promoted backlog items.
     Shows type, priority, title, and the task status if promoted.
+    Capped to max_rows visible items with overflow indicator (#230).
     """
     lines: list[str] = [
         f"{_BOLD}{'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'TITLE':<35}{_RESET}",
@@ -380,8 +381,11 @@ def _render_backlog(backlog: list[sqlite3.Row]) -> list[str]:
         lines.append(f"  {_DIM}(no active backlog items){_RESET}")
         return lines
 
+    visible = backlog[:max_rows]
+    overflow = len(backlog) - len(visible)
+
     lines.insert(0, f"{_BOLD}BACKLOG{_RESET}")
-    for row in backlog:
+    for row in visible:
         pri_color = _PRIORITY_COLORS.get(row["priority"], _DIM)
         # Show task stage if promoted, otherwise show backlog status
         if row["promoted_to"]:
@@ -398,6 +402,9 @@ def _render_backlog(backlog: list[sqlite3.Row]) -> list[str]:
             f"{task_info:<12}  "
             f"{title}"
         )
+
+    if overflow > 0:
+        lines.append(f"  {_DIM}+ {overflow} more backlog items not shown{_RESET}")
 
     return lines
 
@@ -457,8 +464,10 @@ def render_screen(
     lines.append("")
 
     # Backlog section — only shown if there are active backlog items (#112)
+    # Cap visible rows to available height, same pattern as agents (#230)
     if backlog:
-        lines.extend(_render_backlog(backlog))
+        backlog_max = max(2, height - len(lines) - 12)  # reserve rows for activity + headers
+        lines.extend(_render_backlog(backlog, max_rows=backlog_max))
         lines.append("")
 
     # Activity feed — fixed 10-line block at bottom
