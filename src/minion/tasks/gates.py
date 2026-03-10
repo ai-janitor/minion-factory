@@ -229,6 +229,7 @@ def _db_all_leaves_have_tasks(db, entity_id: int, entity_type: str) -> GateResul
             "SELECT id FROM requirements WHERE parent_id = ?", (entity_id,)
         ).fetchall()
     except Exception:
+        # parent_id column not yet available
         return GateResult(passed=True, gate=gate, message="parent_id column not yet available")
 
     if not rows:

@@ -1,0 +1,55 @@
+{# agents.html — SU-22: Agent roster with HP, task, and presence data.
+   Purpose: Display all registered agents with health status and current assignment.
+   Rationale: Replaces the JS-rendered agent table with server-side rendering.
+   Responsibility: Agent table with HP bars, status badges, current task links.
+#}
+{% extends "dashboard/base.html" %}
+{% block title %}Agents — Minion Dashboard{% endblock %}
+{% block content %}
+<h1>Agents ({{ agents|length }})</h1>
+<div class="card">
+<table>
+<thead>
+<tr><th>Name</th><th>Class</th><th>HP</th><th>Status</th><th>Current Task</th><th>Unread</th><th>Last Seen</th></tr>
+</thead>
+<tbody>
+{% for agent in agents %}
+<tr>
+  <td>{{ agent.name }}</td>
+  <td><span class="badge badge-blue">{{ agent.agent_class or 'unknown' }}</span></td>
+  <td>
+    {% if agent.hp_pct is not none %}
+      {% if agent.hp_pct > 60 %}
+        <span class="badge badge-green">{{ agent.hp_pct }}%</span>
+      {% elif agent.hp_pct > 30 %}
+        <span class="badge badge-yellow">{{ agent.hp_pct }}%</span>
+      {% else %}
+        <span class="badge badge-red">{{ agent.hp_pct }}%</span>
+      {% endif %}
+    {% else %}
+      <span class="badge badge-gray">--</span>
+    {% endif %}
+  </td>
+  <td>{{ agent.status or 'idle' }}</td>
+  <td>
+    {% if agent.current_task %}
+      #{{ agent.current_task.id }}: {{ agent.current_task.title[:40] }}
+      <span class="badge badge-gray">{{ agent.current_task.status }}</span>
+    {% else %}
+      <span style="color:#8b949e">idle</span>
+    {% endif %}
+  </td>
+  <td>
+    {% if agent.unread_count > 0 %}
+      <span class="badge badge-red">{{ agent.unread_count }}</span>
+    {% else %}
+      0
+    {% endif %}
+  </td>
+  <td style="color:#8b949e">{{ agent.last_seen[:16] if agent.last_seen else '--' }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

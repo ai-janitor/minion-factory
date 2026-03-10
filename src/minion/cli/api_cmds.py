@@ -173,7 +173,9 @@ def register_commands(cli: click.Group) -> None:
             if not token:
                 raise click.UsageError(f"Password file '{password_file}' is empty.")
         if not token:
-            token = os.environ.get("MINION_CLUSTER_TOKEN", "")
+            # SU-16: Route env reads through defaults.py for consistency
+            from minion.defaults import resolve_cluster_token
+            token = resolve_cluster_token()
         if not token and not insecure and sys.stdin.isatty():
             token = getpass.getpass("Cluster auth token: ")
         if not token and not insecure:

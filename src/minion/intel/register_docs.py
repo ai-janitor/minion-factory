@@ -33,8 +33,8 @@ def _extract_tags_from_headings(filepath: str) -> list[str]:
                         if len(w) > 2
                     ]
                     tags.extend(w for w in words if w not in _STOP_WORDS)
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError):
+        pass  # SU-17: narrowed from bare Exception — only file I/O and encoding errors expected
     # Deduplicate preserving order
     seen: set[str] = set()
     unique: list[str] = []
@@ -109,6 +109,6 @@ def _first_heading(filepath: str) -> str:
                 m = re.match(r"^#\s+(.+)", line)
                 if m:
                     return m.group(1).strip()
-    except Exception:
-        pass
+    except (OSError, UnicodeDecodeError):
+        pass  # SU-17: narrowed — only file I/O and encoding errors expected
     return ""

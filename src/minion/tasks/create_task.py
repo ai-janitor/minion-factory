@@ -97,8 +97,8 @@ def create_task(
             stages = [s.name for s in flow.stages]
             result["flow"] = task_type
             result["dag"] = " → ".join(stages[:4]) + (" → ..." if len(stages) > 4 else "")
-        except Exception:
-            pass
+        except (ImportError, KeyError, ValueError, AttributeError, TypeError):
+            pass  # SU-17: narrowed — flow loader may not find flow or stages format varies
         return result
     finally:
         conn.close()
