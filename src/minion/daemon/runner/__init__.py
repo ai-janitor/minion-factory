@@ -168,7 +168,7 @@ class AgentDaemon(
             self._log(f"found {len(pending_fenix_records)} fenix_down record(s) from prior session")
 
         while not self._stop_event.is_set():
-            print(".", end="", flush=True)
+            self._log("polling")
             poll_data = self._poll_inbox()
 
             if self._stop_event.is_set():
@@ -182,7 +182,6 @@ class AgentDaemon(
                 self._stop_event.wait(timeout=5.0)
                 continue
 
-            print(flush=True)  # newline after dots
             # Wake from standdown if needed (decides resume vs fresh)
             if self._stood_down:
                 self._wake_from_standdown(poll_data)
@@ -264,5 +263,6 @@ class AgentDaemon(
             "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "agent": self.agent_name,
             "level": "INFO",
+            "source": "daemon.runner",
             "message": message,
         }), flush=True)

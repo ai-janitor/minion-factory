@@ -14,8 +14,23 @@ import shutil
 import signal
 import subprocess
 import sys
+from datetime import datetime
 
 log = logging.getLogger(__name__)
+
+
+def _log_json(fp, agent: str, level: str, message: str, **extra) -> None:
+    """Write a structured JSON log line to the given file handle."""
+    entry = {
+        "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "agent": agent,
+        "level": level,
+        "source": "crew.daemon",
+        "message": message,
+    }
+    entry.update(extra)
+    fp.write(json.dumps(entry) + "\n")
+    fp.flush()
 
 
 def init_swarm(config_path: str, project_dir: str) -> None:
@@ -43,12 +58,11 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     # Resolve absolute path to minion binary so detached process finds it
     minion_bin = shutil.which("minion")
     if not minion_bin:
-        log_fp.write(f"FATAL: 'minion' not found in PATH: {os.environ.get('PATH', '')}\n")
+        _log_json(log_fp, agent_name, "FATAL", "'minion' not found in PATH", path=os.environ.get("PATH", ""))
         log_fp.close()
         raise FileNotFoundError("'minion' binary not found in PATH — is minion-factory installed?")
 
-    log_fp.write(f"[daemon-launch] bin={minion_bin} agent={agent_name} db={resolved_db} config={config_path}\n")
-    log_fp.flush()
+    _log_json(log_fp, agent_name, "INFO", "daemon-launch", bin=minion_bin, db=resolved_db, config=config_path)
 
     import time
     proc = subprocess.Popen(

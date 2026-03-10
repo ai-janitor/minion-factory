@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import sqlite3
 import subprocess
-import sys
 from typing import Any, TYPE_CHECKING
 
 from minion.defaults import ENV_CLASS, ENV_DB_PATH, ENV_DOCS_DIR
@@ -47,11 +46,10 @@ class AlertingMixin:
                     capture_output=True, text=True, timeout=10, env=env,
                 )
                 if r2.returncode != 0:
-                    print(f"ALERT SEND FAILED: both commander and lead unreachable. stderr={r2.stderr[:200]}", file=sys.stderr, flush=True)
+                    self._log(f"ALERT SEND FAILED: both commander and lead unreachable. stderr={r2.stderr[:200]}")
         except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired) as exc:
-            print(f"ALERT SEND FAILED: {exc}", file=sys.stderr, flush=True)
+            self._log(f"ALERT SEND FAILED: {exc}")
         self._log(f"ALERT: {message}")
-        print(f"\U0001f6a8 [{self.agent_name}] {message}", file=sys.stderr, flush=True)
 
     def _alert_lead_watcher(self, watcher: Any) -> None:
         lead = watcher.find_lead_agent() or "lead"

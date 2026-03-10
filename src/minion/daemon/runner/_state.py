@@ -67,11 +67,9 @@ class StateMixin:
             validate_transition(DAEMON_TRANSITIONS, "daemon", old_state, status)
         except InvalidTransition:
             # Log but don't crash — daemon stability takes priority over strict enforcement
-            import sys
-            print(
+            self._log(
                 f"WARNING: invalid daemon state transition '{old_state}' -> '{status}' "
-                f"for {self.agent_name}",
-                file=sys.stderr,
+                f"for {self.agent_name}"
             )
 
         payload = {
@@ -119,3 +117,6 @@ class StateMixin:
         self.inject_history_next_turn = False
         self._stood_down = False
         self._last_task_id = None
+
+    # Defined in other mixins
+    def _log(self, message: str) -> None: ...
