@@ -194,3 +194,50 @@ def test_mission_group_subcommands():
     assert result.exit_code == 0
     for sub in ["list", "suggest", "spawn"]:
         assert sub in result.output, f"mission group missing: {sub}"
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat — any CLI command updates last_seen for MINION_AGENT_NAME
+# ---------------------------------------------------------------------------
+
+
+def test_heartbeat_updates_last_seen_on_any_command(isolated_db, runner, monkeypatch):
+    """Any CLI command should update last_seen in local DB when MINION_AGENT_NAME is set.
+
+    Bug: only set-context updated last_seen. Active agents running other commands
+    (comms send, task assign, etc.) showed as stale on the dashboard.
+    Fix: _heartbeat_on_close in cli/main.py reads MINION_AGENT_NAME env var as
+    fallback and updates last_seen in both coordinator and local DB.
+    """
+    from minion.db import get_db, register_agent_db
+
+    # Register agent with no last_seen
+    register_agent_db("test-agent", "coder")
+
+    # Clear last_seen to simulate a fresh agent
+    conn = get_db()
+    conn.execute("UPDATE agents SET last_seen = NULL WHERE name = 'test-agent'")
+    conn.commit()
+    conn.close()
+
+    # Set MINION_AGENT_NAME env var (simulates a spawned agent session)
+    monkeypatch.setenv("MINION_AGENT_NAME", "test-agent")
+
+    # Run a command that does NOT use --agent (e.g., "who")
+    result = runner.invoke(cli, ["who"])
+    assert result.exit_code == 0
+
+    # Verify last_seen was updated in local DB
+    conn = get_db()
+    row = conn.execute("SELECT last_seen FROM agents WHERE name = 'test-agent'").fetchone()
+    conn.close()
+    assert row is not None
+    assert row["last_seen"] is not None, "last_seen should be set after any CLI command"
+
+
+def test_heartbeat_no_crash_when_agent_not_in_db(isolated_db, runner, monkeypatch):
+    """Heartbeat should silently no-op if MINION_AGENT_NAME refers to an unregistered agent."""
+    monkeypatch.setenv("MINION_AGENT_NAME", "ghost-agent")
+    result = runner.invoke(cli, ["who"])
+    # Should not crash — heartbeat is best-effort
+    assert result.exit_code == 0

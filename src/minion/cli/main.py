@@ -106,15 +106,30 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
     init_db()
     ensure_dirs()
 
-    # Universal heartbeat: any command with --agent marks agent active in coordinator
+    # Universal heartbeat: any CLI command by a registered agent updates last_seen
+    # in BOTH the coordinator DB and the local .work/minion.db.
+    # Agent identity comes from --agent option OR MINION_AGENT_NAME env var.
     def _heartbeat_on_close() -> None:
-        agent = ctx.obj.get("_heartbeat_agent")
-        if agent:
+        agent = ctx.obj.get("_heartbeat_agent") or os.environ.get("MINION_AGENT_NAME")
+        if not agent:
+            return
+        try:
+            from minion.db import get_db, now_iso, touch_coordinator_activity
+            # Touch coordinator DB (cross-project presence)
+            touch_coordinator_activity(agent)
+            # Touch local .work/minion.db last_seen (same-project dashboard)
+            now = now_iso()
+            conn = get_db()
             try:
-                from minion.db import touch_coordinator_activity
-                touch_coordinator_activity(agent)
-            except Exception:
-                pass
+                conn.execute(
+                    "UPDATE agents SET last_seen = ? WHERE name = ?",
+                    (now, agent),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass  # Best-effort — never let heartbeat failures break commands
 
     ctx.call_on_close(_heartbeat_on_close)
 
