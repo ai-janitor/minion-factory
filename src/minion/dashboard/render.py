@@ -8,6 +8,29 @@ Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: ANSI screen rendering for the TUI dashboard. NOT responsible for unrelated concerns.
 Organization: Standalone functions and/or a single class. See source."""
 
+# === TUI Data Flow Audit ===
+# TASKS section:
+#   Source: queries.fetch_tasks() → tasks table
+#   Filter: status NOT IN ('closed', 'abandoned', 'stale', 'obsolete')
+#   Fields: id, status, assigned_to (→assignee), SUBSTR(title,1,40) (→title_short),
+#           activity_count, blocked_by, result_file IS NOT NULL (→has_result)
+#   Order: status priority (in_progress > assigned > fixed > verified > open), then id ASC
+#
+# AGENTS section:
+#   Source: queries.fetch_agents() → agents table
+#   Filter: transport IN ('daemon', 'daemon-ts', 'terminal')
+#   Fields: name, agent_class, status, last_seen, registered_at,
+#           COALESCE(hp_input_tokens,0)+COALESCE(hp_output_tokens,0) (→tokens_used),
+#           COALESCE(hp_tokens_limit,0) (→tokens_limit),
+#           MAX(last_seen, context_updated_at, registered_at) (→effective_last_seen)
+#   Derived: display_status via _agent_display_status(), token_bar(), checklist via filesystem lookup
+#
+# ACTIVITY section:
+#   Source: queries.fetch_activity() → transition_log JOIN tasks
+#   Filter: entity_type='task', ROW_NUMBER()=1 per task (most recent transition only)
+#   Fields: task_id, SUBSTR(title,1,25), from_status, to_status, triggered_by (→agent), created_at (→timestamp)
+#   Order: timestamp DESC LIMIT 8
+
 from __future__ import annotations
 
 import os
@@ -27,6 +50,29 @@ _CYAN   = "\033[36m"
 _WHITE  = "\033[37m"
 
 BAR_WIDTH = 10
+
+# Regex to match ANSI escape sequences (SGR, OSC 8 hyperlinks, etc.)
+_ANSI_RE = re.compile(r'\033\[[0-9;]*[a-zA-Z]|\033\]8;;[^\033]*\033\\')
+
+
+def _visible_len(text: str) -> int:
+    """Return the visible character length of text after stripping ANSI escape codes."""
+    return len(_ANSI_RE.sub('', text))
+
+
+def _visible_pad(text: str, width: int) -> str:
+    """Pad text with trailing spaces so its visible width reaches *width*.
+
+    ANSI escape codes are invisible — Python's f-string padding counts their bytes
+    as visible characters, causing columns after ANSI-colored fields to misalign.
+    This helper measures visible length (stripping ANSI) and appends the correct
+    number of spaces.
+    """
+    vis = _visible_len(text)
+    if vis >= width:
+        return text
+    return text + ' ' * (width - vis)
+
 
 # Status → display color
 _STATUS_COLORS: dict[str, str] = {
@@ -249,7 +295,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
     never heartbeated show "no hb" instead of their declared status.
     """
     lines: list[str] = [
-        f"{_BOLD}{'AGENT':<14}  {'CLASS':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  📋{_RESET}",
+        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
         "─" * 80,
     ]
 
@@ -276,7 +322,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
             f"{row['agent_class']:<8}  "
             f"{status_color}{display_status:<10}{_RESET}  "
             f"{seen_color}{last_seen:<8}{_RESET}  "
-            f"{bar}  "
+            f"{_visible_pad(bar, 20)}  "
             f"{checklist_col}"
         )
 
