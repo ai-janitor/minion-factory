@@ -119,7 +119,7 @@ def test_set_status_registered_agent():
     """set_status updates status for a registered agent."""
     from minion.comms import register, set_status
     register(agent_name="leo", agent_class="coder")
-    result = set_status("leo", "working on task 42")
+    result = set_status("leo", "working")
     assert "error" not in result
 
 

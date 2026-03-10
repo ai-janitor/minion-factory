@@ -14,6 +14,9 @@ def fresh_db(tmp_path, monkeypatch):
     """Set up a fresh minion DB in a temp directory."""
     db_path = str(tmp_path / ".work" / "minion.db")
     monkeypatch.setenv("MINION_DB_PATH", db_path)
+    # Isolate coordinator DB so tests don't hit real agent registry
+    coord_path = str(tmp_path / ".work" / "coordinator.db")
+    monkeypatch.setenv("MINION_COORDINATOR_DB_PATH", coord_path)
 
     from minion.db.connection import reset_db_path, init_db
     reset_db_path()
@@ -23,7 +26,7 @@ def fresh_db(tmp_path, monkeypatch):
 
 def _register_agents(fresh_db):
     """Helper to register test agents with fresh context (avoids staleness block)."""
-    from minion.db.helpers import register_agent_db, now_iso
+    from minion.db.timestamp_and_agent_registry import register_agent_db, now_iso
     from minion.db.connection import get_db
     register_agent_db("sender", "coder")
     register_agent_db("receiver", "coder")
