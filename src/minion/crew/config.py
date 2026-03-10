@@ -64,6 +64,92 @@ class SwarmConfig:
 
 
 
+def _parse_agents(agents_raw: dict, system_prefix: str) -> Dict[str, AgentConfig]:
+    """Parse the 'agents' mapping from a crew/daemon YAML into AgentConfig instances.
+
+    Extracted to eliminate duplication between crew/config.py and daemon/config.py.
+    Both callers pass system_prefix (crew-level prompt prefix, empty string for daemon).
+    skills and scope fields have dataclass defaults, so daemon callers skip them safely.
+    """
+    from minion.auth import CLASS_CAPABILITIES, VALID_CAPABILITIES
+    from minion.prompts import build_system_prompt
+
+    agents: Dict[str, AgentConfig] = {}
+    for name, item in agents_raw.items():
+        if not isinstance(item, dict):
+            raise ValueError(f"Agent '{name}' config must be a mapping")
+
+        provider = str(item.get("provider", "claude")).strip().lower()
+        if provider not in {"claude", "codex", "opencode", "gemini"}:
+            raise ValueError(
+                f"Agent '{name}' has invalid provider '{provider}'. "
+                "Expected one of: claude, codex, opencode, gemini."
+            )
+
+        role = str(item.get("role", "coder"))
+        zone = str(item.get("zone", ""))
+        system = str(item.get("system", "")).strip()
+        if not system:
+            system = (
+                f"You are {name} ({role}) running under minion-swarm. "
+                "Check inbox, execute tasks, and report when done."
+            )
+
+        # Inject crew-level system_prefix into every agent's prompt
+        system = build_system_prompt(system_prefix, system)
+
+        allowed_tools = item.get("allowed_tools")
+        if allowed_tools is not None:
+            allowed_tools = str(allowed_tools)
+
+        permission_mode = item.get("permission_mode")
+        if permission_mode is not None:
+            permission_mode = str(permission_mode).strip()
+            if not permission_mode:
+                permission_mode = None
+
+        model = item.get("model")
+        if model is not None:
+            model = str(model)
+
+        max_history_tokens = int(item.get("max_history_tokens", 100_000))
+        max_prompt_chars = int(item.get("max_prompt_chars", 120_000))
+        no_output_timeout_sec = int(item.get("no_output_timeout_sec", 600))
+        retry_backoff_sec = int(item.get("retry_backoff_sec", 30))
+        retry_backoff_max_sec = int(item.get("retry_backoff_max_sec", 300))
+
+        skills_raw = item.get("skills", [])
+        skills = tuple(str(s) for s in skills_raw) if isinstance(skills_raw, list) else ()
+
+        caps_raw = item.get("capabilities")
+        if isinstance(caps_raw, list):
+            caps = tuple(str(c) for c in caps_raw if str(c) in VALID_CAPABILITIES)
+        else:
+            caps = tuple(sorted(CLASS_CAPABILITIES.get(role, set())))
+
+        agents[str(name)] = AgentConfig(
+            name=str(name),
+            role=role,
+            zone=zone,
+            provider=provider,  # type: ignore[arg-type]
+            system=system,
+            allowed_tools=allowed_tools,
+            permission_mode=permission_mode,
+            model=model,
+            max_history_tokens=max_history_tokens,
+            max_prompt_chars=max_prompt_chars,
+            no_output_timeout_sec=no_output_timeout_sec,
+            retry_backoff_sec=retry_backoff_sec,
+            retry_backoff_max_sec=retry_backoff_max_sec,
+            skills=skills,
+            self_dismiss=bool(item.get("self_dismiss", False)),
+            capabilities=caps,
+            scope=str(item.get("scope", "project")),
+        )
+
+    return agents
+
+
 def load_config(config_path: str | Path) -> SwarmConfig:
     cfg_path = Path(config_path).expanduser().resolve()
     if not cfg_path.exists():
@@ -96,80 +182,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
     if not isinstance(agents_raw, dict) or not agents_raw:
         raise ValueError("Config must define a non-empty 'agents' mapping")
 
-    agents: Dict[str, AgentConfig] = {}
-    for name, item in agents_raw.items():
-        if not isinstance(item, dict):
-            raise ValueError(f"Agent '{name}' config must be a mapping")
-
-        provider = str(item.get("provider", "claude")).strip().lower()
-        if provider not in {"claude", "codex", "opencode", "gemini"}:
-            raise ValueError(
-                f"Agent '{name}' has invalid provider '{provider}'. "
-                "Expected one of: claude, codex, opencode, gemini."
-            )
-
-        role = str(item.get("role", "coder"))
-        zone = str(item.get("zone", ""))
-        system = str(item.get("system", "")).strip()
-        if not system:
-            system = (
-                f"You are {name} ({role}) running under minion-swarm. "
-                "Check inbox, execute tasks, and report when done."
-            )
-
-        # Inject crew-level system_prefix into every agent's prompt
-        from minion.prompts import build_system_prompt
-        system = build_system_prompt(str(raw.get("system_prefix", "")), system)
-
-        allowed_tools = item.get("allowed_tools")
-        if allowed_tools is not None:
-            allowed_tools = str(allowed_tools)
-
-        permission_mode = item.get("permission_mode")
-        if permission_mode is not None:
-            permission_mode = str(permission_mode).strip()
-            if not permission_mode:
-                permission_mode = None
-
-        model = item.get("model")
-        if model is not None:
-            model = str(model)
-
-        max_history_tokens = int(item.get("max_history_tokens", 100_000))
-        max_prompt_chars = int(item.get("max_prompt_chars", 120_000))
-        no_output_timeout_sec = int(item.get("no_output_timeout_sec", 600))
-        retry_backoff_sec = int(item.get("retry_backoff_sec", 30))
-        retry_backoff_max_sec = int(item.get("retry_backoff_max_sec", 300))
-
-        skills_raw = item.get("skills", [])
-        skills = tuple(str(s) for s in skills_raw) if isinstance(skills_raw, list) else ()
-
-        from minion.auth import CLASS_CAPABILITIES, VALID_CAPABILITIES
-        caps_raw = item.get("capabilities")
-        if isinstance(caps_raw, list):
-            caps = tuple(str(c) for c in caps_raw if str(c) in VALID_CAPABILITIES)
-        else:
-            caps = tuple(sorted(CLASS_CAPABILITIES.get(role, set())))
-
-        agents[str(name)] = AgentConfig(
-            name=str(name),
-            role=role,
-            zone=zone,
-            provider=provider,  # type: ignore[arg-type]
-            system=system,
-            allowed_tools=allowed_tools,
-            permission_mode=permission_mode,
-            model=model,
-            max_history_tokens=max_history_tokens,
-            max_prompt_chars=max_prompt_chars,
-            no_output_timeout_sec=no_output_timeout_sec,
-            retry_backoff_sec=retry_backoff_sec,
-            retry_backoff_max_sec=retry_backoff_max_sec,
-            skills=skills,
-            self_dismiss=bool(item.get("self_dismiss", False)),
-            capabilities=caps,
-            scope=str(item.get("scope", "project")),
-        )
+    agents = _parse_agents(agents_raw, str(raw.get("system_prefix", "")))
 
     return SwarmConfig(
         config_path=cfg_path,
