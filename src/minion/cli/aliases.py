@@ -32,7 +32,8 @@ def register_aliases(cli: click.Group) -> None:
 
     # Agent group aliases
     for sub_name in ["register", "set-status", "set-context", "who", "update-hp",
-                     "cold-start", "fenix-down", "check-activity", "check-freshness"]:
+                     "cold-start", "fenix-down", "check-activity", "check-freshness",
+                     "deregister", "rename", "interrupt", "resume"]:
         cmd = agent_group.commands.get(sub_name)  # type: ignore[union-attr]
         if cmd:
             _alias_map[sub_name] = cmd

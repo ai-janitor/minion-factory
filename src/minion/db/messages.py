@@ -18,14 +18,14 @@ def scan_triggers(message: str) -> list[str]:
 
     Only matches deliberate !!trigger!! pattern — not casual mentions.
     """
-    from minion.auth import TRIGGER_WORDS
+    from minion.defaults import TRIGGER_WORDS
     lower = message.lower()
     return [word for word in TRIGGER_WORDS if f"!!{word}!!" in lower]
 
 
 def format_trigger_codebook() -> str:
     """Format the trigger word codebook for display."""
-    from minion.auth import TRIGGER_WORDS
+    from minion.defaults import TRIGGER_WORDS
     lines = ["## Trigger Words (Brevity Codes)", ""]
     lines.append("Wrap in `!!` to activate: `!!stand_down!!`. Bare mentions are ignored.")
     lines.append("")

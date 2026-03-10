@@ -1,4 +1,10 @@
-"""CLI output formatting — JSON, human-readable, and compact modes."""
+"""CLI output formatting — JSON, human-readable, and compact modes.
+
+Exit code convention:
+  0 = success
+  1 = runtime error (command understood but failed)
+  2 = usage error (bad args, missing required input)
+"""
 from __future__ import annotations
 
 import json
@@ -8,9 +14,12 @@ import click
 
 
 def output(data: dict[str, object], human: bool = False, compact: bool = False) -> None:
-    """Print result as JSON (default), human-readable, or compact text."""
+    """Print result as JSON (default), human-readable, or compact text.
+
+    Exit codes: 0=success, 1=error. Usage errors (exit 2) are handled by Click.
+    """
     if "error" in data:
-        click.echo(json.dumps(data, indent=2, default=str))
+        click.echo(json.dumps(data, indent=2, default=str), err=True)
         sys.exit(1)
     if compact:
         click.echo(_format_compact(data))

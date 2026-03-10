@@ -26,9 +26,9 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @send_group.command("local")
-    @click.option("--from", "from_agent", required=True)
-    @click.option("--to", "to_agent", required=True)
-    @click.option("--message", required=True)
+    @click.option("--from", "-f", "from_agent", required=True)
+    @click.option("--to", "-t", "to_agent", required=True)
+    @click.option("--message", "-m", required=True)
     @click.option("--cc", default="")
     @click.pass_context
     def send_local(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str) -> None:
@@ -42,9 +42,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_send(from_agent, to_agent, message, cc), ctx.obj["human"])
 
     @send_group.command("global")
-    @click.option("--from", "from_agent", required=True)
-    @click.option("--to", "to_agent", required=True)
-    @click.option("--message", required=True)
+    @click.option("--from", "-f", "from_agent", required=True)
+    @click.option("--to", "-t", "to_agent", required=True)
+    @click.option("--message", "-m", required=True)
     @click.pass_context
     def send_global_via_comms(ctx: click.Context, from_agent: str, to_agent: str, message: str) -> None:
         """Send to an agent in ANY repo via the coordinator.

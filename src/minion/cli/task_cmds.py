@@ -23,7 +23,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("create")
     @_agent_option(required=True)
-    @click.option("--title", required=True)
+    @click.option("--title", "-t", required=True)
     @click.option("--task-file", required=True)
     @click.option("--project", default="")
     @click.option("--zone", default="")
@@ -64,12 +64,12 @@ def register_commands(cli: click.Group) -> None:
         _output(_update_task(agent, task_id, status, progress, files), ctx.obj["human"])
 
     @task_group.command("list")
-    @click.option("--status", default="")
-    @click.option("--project", default="")
-    @click.option("--zone", default="")
+    @click.option("--status", "-s", default="")
+    @click.option("--project", "-p", default="")
+    @click.option("--zone", "-z", default="")
     @click.option("--assigned-to", default="")
     @click.option("--class-required", default="", help="Filter by required agent class")
-    @click.option("--count", default=50, type=int)
+    @click.option("--count", "-n", default=50, type=int)
     @click.pass_context
     def list_tasks(ctx: click.Context, status: str, project: str, zone: str, assigned_to: str, class_required: str, count: int) -> None:
         """List tasks."""
@@ -80,7 +80,15 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--task-id", required=True, type=int)
     @click.pass_context
     def get_task(ctx: click.Context, task_id: int) -> None:
-        """Get full detail for a single task."""
+        """Get full detail for a single task (alias: 'task show')."""
+        from minion.tasks import get_task as _get_task
+        _output(_get_task(task_id), ctx.obj["human"])
+
+    @task_group.command("show")
+    @click.option("--task-id", required=True, type=int)
+    @click.pass_context
+    def show_task(ctx: click.Context, task_id: int) -> None:
+        """Show full detail for a single task (alias for 'task get')."""
         from minion.tasks import get_task as _get_task
         _output(_get_task(task_id), ctx.obj["human"])
 
@@ -180,7 +188,7 @@ def register_commands(cli: click.Group) -> None:
     @task_group.command("comment")
     @_agent_option(required=True)
     @click.option("--task-id", required=True, type=int)
-    @click.option("--message", required=True)
+    @click.option("--message", "-m", required=True)
     @click.option("--files", default="", help="Comma-separated file paths read for context")
     @click.pass_context
     def task_comment_cmd(ctx: click.Context, agent: str, task_id: int, message: str, files: str) -> None:

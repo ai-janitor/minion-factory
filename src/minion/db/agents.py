@@ -1,8 +1,8 @@
 """Agent-related DB helpers — enrichment, staleness, HP summary.
 
 Functions that read/transform agent rows from the agents table.
-Separated from connection/schema because they import from minion.auth
-(deferred to avoid circular imports).
+Staleness thresholds imported from minion.defaults (shared constants),
+not from minion.auth, to avoid db→auth layer violation.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def hp_summary(
 def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]:
     """Add HP, staleness, and last_seen_mins_ago to an agent row dict."""
     # Import here to avoid circular dependency with auth
-    from minion.auth import CLASS_STALENESS_SECONDS
+    from minion.defaults import CLASS_STALENESS_SECONDS
 
     a: dict[str, Any] = dict(row)
 
@@ -90,7 +90,7 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
 
     Returns (is_stale, message). is_stale=True means BLOCKED.
     """
-    from minion.auth import CLASS_STALENESS_SECONDS
+    from minion.defaults import CLASS_STALENESS_SECONDS
 
     cursor.execute(
         "SELECT agent_class, context_updated_at FROM agents WHERE name = ?",

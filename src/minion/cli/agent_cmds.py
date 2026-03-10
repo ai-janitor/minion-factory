@@ -20,8 +20,8 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @agent_group.command("register")
-    @click.option("--name", required=True)
-    @click.option("--class", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
+    @click.option("--name", "-n", required=True)
+    @click.option("--class", "-c", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
     @click.option("--model", default="")
     @click.option("--description", default="")
     @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
@@ -41,7 +41,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("set-status")
     @_agent_option(required=True)
-    @click.option("--status", required=True)
+    @click.option("--status", "-s", required=True)
     @click.pass_context
     def set_status(ctx: click.Context, agent: str, status: str) -> None:
         """Set agent status."""
@@ -50,7 +50,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("set-context")
     @_agent_option(required=True)
-    @click.option("--context", required=True)
+    @click.option("--context", "-x", required=True)
     @click.option("--tokens-used", default=0, type=int)
     @click.option("--tokens-limit", default=0, type=int)
     @click.option("--hp", default=None, type=int, help="Self-reported HP 0-100 (skips daemon token counting)")
@@ -146,3 +146,45 @@ def register_commands(cli: click.Group) -> None:
         require_class("lead")(lambda: None)()
         from minion.monitoring import check_freshness as _check_freshness
         _output(_check_freshness(agent, files), ctx.obj["human"])
+
+    @agent_group.command("deregister")
+    @click.option("--name", "-n", required=True)
+    @click.pass_context
+    def deregister(ctx: click.Context, name: str) -> None:
+        """Remove an agent from the registry."""
+        from minion.comms import deregister as _deregister
+        _output(_deregister(name), ctx.obj["human"])
+
+    @agent_group.command("rename")
+    @click.option("--old", required=True)
+    @click.option("--new", required=True)
+    @click.pass_context
+    def rename(ctx: click.Context, old: str, new: str) -> None:
+        """Rename an agent. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.comms import rename as _rename
+        _output(_rename(old, new), ctx.obj["human"])
+
+    @agent_group.command("interrupt")
+    @_agent_option(required=True, help="Agent to interrupt")
+    @click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
+    @click.pass_context
+    def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
+        """Interrupt an agent's current invocation. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.crew import interrupt_agent as _interrupt
+        _output(_interrupt(agent, requesting_agent), ctx.obj["human"])
+
+    @agent_group.command("resume")
+    @_agent_option(required=True, help="Agent to resume")
+    @click.option("--message", "-m", required=True, help="Message to send on resume")
+    @click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
+    @click.pass_context
+    def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
+        """Send a resume message to an interrupted agent. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.comms import send as _send
+        _output(_send(from_agent, agent, message), ctx.obj["human"])

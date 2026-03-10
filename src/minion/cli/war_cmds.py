@@ -52,8 +52,8 @@ def register_commands(cli: click.Group) -> None:
 
     @war_group.command("log")
     @_agent_option(required=True)
-    @click.option("--entry", required=True)
-    @click.option("--priority", default="normal", type=click.Choice(["low", "normal", "high", "critical"]))
+    @click.option("--entry", "-e", required=True)
+    @click.option("--priority", "-p", default="normal", type=click.Choice(["low", "normal", "high", "critical"]))
     @click.pass_context
     def log_raid(ctx: click.Context, agent: str, entry: str, priority: str) -> None:
         """Log a progress entry — what was done, decisions made, blockers hit."""
@@ -61,8 +61,8 @@ def register_commands(cli: click.Group) -> None:
         _output(_log_raid(agent, entry, priority), ctx.obj["human"])
 
     @war_group.command("list-log")
-    @click.option("--priority", default=None, type=click.Choice(["low", "normal", "high", "critical"]))
-    @click.option("--count", default=20, type=int)
+    @click.option("--priority", "-p", default=None, type=click.Choice(["low", "normal", "high", "critical"]))
+    @click.option("--count", "-n", default=20, type=int)
     @_agent_option(default="")
     @click.pass_context
     def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:

@@ -11,6 +11,12 @@ import sys
 import click
 
 
+def _echo_error(data: dict[str, object], exit_code: int = 1) -> None:
+    """Print error JSON to stderr and exit with given code."""
+    click.echo(json.dumps(data, indent=2), err=True)
+    sys.exit(exit_code)
+
+
 def register_commands(cli: click.Group) -> None:
     """Attach the backlog group and its subcommands to the root CLI."""
 
@@ -21,7 +27,7 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @backlog_group.command("add")
-    @click.option("--type", "item_type", required=True, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
+    @click.option("--type", "-t", "item_type", required=True, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
     @click.option("--title", required=True, help="Short descriptive title")
     @click.option("--source", default="human", help="Who captured this (default: human)")
     @click.option("--description", default="", help="Longer description of the item")
@@ -34,8 +40,7 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _add(item_type, title, source, description, priority, flow_hint=flow_hint)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
         if not flow_hint:
             click.echo(
@@ -55,8 +60,7 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _list_items(item_type, priority, status)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
         missing = [r for r in result if not r.get("flow_hint")]
         if missing:
@@ -76,19 +80,16 @@ def register_commands(cli: click.Group) -> None:
         """Show a single backlog item by file path or --id."""
         from minion.backlog import get_item as _get_item
         if not path and item_id is None:
-            click.echo(json.dumps({"error": "Provide PATH or --id"}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": "Provide PATH or --id"}, exit_code=2)
         try:
             if item_id is not None:
                 result = _get_item(item_id=item_id)
             else:
                 result = _get_item(file_path=path)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         if result is None:
-            click.echo(json.dumps({"error": "Backlog item not found."}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": "Backlog item not found."})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("update")
@@ -103,13 +104,12 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _update_item(path, priority, status, flow_hint=flow_hint)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("promote")
     @click.argument("path", required=False, default=None)
-    @click.option("--agent", required=True, help="Agent performing the promotion (must be lead class)")
+    @click.option("--agent", "-a", required=True, help="Agent performing the promotion (must be lead class)")
     @click.option("--id", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
     @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
     @click.option("--slug", default=None, help="Override the auto-derived requirement slug")
@@ -119,21 +119,18 @@ def register_commands(cli: click.Group) -> None:
     def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
         """Promote a backlog item into the requirement pipeline. Requires lead class."""
         if not path and not item_id:
-            click.echo(json.dumps({"error": "Provide a path argument or --id <N>."}, indent=2))
-            raise SystemExit(1)
+            _echo_error({"error": "Provide a path argument or --id <N>."}, exit_code=2)
         if item_id and not path:
             from minion.backlog import get_item as _get_item
             item = _get_item(item_id=item_id)
             if "error" in item:
-                click.echo(json.dumps(item, indent=2))
-                raise SystemExit(1)
+                _echo_error(item)
             path = item["file_path"]
         from minion.backlog import promote as _promote
         try:
             result = _promote(path, origin, slug=slug, flow=flow, agent_name=agent)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("kill")
@@ -146,8 +143,7 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _kill(path, reason)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("defer")
@@ -160,8 +156,7 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _defer(path, until)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("lineage")
@@ -172,13 +167,11 @@ def register_commands(cli: click.Group) -> None:
         """Full audit trail from backlog item to task closure."""
         from minion.backlog import lineage as _lineage
         if not path and item_id is None:
-            click.echo(json.dumps({"error": "Provide PATH or --id"}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": "Provide PATH or --id"}, exit_code=2)
         try:
             result = _lineage(file_path=path, item_id=item_id)
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("reindex")
@@ -189,6 +182,5 @@ def register_commands(cli: click.Group) -> None:
         try:
             result = _reindex()
         except ValueError as e:
-            click.echo(json.dumps({"error": str(e)}, indent=2))
-            sys.exit(1)
+            _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
