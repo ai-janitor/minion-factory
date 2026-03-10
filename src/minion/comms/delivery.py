@@ -33,6 +33,7 @@ def route_cross_repo(
     assert message, "message must not be empty"
     assert now, "timestamp must not be empty"
 
+    # --- SU-04: Narrow coordinator lookup exception handling ---
     try:
         coord = get_coordinator_db()
         try:
@@ -41,8 +42,12 @@ def route_cross_repo(
             ).fetchone()
         finally:
             coord.close()
-    except Exception:
-        return None
+    except sqlite3.OperationalError:
+        return None  # DB not found or table missing — agent genuinely not found
+    except PermissionError as exc:
+        return {"error": f"Coordinator DB permission denied: {exc}"}
+    except sqlite3.DatabaseError as exc:
+        return {"error": f"Coordinator DB corrupt or unreadable: {exc}"}
 
     if not row:
         return None
@@ -52,7 +57,8 @@ def route_cross_repo(
         return None  # agent exists globally but has no project binding
     remote_db_path = os.path.join(project_path, ".work", "minion.db")
     if not os.path.exists(remote_db_path):
-        return None
+        # --- SU-04: Return error dict instead of None for stale paths ---
+        return {"error": f"Target project at {project_path} no longer exists. Agent registry may be stale."}
 
     # Write message content to target project's inbox
     remote_inbox = os.path.join(project_path, ".work", "inbox", to_agent)
@@ -79,14 +85,35 @@ def route_cross_repo(
                 cc_original_to TEXT
             )
         """)
-        remote_conn.execute(
-            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
-            (from_agent, to_agent, content_file, now),
-        )
+        # --- SU-04: Schema compatibility check ---
+        existing_cols = {
+            r[1] for r in remote_conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        expected_cols = {"from_agent", "to_agent", "content_file", "timestamp", "read_flag", "is_cc"}
+        missing = expected_cols - existing_cols
+        if missing:
+            log.warning("cross-repo target DB missing columns: %s — inserting available columns only", missing)
+            available = expected_cols - missing
+            cols = sorted(available)
+            col_vals = {
+                "from_agent": from_agent, "to_agent": to_agent,
+                "content_file": content_file, "timestamp": now,
+                "read_flag": 0, "is_cc": 0,
+            }
+            vals = [col_vals[c] for c in cols]
+            placeholders = ", ".join("?" for _ in cols)
+            remote_conn.execute(
+                f"INSERT INTO messages ({', '.join(cols)}) VALUES ({placeholders})", vals
+            )
+        else:
+            remote_conn.execute(
+                "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
+                (from_agent, to_agent, content_file, now),
+            )
         remote_conn.commit()
         remote_conn.close()
         db_indexed = True
-    except Exception as exc:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError, PermissionError) as exc:
         log.warning("cross-repo DB insert failed: %s: %s", type(exc).__name__, exc)
         # File delivered even if DB insert fails
 

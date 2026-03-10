@@ -67,9 +67,19 @@ if [ -z "$PROJECT_DIR" ]; then
     PROJECT_DIR="$(pwd)"
 fi
 
+# --- SU-06: Guard — minion CLI must be in PATH ---
+if ! command -v minion &>/dev/null; then
+    exit 0  # fail-open: CLI not available
+fi
+
+# --- SU-06: Guard — .work/minion.db must exist ---
+DB_PATH="$PROJECT_DIR/.work/minion.db"
+if [ ! -f "$DB_PATH" ]; then
+    exit 0  # fail-open: no DB
+fi
+
 # Check inbox for unread messages — if empty, allow stop (poll catches new messages)
 # Use direct sqlite3 for speed — avoid full CLI overhead
-DB_PATH="$PROJECT_DIR/.work/minion.db"
 if [ -f "$DB_PATH" ]; then
     # Count unread direct messages + unread broadcasts
     UNREAD=$(sqlite3 "$DB_PATH" "

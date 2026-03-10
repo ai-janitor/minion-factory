@@ -89,7 +89,35 @@ def _rollup_task_to_requirement(
         ))
         return
 
-    # All terminal — advance requirement
+    # All terminal — determine rollup status
+    # SU-05: If ALL children are stale, parent becomes stale (propagate abandonment).
+    # If mix of stale + completed/closed, parent advances normally (some work was done).
+    children_statuses = [s["status"] for s in siblings]
+    all_stale = all(s == "stale" for s in children_statuses)
+
+    if all_stale:
+        # All work abandoned — propagate stale directly without engine transition
+        from ..db import now_iso
+
+        now = now_iso()
+        req_row = db.execute(
+            "SELECT id, stage FROM requirements WHERE id = ?", (req_id,)
+        ).fetchone()
+        if req_row is None:
+            return
+        db.execute(
+            "UPDATE requirements SET stage = 'stale', updated_at = ? WHERE id = ?",
+            (now, req_id),
+        )
+        db.commit()
+        results.append(RollupResult(
+            triggered=True, entity_type="requirement", entity_id=req_id,
+            from_status=req_row["stage"], to_status="stale",
+        ))
+        _rollup_requirement_to_parent(db, req_id, context_dir=context_dir, results=results)
+        return
+
+    # Normal rollup — advance requirement via engine
     req_row = db.execute(
         "SELECT id, stage, flow_type FROM requirements WHERE id = ?", (req_id,)
     ).fetchone()
@@ -159,6 +187,31 @@ def _rollup_requirement_to_parent(
 
     all_terminal = all(s["stage"] in TERMINAL_STATUSES for s in siblings)
     if not all_terminal:
+        return
+
+    # SU-05: If ALL children are stale, parent becomes stale
+    children_statuses = [s["stage"] for s in siblings]
+    all_stale = all(s == "stale" for s in children_statuses)
+
+    if all_stale:
+        from ..db import now_iso
+
+        now = now_iso()
+        parent_row = db.execute(
+            "SELECT id, stage FROM requirements WHERE id = ?", (parent_id,)
+        ).fetchone()
+        if parent_row is None:
+            return
+        db.execute(
+            "UPDATE requirements SET stage = 'stale', updated_at = ? WHERE id = ?",
+            (now, parent_id),
+        )
+        db.commit()
+        results.append(RollupResult(
+            triggered=True, entity_type="requirement", entity_id=parent_id,
+            from_status=parent_row["stage"], to_status="stale",
+        ))
+        _rollup_requirement_to_parent(db, parent_id, context_dir=context_dir, results=results)
         return
 
     # All terminal — advance parent requirement

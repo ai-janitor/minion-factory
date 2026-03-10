@@ -427,3 +427,80 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
 
         if timeout > 0 and elapsed >= timeout:
             return {"exit_code": 1}
+
+
+def poll_status(agent_name: str) -> dict[str, Any]:
+    """Diagnostic: report poll health for an agent.
+
+    SU-06: Check PID file, PID alive, last poll heartbeat, hook installed.
+    Returns a dict with health status fields.
+    """
+    import json
+    from pathlib import Path
+
+    assert agent_name, "agent_name must not be empty"
+
+    result: dict[str, Any] = {"agent": agent_name}
+
+    # 1. Check PID file
+    pidfile = _poll_pidfile(agent_name)
+    result["pid_file_exists"] = os.path.exists(pidfile)
+    result["pid_alive"] = False
+    result["pid_value"] = None
+
+    if result["pid_file_exists"]:
+        try:
+            with open(pidfile) as f:
+                pid = int(f.read().strip())
+            result["pid_value"] = pid
+            os.kill(pid, 0)  # signal 0 = check alive
+            result["pid_alive"] = True
+        except (ValueError, ProcessLookupError, PermissionError, OSError):
+            pass
+
+    # 2. Check last heartbeat from coordinator DB
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT last_seen FROM agents WHERE name = ?", (agent_name,)
+            ).fetchone()
+            if row and row["last_seen"]:
+                result["last_heartbeat"] = row["last_seen"]
+                import datetime
+                try:
+                    last = datetime.datetime.fromisoformat(row["last_seen"])
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    if last.tzinfo is None:
+                        last = last.replace(tzinfo=datetime.timezone.utc)
+                    delta = (now - last).total_seconds()
+                    result["seconds_since_heartbeat"] = int(delta)
+                    # ASSUMPTION: 5-minute stale threshold for poll heartbeat
+                    result["stale"] = delta > 300
+                except (ValueError, TypeError):
+                    result["stale"] = True
+            else:
+                result["last_heartbeat"] = None
+                result["stale"] = True
+        finally:
+            conn.close()
+    except (OSError, Exception):
+        result["last_heartbeat"] = None
+        result["stale"] = True
+
+    # 3. Check Stop hook installed
+    settings_path = Path.home() / ".claude" / "settings.json"
+    result["hook_installed"] = False
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+            stop_hooks = settings.get("hooks", {}).get("Stop", [])
+            result["hook_installed"] = any(
+                "poll-on-stop" in str(h.get("command", ""))
+                for h in stop_hooks
+                if isinstance(h, dict)
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return result

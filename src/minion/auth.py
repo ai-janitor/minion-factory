@@ -245,6 +245,23 @@ def get_agent_scope() -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Cross-project detection — SU-07
+# ---------------------------------------------------------------------------
+
+def is_cross_project() -> bool:
+    """Return True if -C flag is active (targeting foreign project).
+
+    Compare MINION_PROJECT_DIR env var to cwd.
+    If they differ -> cross-project operation.
+    If MINION_PROJECT_DIR not set -> not cross-project (local operation).
+    """
+    project_dir = os.environ.get("MINION_PROJECT_DIR", "")
+    if not project_dir:
+        return False
+    return os.path.abspath(project_dir) != os.path.abspath(os.getcwd())
+
+
+# ---------------------------------------------------------------------------
 # Scope-based permission narrowing
 # ---------------------------------------------------------------------------
 # Class gives max permissions; scope narrows them.

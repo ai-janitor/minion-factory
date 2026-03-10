@@ -253,8 +253,24 @@ def promote(
         except Exception:
             pass
 
+        # --- SU-07: Ensure requirement_id propagates for lineage tracking ---
+        requirement_id = reg_result.get("id") or reg_result.get("requirement_id")
+        if requirement_id is None:
+            # Fallback: query DB for the requirement we just registered
+            fallback_conn = get_db()
+            try:
+                fallback_row = fallback_conn.execute(
+                    "SELECT id FROM requirements WHERE file_path = ? ORDER BY id DESC LIMIT 1",
+                    (req_rel_path,),
+                ).fetchone()
+                if fallback_row:
+                    requirement_id = fallback_row["id"]
+            finally:
+                fallback_conn.close()
+
         result: dict[str, Any] = {
             "status": "promoted",
+            "requirement_id": requirement_id,
             "backlog": {
                 "id": backlog_id,
                 "file_path": file_path,

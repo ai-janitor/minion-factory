@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 # Single source of truth for terminal task statuses.
 # Import this everywhere instead of redefining inline — was drifting across rollup.py, gates.py.
-TERMINAL_STATUSES: frozenset[str] = frozenset({"closed", "abandoned", "obsolete", "completed"})
+TERMINAL_STATUSES: frozenset[str] = frozenset({"closed", "abandoned", "obsolete", "completed", "stale"})
 
 
 @dataclass

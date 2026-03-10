@@ -166,6 +166,29 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
                 f"This stage requires a different agent."
             }
 
+        # --- SU-03: Self-review bypass prevention ---
+        # If current stage requires reviewer classes, block the implementer from self-reviewing.
+        # Lead class bypasses this check (trusted to self-review when necessary).
+        if agent_class != "lead":
+            current_stage_obj = flow.stages.get(current)
+            if current_stage_obj and current_stage_obj.workers is not None:
+                # Check if this is a review-type stage (workers are reviewer classes)
+                eligible_workers = flow.workers_for(current, class_required)
+                # Look for who last advanced this task — query transition_log
+                implementer_row = cursor.execute(
+                    "SELECT triggered_by FROM transition_log "
+                    "WHERE entity_id = ? AND entity_type = 'task' AND triggered_by IS NOT NULL AND triggered_by != '' "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (task_id,),
+                ).fetchone()
+                if implementer_row and implementer_row["triggered_by"] == agent_name:
+                    # Agent was the last to work on it — block self-review if eligible
+                    if eligible_workers is not None and agent_class in (eligible_workers or []):
+                        return {
+                            "error": f"BLOCKED: Agent '{agent_name}' was the last to advance this task "
+                            f"and cannot self-review stage '{current}'. Assign a different reviewer."
+                        }
+
         # DAG decides next status — no fallback
         new_status = flow.next_status(current, passed)
 
@@ -222,6 +245,8 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
             result["eligible_classes"] = eligible
         if flow and flow.is_terminal(new_status):
             result["terminal"] = True
+        # --- SU-06: Poll reminder after phase completion ---
+        result["poll_reminder"] = f"Run: minion poll --agent {agent_name}"
         return result
     finally:
         conn.close()
