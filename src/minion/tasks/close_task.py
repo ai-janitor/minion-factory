@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from minion.db import get_db, now_iso
-from minion.crew._tmux import update_pane_task
+from minion.crew import update_pane_task
 from ._helpers import _get_flow, _log_transition
 
 
