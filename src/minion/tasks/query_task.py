@@ -11,7 +11,7 @@ import os
 
 from minion.db import get_db
 from minion.fs import MAX_DOC_SIZE
-from .flow_gates_and_validation import _get_flow
+from ._helpers import _get_flow
 
 
 def _resolve_path(path: str) -> str:

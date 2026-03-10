@@ -50,14 +50,14 @@ def test_output_error_key_exits_nonzero(capsys):
 
 
 def test_output_error_key_prints_json(capsys):
-    """output() error path still prints JSON."""
+    """output() error path still prints JSON to stderr."""
     from minion.output import output
     try:
         output({"error": "bad thing"})
     except SystemExit:
         pass
-    out, _ = capsys.readouterr()
-    parsed = json.loads(out)
+    _, err = capsys.readouterr()
+    parsed = json.loads(err)
     assert "error" in parsed
 
 

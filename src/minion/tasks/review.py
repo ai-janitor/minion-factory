@@ -13,7 +13,7 @@ from pathlib import Path
 from minion.db import _get_db_path, get_db
 
 from .update_task import complete_phase
-from .flow_gates_and_validation import _get_flow
+from ._helpers import _get_flow
 
 
 def create_review(
