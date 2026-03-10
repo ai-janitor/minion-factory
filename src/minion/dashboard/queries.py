@@ -77,6 +77,12 @@ def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         FROM transition_log tl
         JOIN tasks t ON t.id = tl.entity_id
         WHERE tl.entity_type = 'task'
+          AND tl.created_at = (
+              SELECT MAX(tl2.created_at)
+              FROM transition_log tl2
+              WHERE tl2.entity_id = tl.entity_id
+                AND tl2.entity_type = 'task'
+          )
         ORDER BY tl.created_at DESC
         LIMIT 8
     """)
