@@ -52,7 +52,7 @@ def register_commands(cli: click.Group) -> None:
     @backlog_group.command("list")
     @click.option("--type", "item_type", default=None, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
     @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
-    @click.option("--status", default="open", type=click.Choice(["open", "promoted", "killed", "deferred"]))
+    @click.option("--status", default="open", type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
     @click.pass_context
     def backlog_list(ctx: click.Context, item_type: str | None, priority: str | None, status: str | None) -> None:
         """List backlog items with optional filters."""
@@ -95,7 +95,7 @@ def register_commands(cli: click.Group) -> None:
     @backlog_group.command("update")
     @click.argument("path")
     @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
-    @click.option("--status", default=None, type=click.Choice(["open", "promoted", "killed", "deferred"]))
+    @click.option("--status", default=None, type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
     @click.option("--flow-hint", default=None, help="DAG flow type hint (e.g. implementation, feature, chore, build)")
     @click.pass_context
     def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None, flow_hint: str | None) -> None:

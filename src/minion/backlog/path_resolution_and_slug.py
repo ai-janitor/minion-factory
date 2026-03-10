@@ -18,7 +18,7 @@ from minion.db import _get_db_path
 # ---------------------------------------------------------------------------
 
 VALID_TYPES = {"idea", "bug", "request", "smell", "debt"}
-VALID_STATUSES = {"open", "promoted", "killed", "deferred"}
+VALID_STATUSES = {"open", "promoted", "killed", "deferred", "closed"}
 VALID_PRIORITIES = {"unset", "low", "medium", "high", "critical"}
 
 # Each item type lives under its plural folder name inside .work/backlog/
