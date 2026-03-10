@@ -18,6 +18,9 @@ from minion.fs import read_content_file
 
 
 def check_inbox(agent_name: str, msg_type: str | None = None) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

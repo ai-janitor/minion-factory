@@ -378,6 +378,9 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     migration is rolled back and the error propagates — later migrations
     are skipped so the DB stays at the last successful version.
     """
+    # Precondition assertion — backlog #63
+    assert conn is not None, "DB connection must not be None"
+
     if not _MIGRATIONS:
         return
 

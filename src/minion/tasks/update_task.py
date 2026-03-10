@@ -14,6 +14,10 @@ def update_task(
     progress: str = "",
     files: str = "",
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert isinstance(task_id, int) and task_id > 0, f"task_id must be a positive int, got {task_id}"
+
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
@@ -123,6 +127,10 @@ def update_task(
 
 def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: str | None = None) -> dict[str, object]:
     """Complete your phase — DAG decides next status and routing."""
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert isinstance(task_id, int) and task_id > 0, f"task_id must be a positive int, got {task_id}"
+
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

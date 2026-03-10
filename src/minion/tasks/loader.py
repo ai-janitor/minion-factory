@@ -226,6 +226,9 @@ def _load_flow_from_disk(task_type: str, flows_path: Path) -> TaskFlow:
 
 def load_flow(task_type: str, flows_dir: str | Path | None = None) -> TaskFlow:
     """Load a task flow DAG by type name. Returns from cache if already loaded."""
+    # Precondition assertion — backlog #63
+    assert task_type, "task_type must not be empty"
+
     if not _FLOWS_LOADED:
         _load_all_flows(Path(flows_dir) if flows_dir else None)
     if task_type in _FLOW_CACHE:

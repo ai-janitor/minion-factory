@@ -36,6 +36,12 @@ def send(
     cc: str = "",
     msg_type: str | None = None,
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert from_agent, "from_agent must not be empty"
+    assert to_agent, "to_agent must not be empty"
+    assert message, "message must not be empty"
+    assert from_agent != to_agent or to_agent == "all", "Cannot send a message to yourself"
+
     # Validate msg_type if provided — backlog #66
     if msg_type is not None:
         assert msg_type in VALID_MSG_TYPES, (

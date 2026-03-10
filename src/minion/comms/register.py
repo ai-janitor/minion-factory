@@ -34,6 +34,12 @@ def register(
     crew: str = "",
     scope: str = "project",
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert agent_class, "agent_class must not be empty"
+    assert len(agent_name) <= 64, f"agent_name too long ({len(agent_name)} chars, max 64)"
+    assert " " not in agent_name, f"agent_name must not contain spaces: '{agent_name}'"
+
     if transport not in ("terminal", "daemon", "daemon-ts"):
         return {"error": f"Invalid transport '{transport}'. Must be 'terminal', 'daemon', or 'daemon-ts'."}
     if agent_class not in VALID_CLASSES:
@@ -243,6 +249,8 @@ def register(
 
 
 def deregister(agent_name: str) -> dict[str, object]:
+    # Precondition — backlog #63
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     try:

@@ -21,6 +21,12 @@ def route_cross_repo(
 
     Returns a result dict if cross-repo delivery succeeded, None if agent not found globally.
     """
+    # Precondition assertions — backlog #63
+    assert to_agent, "to_agent must not be empty"
+    assert from_agent, "from_agent must not be empty"
+    assert message, "message must not be empty"
+    assert now, "timestamp must not be empty"
+
     try:
         coord = get_coordinator_db()
         try:
