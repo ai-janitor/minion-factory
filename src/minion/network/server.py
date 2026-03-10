@@ -113,6 +113,17 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
             self._html_response(DASHBOARD_HTML)
             return
 
+        # SU-22: Server-rendered dashboard pages — no auth (read-only views)
+        if path.startswith("/dashboard"):
+            try:
+                from minion.network.handlers.dashboard_views import handle_dashboard_page
+                html = handle_dashboard_page(path, self.db_path)
+                if html is not None:
+                    self._html_response(html)
+                    return
+            except Exception:
+                pass  # Fall through to auth-required routes
+
         # API endpoints — auth required
         if not self.require_auth():
             return
