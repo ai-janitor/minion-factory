@@ -4,4 +4,4 @@
 - [done] 2b: Reconcile with v1 clean requirements + upstream feedback
 - [done] 2c: Completeness audit (raw-to-clean-trace) → raw-to-clean-trace.md
 - [done] 2d: Merge and write to .planning/v2/clean-requirements.md
-- [ ] 2e: Present to user for approval
+- [done] 2e: Present to user for approval

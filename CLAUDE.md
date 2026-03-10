@@ -252,9 +252,9 @@ Claude provider passes system prompts via `--append-system-prompt` (system-level
 
 **Prompting pattern:** Use positive instructions ("ONLY scan src/") not negation ("NEVER scan .venv/"). LLMs ignore negative instructions even at system prompt level.
 
-## sys-lead Operations
+## Napoleon Operations
 
-See `/sys-lead` slash command (`~/.claude/commands/sys-lead.md`) for the full operational playbook — chain of command, checklist-first protocol, worker context, merge protocol, anti-patterns.
+See `/napoleon` slash command (`~/.claude/commands/napoleon.md`) for the full operational playbook — chain of command, checklist-first protocol, worker context, merge protocol, anti-patterns.
 
 ## Running Tests
 
