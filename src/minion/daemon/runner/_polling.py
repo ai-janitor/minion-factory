@@ -41,6 +41,7 @@ class PollingMixin:
                 capture_output=True,
                 text=True,
                 env=env,
+                timeout=60,  # guard against indefinite hang — poll inner timeout is 30s, outer is 60s
             )
             if proc.returncode == 3:
                 handle_stand_down(self.agent_name, self._log, self._stop_event)
