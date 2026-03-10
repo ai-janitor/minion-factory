@@ -35,14 +35,14 @@ def _log_json(fp, agent: str, level: str, message: str, **extra) -> None:
 
 def init_swarm(config_path: str, project_dir: str) -> None:
     """Create runtime directories for a swarm config (replaces minion-swarm init)."""
-    from minion.daemon.config import load_config
+    from minion.crew.config import load_config
     cfg = load_config(config_path)
     cfg.ensure_runtime_dirs()
 
 
 def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> None:
     """Fork a daemon process for one agent (replaces minion-swarm start)."""
-    from minion.daemon.config import load_config
+    from minion.crew.config import load_config
     cfg = load_config(config_path)
     log_file = cfg.logs_dir / f"{agent_name}.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +86,7 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
 
 def stop_swarm(config_path: str) -> None:
     """Stop all daemon agents for a config by reading PID from state files."""
-    from minion.daemon.config import load_config
+    from minion.crew.config import load_config
     try:
         cfg = load_config(config_path)
     except (FileNotFoundError, ValueError):
