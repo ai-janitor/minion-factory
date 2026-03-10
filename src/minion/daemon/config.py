@@ -7,10 +7,10 @@ from typing import Dict, Literal, Optional
 
 import yaml
 from minion.defaults import (
-    DEFAULT_DOCS_DIR,
     ENV_DB_PATH,
-    ENV_DOCS_DIR,
     resolve_db_path,
+    resolve_docs_dir,
+    resolve_path,
 )
 
 ProviderName = Literal["claude", "codex", "opencode", "gemini"]
@@ -66,13 +66,6 @@ class SwarmConfig:
         self.state_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _resolve_path(raw_value: str, base: Path) -> Path:
-    path = Path(raw_value).expanduser()
-    if not path.is_absolute():
-        path = (base / path).resolve()
-    return path
-
-
 def load_config(config_path: str | Path) -> SwarmConfig:
     cfg_path = Path(config_path).expanduser().resolve()
     if not cfg_path.exists():
@@ -82,21 +75,21 @@ def load_config(config_path: str | Path) -> SwarmConfig:
     if not isinstance(raw, dict):
         raise ValueError("Top-level config must be a YAML mapping")
 
-    project_dir = _resolve_path(str(raw.get("project_dir", cfg_path.parent)), cfg_path.parent)
-    comms_dir = _resolve_path(
+    project_dir = resolve_path(str(raw.get("project_dir", cfg_path.parent)), cfg_path.parent)
+    comms_dir = resolve_path(
         str(raw.get("comms_dir", ".work")),
         project_dir,
     )
 
     # comms_db comes from MINION_DB_PATH env (set by spawn), not from YAML.
     # Ignore stale comms_db in crew YAMLs — env is the source of truth.
-    comms_db = _resolve_path(
+    comms_db = resolve_path(
         str(os.environ.get(ENV_DB_PATH) or resolve_db_path()),
         cfg_path.parent,
     )
 
-    docs_dir = _resolve_path(
-        str(raw.get("docs_dir", os.environ.get(ENV_DOCS_DIR, DEFAULT_DOCS_DIR))),
+    docs_dir = resolve_path(
+        str(raw.get("docs_dir", resolve_docs_dir())),
         cfg_path.parent,
     )
 
@@ -143,6 +136,11 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         if model is not None:
             model = str(model)
 
+        # ASSUMPTION: These defaults match docs/contracts/config-defaults.json.
+        # ASSUMPTION: 100k history tokens fits Claude Sonnet context window with room
+        # for system prompt + tools. Haiku/Opus may need different limits.
+        # ASSUMPTION: 600s (10min) no-output timeout catches stuck invocations.
+        # ASSUMPTION: 30s initial backoff with 300s max is exponential with cap.
         max_history_tokens = int(item.get("max_history_tokens", 100_000))
         max_prompt_chars = int(item.get("max_prompt_chars", 120_000))
         no_output_timeout_sec = int(item.get("no_output_timeout_sec", 600))

@@ -52,6 +52,8 @@ class _DbFileEventHandler(FileSystemEventHandler):
 
 
 class CommsWatcher:
+    # ASSUMPTION: 0.5s debounce is sufficient to coalesce rapid DB writes from
+    # multi-agent scenarios without adding perceptible latency to message delivery.
     def __init__(self, agent_name: str, db_path: Path, debounce_seconds: float = 0.5) -> None:
         self.agent_name = agent_name
         self.db_path = db_path.expanduser().resolve()
@@ -61,9 +63,16 @@ class CommsWatcher:
         self._change_signal = threading.Event()
 
     def _connect(self) -> sqlite3.Connection:
+        """Open a WAL-mode connection consistent with db.connection.get_db().
+
+        ASSUMPTION: WAL mode is required for concurrent read/write safety when
+        multiple daemon agents share the same DB file.
+        """
         try:
             conn = sqlite3.connect(self.db_path, timeout=5.0)
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")
             return conn
         except sqlite3.OperationalError as exc:
             import sys

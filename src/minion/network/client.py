@@ -11,15 +11,17 @@ import os
 import urllib.request
 import urllib.error
 
+from minion.defaults import resolve_cluster_token, resolve_network_insecure, resolve_network_url
+
 
 class NetworkClient:
     """Client for the API GLOBAL coordinator server."""
 
     def __init__(self, base_url: str = "", token: str = "", insecure: bool | None = None):
-        self.base_url = (base_url or os.environ.get("MINION_NETWORK_URL", "")).rstrip("/")
-        self.token = token or os.environ.get("MINION_CLUSTER_TOKEN", "")
+        self.base_url = (base_url or resolve_network_url()).rstrip("/")
+        self.token = token or resolve_cluster_token()
         if insecure is None:
-            insecure = os.environ.get("MINION_NETWORK_INSECURE", "") == "1"
+            insecure = resolve_network_insecure()
         self._insecure = insecure
 
     @property

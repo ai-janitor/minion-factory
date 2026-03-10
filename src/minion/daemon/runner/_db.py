@@ -1,4 +1,8 @@
-"""DB operations — invocation log, child PID tracking, session ID, compaction log."""
+"""DB operations — invocation log, child PID tracking, session ID, compaction log.
+
+All DB connections use _daemon_connect() for consistent WAL mode, row_factory,
+and busy_timeout settings matching the canonical get_db() pattern.
+"""
 from __future__ import annotations
 
 import os
@@ -9,6 +13,20 @@ from ._constants import utc_now_iso, _get_rss_bytes, AgentRunResult
 
 if TYPE_CHECKING:
     from ..config import SwarmConfig, AgentConfig
+
+
+def _daemon_connect(db_path: str, timeout: float = 5.0) -> sqlite3.Connection:
+    """Open a WAL-mode connection consistent with db.connection.get_db().
+
+    ASSUMPTION: All daemon DB connections should use WAL mode for concurrent
+    read/write safety, row_factory for dict-like access, and busy_timeout
+    to handle lock contention from multiple agents.
+    """
+    conn = sqlite3.connect(db_path, timeout=timeout)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
 
 
 class DBMixin:
@@ -24,8 +42,7 @@ class DBMixin:
     def _write_agent_runtime(self, crew: str | None = None) -> None:
         """Write PID, crew to the agents table. Child PID + RSS written per-invocation."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             conn.execute(
                 "UPDATE agents SET pid = ?, crew = ? WHERE name = ?",
                 (self._child_pid, crew, self.agent_name),
@@ -39,8 +56,7 @@ class DBMixin:
         """Write the current child PID + its RSS to agents (current state)."""
         try:
             rss = _get_rss_bytes(self._child_pid)
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             conn.execute(
                 "UPDATE agents SET pid = ?, rss_bytes = ? WHERE name = ?",
                 (self._child_pid, rss, self.agent_name),
@@ -53,8 +69,7 @@ class DBMixin:
     def _insert_invocation_start(self) -> int | None:
         """INSERT a row into invocation_log when child spawns. Returns row id."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             cur = conn.execute(
                 """INSERT INTO invocation_log
                    (agent_name, pid, model, generation, rss_bytes, started_at)
@@ -83,8 +98,7 @@ class DBMixin:
             return
         try:
             rss = _get_rss_bytes(self._child_pid)
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             conn.execute(
                 """UPDATE invocation_log SET
                    rss_bytes = ?, input_tokens = ?, output_tokens = ?,
@@ -113,8 +127,7 @@ class DBMixin:
     def _check_interrupt(self) -> bool:
         """Check agent_interrupt table. Returns True if flag is set, and clears it."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=2)
-            conn.execute("PRAGMA busy_timeout=2000")
+            conn = _daemon_connect(str(self.config.comms_db), timeout=2)
             cur = conn.cursor()
             cur.execute("SELECT agent_name FROM agent_interrupt WHERE agent_name = ?", (self.agent_name,))
             row = cur.fetchone()
@@ -132,8 +145,7 @@ class DBMixin:
         """INSERT a compaction event into compaction_log."""
         try:
             rss = _get_rss_bytes(self._child_pid)
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             conn.execute(
                 """INSERT INTO compaction_log
                    (agent_name, model, pid, rss_pre_bytes, tokens_pre, tokens_post, generation, compacted_at)
@@ -158,8 +170,7 @@ class DBMixin:
         """Store session_id on provider and in DB."""
         self._provider.session_id = session_id
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             conn.execute(
                 "UPDATE agents SET session_id = ? WHERE name = ?",
                 (session_id, self.agent_name),
@@ -172,8 +183,7 @@ class DBMixin:
     def _has_pending_halt(self) -> bool:
         """Check if there's a HALT message waiting in the inbox."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             cur = conn.cursor()
             cur.execute(
                 "SELECT content FROM messages WHERE to_agent = ? AND read = 0",
@@ -192,9 +202,7 @@ class DBMixin:
     def _fetch_fenix_records(self) -> list[dict[str, Any]]:
         """Fetch and consume unconsumed fenix_down records for this agent."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _daemon_connect(str(self.config.comms_db))
             cur = conn.cursor()
             cur.execute(
                 "SELECT * FROM fenix_down_records WHERE agent_name = ? AND consumed = 0 ORDER BY created_at DESC",

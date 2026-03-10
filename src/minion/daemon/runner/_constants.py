@@ -55,8 +55,10 @@ class AgentRunResult:
 
 
 # Load max_console_stream_chars from contract, fallback to 12k
+from minion.defaults import resolve_docs_dir as _resolve_docs_dir
+
 _cfg_defaults = load_contract(
-    os.getenv("MINION_DOCS_DIR", os.path.expanduser("~/.minion_work/docs")),
+    _resolve_docs_dir(),
     "config-defaults",
 )
 MAX_CONSOLE_STREAM_CHARS = (_cfg_defaults or {}).get("max_console_stream_chars", 12_000)
@@ -64,6 +66,12 @@ MAX_CONSOLE_STREAM_CHARS = (_cfg_defaults or {}).get("max_console_stream_chars",
 # Claude Code system prompt + tool definitions token costs (approximate).
 # Each tool's JSON schema + description consumes context tokens.
 # These are injected by Claude Code before the agent's prompt.
+#
+# ASSUMPTION: These token counts are rough estimates based on Claude Code v1.0.
+# They will drift as Claude Code updates its system prompt and tool schemas.
+# ASSUMPTION: 1 token ~= 4 characters for English text (OpenAI/Anthropic norm).
+# ASSUMPTION: CLAUDE_CODE_PROJECT_OVERHEAD (4k tokens) covers CLAUDE.md + rules +
+# MEMORY.md. Real overhead varies per project — large CLAUDE.md files cost more.
 CLAUDE_CODE_SYSTEM_TOKENS = 3_500   # Base system prompt (instructions, rules, formatting)
 CLAUDE_CODE_TOOL_TOKENS: dict[str, int] = {
     "Bash":             400,

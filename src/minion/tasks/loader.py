@@ -12,7 +12,8 @@ from .dag import Stage, TaskFlow
 
 # Search order: env var, ~/.minion/task-flows/, bundled with package
 def _find_flows_dir() -> Path:
-    env = os.getenv("MINION_FLOWS_DIR") or os.getenv("MINION_TASKS_FLOWS_DIR")
+    from minion.defaults import resolve_flows_dir
+    env = resolve_flows_dir()
     if env:
         return Path(env)
     user_dir = Path.home() / ".minion" / "task-flows"

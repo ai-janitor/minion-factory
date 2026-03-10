@@ -24,6 +24,14 @@ def _agent_judgment(
     last_task_update: str | None,
     file_mtimes: list[str | None],
 ) -> str:
+    """Classify agent as active/idle/possibly-dead based on timestamps.
+
+    ASSUMPTION: 5-minute window for "active" status. File mtime < 5min = active.
+    ASSUMPTION: 15-minute window for "idle" status. last_seen 5-15min ago = idle.
+    ASSUMPTION: Anything older than 15 minutes = "possibly dead".
+    These thresholds are hardcoded, not configurable. They match the staleness
+    thresholds in auth.py CLASS_STALENESS_SECONDS (5min for coders, 15min for leads).
+    """
     now = datetime.datetime.now()
 
     for mt in file_mtimes:
@@ -397,7 +405,17 @@ def update_hp(
     turn_input: int | None = None,
     turn_output: int | None = None,
 ) -> dict[str, object]:
-    """Daemon-only: write observed HP to SQLite."""
+    """Daemon-only: write observed HP to SQLite.
+
+    ASSUMPTION: HP% is computed as 100 - (used_tokens / limit * 100).
+    ASSUMPTION: turn_input (per-turn) is preferred over cumulative input_tokens
+                for HP calculation when available (more accurate for context window).
+    ASSUMPTION: hp_tokens_limit == 100 is the sentinel for self-reported agents
+                (terminal transport). These agents manage their own HP tracking
+                and should not be overwritten by daemon observations.
+    ASSUMPTION: HP alerts fire at 25% and 10% thresholds. Recovery above 50%
+                resets alerts so they can re-fire if agent drops again.
+    """
     conn = get_db()
     now = now_iso()
     try:

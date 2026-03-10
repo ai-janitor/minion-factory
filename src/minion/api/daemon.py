@@ -115,7 +115,8 @@ def start(port: int = 8377, token: str = "") -> dict:
 
     # Auto-generate TLS cert if missing
     tls_enabled = False
-    insecure = os.environ.get("MINION_NETWORK_INSECURE", "") == "1"
+    from minion.defaults import resolve_network_insecure
+    insecure = resolve_network_insecure()
     if not insecure:
         tls_dir = _minion_dir() / "tls"
         cert_path = tls_dir / "cert.pem"
