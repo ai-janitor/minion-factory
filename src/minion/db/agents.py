@@ -61,7 +61,7 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
         turn_input=a.get("hp_turn_input"), turn_output=a.get("hp_turn_output"),
     )
 
-    from minion.db.helpers import parse_iso_to_naive_local
+    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
 
     threshold = CLASS_STALENESS_SECONDS.get(a.get("agent_class", ""))
     stale = False
@@ -117,7 +117,7 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
         )
 
     try:
-        from minion.db.helpers import parse_iso_to_naive_local
+        from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
         updated = parse_iso_to_naive_local(context_updated_at)
     except (ValueError, TypeError):
         import sys

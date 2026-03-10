@@ -147,7 +147,7 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                 "WHERE stage NOT IN ('completed','killed','deferred')"
             ).fetchall():
                 try:
-                    from minion.db.helpers import parse_iso_to_naive_local
+                    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
                     updated = parse_iso_to_naive_local(row["updated_at"])
                     age_mins = (now - updated).total_seconds() / 60
                     if age_mins > 60:
@@ -186,7 +186,7 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                 "FROM messages WHERE read_flag = 0 GROUP BY to_agent"
             ).fetchall():
                 try:
-                    from minion.db.helpers import parse_iso_to_naive_local
+                    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
                     oldest = parse_iso_to_naive_local(row["oldest"])
                     age_mins = (now - oldest).total_seconds() / 60
                     if age_mins > 30:

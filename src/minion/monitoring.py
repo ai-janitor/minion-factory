@@ -40,7 +40,7 @@ def _agent_judgment(
     These thresholds are hardcoded, not configurable. They match the staleness
     thresholds in auth.py CLASS_STALENESS_SECONDS (5min for coders, 15min for leads).
     """
-    from minion.db.helpers import parse_iso_to_naive_local
+    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
 
     now = datetime.datetime.now()
 
@@ -135,7 +135,7 @@ def party_status() -> dict[str, object]:
 
 
 def check_activity(agent_name: str) -> dict[str, object]:
-    from minion.db.helpers import parse_iso_to_naive_local
+    from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
 
     conn = get_db()
     cursor = conn.cursor()
@@ -238,7 +238,7 @@ def check_freshness(agent_name: str, file_paths: str) -> dict[str, object]:
             }
 
         try:
-            from minion.db.helpers import parse_iso_to_naive_local
+            from minion.db.timestamp_and_agent_registry import parse_iso_to_naive_local
             context_dt = parse_iso_to_naive_local(context_updated_at)
             context_ts = context_dt.timestamp()
         except (ValueError, TypeError):
