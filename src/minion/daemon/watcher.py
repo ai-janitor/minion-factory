@@ -13,7 +13,9 @@ from watchdog.observers import Observer
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    # Use naive local time — consistent with now_iso() in db/helpers.py.
+    # Mixing UTC-aware and naive timestamps causes TypeError on comparison.
+    return datetime.now().isoformat()
 
 
 @dataclass

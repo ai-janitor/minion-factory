@@ -24,41 +24,43 @@ def _agent_judgment(
     last_task_update: str | None,
     file_mtimes: list[str | None],
 ) -> str:
+    from minion.db.helpers import parse_iso_to_naive_local
+
     now = datetime.datetime.now()
 
     for mt in file_mtimes:
         if mt:
             try:
-                mtime_dt = datetime.datetime.fromisoformat(mt)
+                mtime_dt = parse_iso_to_naive_local(mt)
                 if (now - mtime_dt).total_seconds() < 5 * 60:
                     return "active"
-            except ValueError:
+            except (ValueError, TypeError):
                 import sys
                 print(f"WARNING: corrupt mtime timestamp: {mt!r}", file=sys.stderr)
 
     if last_seen:
         try:
-            ls = datetime.datetime.fromisoformat(last_seen)
+            ls = parse_iso_to_naive_local(last_seen)
             age_min = (now - ls).total_seconds() / 60
             if age_min < 5:
                 return "active"
             if age_min < 15:
                 return "idle"
             return "possibly dead"
-        except ValueError:
+        except (ValueError, TypeError):
             import sys
             print(f"WARNING: corrupt last_seen timestamp: {last_seen!r}", file=sys.stderr)
 
     if last_task_update:
         try:
-            ltu = datetime.datetime.fromisoformat(last_task_update)
+            ltu = parse_iso_to_naive_local(last_task_update)
             age_min = (now - ltu).total_seconds() / 60
             if age_min < 5:
                 return "active"
             if age_min < 15:
                 return "idle"
             return "possibly dead"
-        except ValueError:
+        except (ValueError, TypeError):
             import sys
             print(f"WARNING: corrupt last_task_update timestamp: {last_task_update!r}", file=sys.stderr)
 
@@ -120,6 +122,8 @@ def party_status() -> dict[str, object]:
 
 
 def check_activity(agent_name: str) -> dict[str, object]:
+    from minion.db.helpers import parse_iso_to_naive_local
+
     conn = get_db()
     cursor = conn.cursor()
     now = datetime.datetime.now()
@@ -139,9 +143,9 @@ def check_activity(agent_name: str) -> dict[str, object]:
 
         if row["last_seen"]:
             try:
-                ls = datetime.datetime.fromisoformat(row["last_seen"])
+                ls = parse_iso_to_naive_local(row["last_seen"])
                 result["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
-            except ValueError:
+            except (ValueError, TypeError):
                 import sys
                 print(f"WARNING: corrupt last_seen for {agent_name}: {row['last_seen']!r}", file=sys.stderr)
 
@@ -222,9 +226,10 @@ def check_freshness(agent_name: str, file_paths: str) -> dict[str, object]:
             }
 
         try:
-            context_dt = datetime.datetime.fromisoformat(context_updated_at)
+            from minion.db.helpers import parse_iso_to_naive_local
+            context_dt = parse_iso_to_naive_local(context_updated_at)
             context_ts = context_dt.timestamp()
-        except ValueError:
+        except (ValueError, TypeError):
             return {"error": f"Invalid context_updated_at timestamp for '{agent_name}'."}
 
         files_result = []
