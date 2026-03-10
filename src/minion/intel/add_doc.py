@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import sqlite3
 
 from minion.db import get_db, now_iso
+
+log = logging.getLogger(__name__)
 from ._frontmatter import _parse_frontmatter
 
 
@@ -74,16 +78,16 @@ def add_doc(
                     "INSERT OR IGNORE INTO intel_links (intel_slug, entity_type, entity_id) VALUES (?, 'task', ?)",
                     (slug, task_id),
                 )
-            except Exception:
-                pass
+            except sqlite3.IntegrityError:
+                log.debug("intel auto-link: duplicate link slug=%s task=%s", slug, task_id)
         for req_id in fm.get("linked_reqs", []):
             try:
                 cursor.execute(
                     "INSERT OR IGNORE INTO intel_links (intel_slug, entity_type, entity_id) VALUES (?, 'requirement', ?)",
                     (slug, req_id),
                 )
-            except Exception:
-                pass
+            except sqlite3.IntegrityError:
+                log.debug("intel auto-link: duplicate link slug=%s req=%s", slug, req_id)
 
         conn.commit()
         return {"status": status, "slug": slug}

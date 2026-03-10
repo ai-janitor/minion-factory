@@ -212,7 +212,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 eligible = _workers_for(task["status"], task.get("class_required") or "", task.get("flow_type") or "bugfix")
                 if eligible is not None and agent_class not in eligible:
                     continue
-            except Exception:
+            except (ImportError, KeyError, ValueError):
                 pass
             # Render DAG so agent sees where they are in the flow
             task_type = task.get("flow_type") or "bugfix"
@@ -221,7 +221,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 from minion.tasks import load_flow
                 flow = load_flow(task_type)
                 dag_str = flow.render_dag(task["status"])
-            except Exception:
+            except (ImportError, FileNotFoundError, KeyError, ValueError):
                 pass
             # Suggest relevant docs for this task
             suggested_docs: list[str] = []
@@ -229,7 +229,7 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 from minion.intel import suggest as _suggest
                 s = _suggest(topic=task["title"], limit=3)
                 suggested_docs = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
-            except Exception:
+            except (ImportError, KeyError, TypeError):
                 pass
             entry: dict[str, object] = {
                 "task_id": task["id"],
@@ -356,7 +356,7 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
                 # Drain offline outbox
                 from minion.network.outbox import drain_outbox
                 drain_outbox(net)
-        except Exception:
+        except (ImportError, OSError, KeyError, ValueError):
             pass
 
         # Find available tasks — only surface NEW ones not yet seen this poll session
