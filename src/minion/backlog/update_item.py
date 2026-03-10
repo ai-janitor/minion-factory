@@ -14,17 +14,22 @@ from minion.backlog.path_resolution_and_slug import VALID_PRIORITIES, VALID_STAT
 
 
 def update_item(
-    file_path: str,
+    file_path: str | None = None,
     priority: str | None = None,
     status: str | None = None,
     flow_hint: str | None = None,
     db: str | None = None,
+    item_id: int | None = None,
 ) -> dict[str, Any]:
     """Patch mutable fields on a backlog item and bump updated_at.
 
+    Items can be looked up by file_path OR item_id (numeric backlog ID).
     At least one of priority, status, or flow_hint must be provided. Priority
     and status are validated against vocabulary constants before any write.
+    This works regardless of the item's current status (open, deferred, etc.).
     """
+    if file_path is None and item_id is None:
+        return {"error": "Provide file_path or item_id to identify the backlog item."}
     if priority is None and status is None and flow_hint is None:
         return {"error": "Provide at least one field to update: priority, status, flow_hint."}
     if priority is not None and priority not in VALID_PRIORITIES:
@@ -40,10 +45,18 @@ def update_item(
         conn.row_factory = __import__("sqlite3").Row
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM backlog WHERE file_path = ?", (file_path,))
+        # Look up by item_id or file_path — no status filter so deferred/killed/etc. items are found
+        if item_id is not None:
+            cursor.execute("SELECT * FROM backlog WHERE id = ?", (item_id,))
+        else:
+            cursor.execute("SELECT * FROM backlog WHERE file_path = ?", (file_path,))
         row = cursor.fetchone()
         if not row:
-            return {"error": f"Backlog item '{file_path}' not found."}
+            lookup_key = f"id={item_id}" if item_id is not None else f"'{file_path}'"
+            return {"error": f"Backlog item {lookup_key} not found."}
+
+        # Use the actual file_path from the DB row for the UPDATE WHERE clause
+        actual_file_path = row["file_path"]
 
         now = now_iso()
         set_clauses: list[str] = ["updated_at = ?"]
@@ -59,14 +72,14 @@ def update_item(
             set_clauses.append("flow_hint = ?")
             params.append(flow_hint)
 
-        params.append(file_path)
+        params.append(actual_file_path)
         cursor.execute(
             f"UPDATE backlog SET {', '.join(set_clauses)} WHERE file_path = ?",
             params,
         )
         conn.commit()
 
-        cursor.execute("SELECT * FROM backlog WHERE file_path = ?", (file_path,))
+        cursor.execute("SELECT * FROM backlog WHERE file_path = ?", (actual_file_path,))
         updated = cursor.fetchone()
         return dict(updated)
     finally:

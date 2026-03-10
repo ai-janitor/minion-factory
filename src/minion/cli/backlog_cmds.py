@@ -93,16 +93,19 @@ def register_commands(cli: click.Group) -> None:
         click.echo(json.dumps(result, indent=2))
 
     @backlog_group.command("update")
-    @click.argument("path")
+    @click.argument("path", required=False, default=None)
+    @click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID (alternative to path)")
     @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
     @click.option("--status", default=None, type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
     @click.option("--flow-hint", default=None, help="DAG flow type hint (e.g. implementation, feature, chore, build)")
     @click.pass_context
-    def backlog_update(ctx: click.Context, path: str, priority: str | None, status: str | None, flow_hint: str | None) -> None:
-        """Update priority and/or status of a backlog item."""
+    def backlog_update(ctx: click.Context, path: str | None, item_id: int | None, priority: str | None, status: str | None, flow_hint: str | None) -> None:
+        """Update priority and/or status of a backlog item by path or --id."""
+        if not path and item_id is None:
+            _echo_error({"error": "Provide PATH or --id"}, exit_code=2)
         from minion.backlog import update_item as _update_item
         try:
-            result = _update_item(path, priority, status, flow_hint=flow_hint)
+            result = _update_item(path, priority, status, flow_hint=flow_hint, item_id=item_id)
         except ValueError as e:
             _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
