@@ -35,16 +35,7 @@ class CodexProvider(BaseProvider):
             "Do not explore the codebase or take initiative beyond the task.",
         ])
 
-    def filter_log_line(self, line: str, error_log: Path) -> str:
-        stripped = line.rstrip("\n")
-        if not stripped or len(stripped) <= 500:
-            return line
-
-        summary = self._classify_codex_error(stripped)
-        if summary:
-            self._append_error_log(error_log, stripped)
-            return f"[{self.agent_name}] {summary}. Full error: {error_log}\n"
-        return line
+    # filter_log_line inherited from BaseProvider — uses _classify_error hook
 
     @property
     def supports_resume(self) -> bool:
@@ -54,8 +45,12 @@ class CodexProvider(BaseProvider):
     def resume_label(self) -> str:
         return "codex resume --last"
 
-    def _classify_codex_error(self, line: str) -> Optional[str]:
-        """Extract short error summary from Codex verbose output."""
+    def _classify_error(self, line: str) -> Optional[str]:
+        """Extract short error summary from Codex verbose output.
+
+        Codex-specific patterns: JSON error/message fields, capacity exhausted,
+        rate limit. Falls back to base _extract_error_summary for generic cases.
+        """
         try:
             data = json.loads(line)
             if isinstance(data, dict):
@@ -72,18 +67,6 @@ class CodexProvider(BaseProvider):
         if m:
             return f"CODEX_ERROR — {m.group(1)}"
 
-        summary = self._extract_error_summary(line)
-        return summary
+        return self._extract_error_summary(line)
 
-    @staticmethod
-    def _append_error_log(error_log: Path, content: str) -> None:
-        from datetime import datetime
-        try:
-            error_log.parent.mkdir(parents=True, exist_ok=True)
-            with open(error_log, "a") as f:
-                f.write(f"\n--- {datetime.now().isoformat()} ---\n")
-                f.write(content)
-                f.write("\n")
-        except OSError as exc:
-            import sys
-            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)
+    # _append_error_log inherited from BaseProvider

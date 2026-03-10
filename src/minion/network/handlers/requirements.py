@@ -17,22 +17,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse, parse_qs
 
-from minion.network.server import _DB_LOCK
-from minion.network.discovery import resolve_project_path
-from minion.network.project_db import get_project_db
-
-
-def _resolve_or_404(handler, db_path: str, project_name: str):
-    """Resolve project and get DB connection, or send 404."""
-    project_path = resolve_project_path(db_path, project_name, _DB_LOCK)
-    if not project_path:
-        handler._json_response(404, {"error": f"Project '{project_name}' not found"})
-        return None, None
-    conn = get_project_db(project_path)
-    if conn is None:
-        handler._json_response(404, {"error": f"Project '{project_name}' has no .work/minion.db"})
-        return project_path, None
-    return project_path, conn
+from minion.network.handlers._resolve_project_or_404 import resolve_project_or_404
 
 
 def register(router) -> None:
@@ -61,7 +46,7 @@ def handle_list_requirements(handler, db_path: str, name: str = "", **kwargs) ->
     #   count linked tasks (tasks WHERE requirement_path matches)
     #   compute completion_pct = closed_tasks / total_tasks * 100
     # PSEUDO: return {"requirements": [...]}
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 
@@ -133,7 +118,7 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
     # PSEUDO: compute completion_pct
     # PSEUDO: return {"requirement": {...}, "stage_history": [...],
     #                 "children": [...], "linked_tasks": [...], "completion_pct": N}
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 

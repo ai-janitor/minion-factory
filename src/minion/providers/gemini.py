@@ -88,15 +88,4 @@ class GeminiProvider(BaseProvider):
         summary = self._extract_error_summary(line)
         return summary
 
-    @staticmethod
-    def _append_error_log(error_log: Path, content: str) -> None:
-        from datetime import datetime
-        try:
-            error_log.parent.mkdir(parents=True, exist_ok=True)
-            with open(error_log, "a") as f:
-                f.write(f"\n--- {datetime.now().isoformat()} ---\n")
-                f.write(content)
-                f.write("\n")
-        except OSError as exc:
-            import sys
-            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)
+    # _append_error_log inherited from BaseProvider
