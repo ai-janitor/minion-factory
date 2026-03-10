@@ -161,6 +161,10 @@ def check_inbox_silent(agent_name: str) -> str:
 
 
 def get_history(count: int = 20) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    if not isinstance(count, int) or count < 1:
+        raise ValueError(f"count must be a positive int, got {count}")
+
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -174,6 +178,11 @@ def get_history(count: int = 20) -> dict[str, object]:
 
 
 def purge_inbox(agent_name: str, older_than_hours: int = 2) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    if not isinstance(older_than_hours, int) or older_than_hours < 0:
+        raise ValueError(f"older_than_hours must be a non-negative int, got {older_than_hours}")
+
     conn = get_db()
     cursor = conn.cursor()
     cutoff = (datetime.datetime.now() - datetime.timedelta(hours=older_than_hours)).isoformat()

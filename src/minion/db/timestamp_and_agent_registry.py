@@ -38,6 +38,10 @@ def register_agent_db(name: str, agent_class: str, model: str | None = None) -> 
     must avoid comms.register() side effects (reading onboarding files,
     creating inbox dirs, broadcasting messages).
     """
+    # Precondition assertions — backlog #63
+    assert name, "name must not be empty"
+    assert agent_class, "agent_class must not be empty"
+
     from minion.db.connection import get_db
 
     conn = get_db()

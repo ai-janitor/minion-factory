@@ -25,6 +25,11 @@ ENV_CLASS = "MINION_CLASS"
 ENV_NETWORK_URL = "MINION_NETWORK_URL"
 ENV_CLUSTER_TOKEN = "MINION_CLUSTER_TOKEN"
 ENV_NETWORK_INSECURE = "MINION_NETWORK_INSECURE"
+ENV_NETWORK_NO_AUTH = "MINION_NETWORK_NO_AUTH"
+ENV_MAX_AGENTS = "MINION_MAX_AGENTS"
+
+# Project directory env var — used by network handlers for context switching
+ENV_PROJECT_DIR = "MINION_PROJECT_DIR"
 
 # Compat layer env var — auto-project for React frontend bridge
 ENV_COMPAT_PROJECT = "MINION_COMPAT_PROJECT"
@@ -195,6 +200,14 @@ def resolve_coordinator_db_path() -> str:
 
 def resolve_path(raw_value: str, base: Path) -> Path:
     """Resolve a possibly-relative path against a base directory."""
+    # Precondition assertions — backlog #63
+    if not isinstance(raw_value, str):
+        raise TypeError(f"raw_value must be str, got {type(raw_value).__name__}")
+    if not raw_value:
+        raise ValueError("raw_value must not be empty")
+    if not isinstance(base, Path):
+        raise TypeError(f"base must be Path, got {type(base).__name__}")
+
     path = Path(raw_value).expanduser()
     if not path.is_absolute():
         path = (base / path).resolve()
@@ -219,6 +232,16 @@ def resolve_cluster_token() -> str:
 def resolve_network_insecure() -> bool:
     """Resolve whether to skip TLS verification. Default: False (verify)."""
     return os.getenv(ENV_NETWORK_INSECURE, "") == "1"
+
+
+def resolve_network_no_auth() -> bool:
+    """Resolve whether auth is disabled for network server. Default: False (auth required)."""
+    return os.getenv(ENV_NETWORK_NO_AUTH, "") == "1"
+
+
+def resolve_max_agents() -> int:
+    """Resolve max concurrent agents per machine. Default: 5."""
+    return int(os.getenv(ENV_MAX_AGENTS, "5"))
 
 
 def resolve_compat_project() -> str:
