@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-TERMINAL_STATUSES = {"closed", "abandoned", "obsolete", "completed"}
+TERMINAL_STATUSES = {"closed", "abandoned", "obsolete", "completed", "stale"}
 
 
 @dataclass

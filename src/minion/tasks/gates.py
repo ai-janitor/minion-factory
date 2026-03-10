@@ -203,7 +203,7 @@ def _db_all_child_tasks_closed(db, entity_id: int, entity_type: str, flow_type: 
     if not rows:
         return GateResult(passed=False, gate=gate, message=f"no child tasks found for entity {entity_id}")
 
-    terminal = {"closed", "abandoned", "obsolete"}
+    terminal = {"closed", "abandoned", "obsolete", "stale"}
     open_tasks = [(r[0], r[1]) for r in rows if r[1] not in terminal]
     if open_tasks:
         return GateResult(

@@ -165,6 +165,65 @@ def _validate(raw: dict, name: str, flows_dir: Path | None = None) -> None:
                                 f"{_pfx}: unknown agent classes in 'workers.{key}': {unknown_cls}"
                             )
 
+    # --- Cycle detection ---
+    # After all per-stage validation, check for cycles in the DAG using DFS.
+    # Edges: next, fail, alt_next. A cycle means the flow can never terminate.
+    _detect_cycles(stages, name)
+
+
+def _detect_cycles(stages: dict, flow_name: str) -> None:
+    """Detect cycles in the forward-progress edges of the stage graph using 3-color DFS.
+
+    Only checks 'next' and 'alt_next' edges — 'fail' edges intentionally point
+    backward for rework/retry and are excluded from cycle detection.
+    If a back-edge is found (gray node visited again), raises ValueError with the cycle path.
+    """
+    # Build adjacency list from forward-progress edges only (next, alt_next)
+    adj: dict[str, list[str]] = {s: [] for s in stages}
+    for stage_name, cfg in stages.items():
+        for edge_key in ("next", "alt_next"):
+            target = cfg.get(edge_key)
+            if target and target in stages:
+                adj[stage_name].append(target)
+
+    # DFS with 3 colors: white=unvisited, gray=in-stack, black=done
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {s: WHITE for s in stages}
+    parent: dict[str, str | None] = {s: None for s in stages}
+
+    def _dfs(node: str) -> list[str] | None:
+        """Returns cycle path if found, else None."""
+        color[node] = GRAY
+        for neighbor in adj[node]:
+            if color[neighbor] == GRAY:
+                # Back-edge found — reconstruct cycle
+                cycle = [neighbor, node]
+                cursor = node
+                while cursor != neighbor:
+                    cursor = parent[cursor]  # type: ignore[assignment]
+                    if cursor is None:
+                        break
+                    cycle.append(cursor)
+                cycle.reverse()
+                return cycle
+            if color[neighbor] == WHITE:
+                parent[neighbor] = node
+                result = _dfs(neighbor)
+                if result is not None:
+                    return result
+        color[node] = BLACK
+        return None
+
+    for stage_name in stages:
+        if color[stage_name] == WHITE:
+            cycle = _dfs(stage_name)
+            if cycle is not None:
+                cycle_str = " -> ".join(cycle)
+                raise ValueError(
+                    f"Flow '{flow_name}' contains a cycle: {cycle_str}. "
+                    f"DAG flows must be acyclic — check next/fail/alt_next edges."
+                )
+
 
 def _build_stage(name: str, cfg: dict) -> Stage:
     return Stage(

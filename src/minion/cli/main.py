@@ -3,13 +3,45 @@
 This module defines the `cli` group and the `_agent_option` / `_store_heartbeat_agent`
 helpers used across all command modules. Submodules register their commands/groups
 onto `cli` at import time via `register_*` functions called from this file's tail.
+
+Includes FuzzyGroup — a Click group subclass that suggests close matches when a user
+misspells a command, using difflib.get_close_matches().
 """
 
 from __future__ import annotations
 
 import os
+from difflib import get_close_matches
 
 import click
+
+
+# ---------------------------------------------------------------------------
+# FuzzyGroup — suggest close command matches on typos
+# ---------------------------------------------------------------------------
+
+class FuzzyGroup(click.Group):
+    """Click group that suggests similar commands when a command is not found.
+
+    Uses difflib.get_close_matches() with a cutoff of 0.6 to find commands
+    that are similar to the misspelled input and appends suggestions to the
+    error message.
+    """
+
+    def resolve_command(self, ctx: click.Context, args: list[str]) -> tuple:
+        """Override resolve_command to add fuzzy suggestions on UsageError."""
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError as exc:
+            # Only add suggestions if there's a command name to match against
+            if args:
+                cmd_name = args[0]
+                available = self.list_commands(ctx)
+                matches = get_close_matches(cmd_name, available, n=3, cutoff=0.6)
+                if matches:
+                    suggestion = ", ".join(f"'{m}'" for m in matches)
+                    exc.message += f"\n\nDid you mean: {suggestion}?"
+            raise
 
 from minion.db import init_db, reset_db_path
 from minion.fs import ensure_dirs
@@ -34,7 +66,7 @@ def _agent_option(**kwargs):  # noqa: ANN003
     return click.option("--agent", **kwargs)
 
 
-@click.group(epilog="Run 'minion <group> --help' to see subcommands. Run 'minion docs' for the full reference.")
+@click.group(cls=FuzzyGroup, epilog="Run 'minion <group> --help' to see subcommands. Run 'minion docs' for the full reference.")
 @click.version_option(package_name="minion-factory")
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON")
 @click.option("--compact", is_flag=True, help="Concise text output for agent context injection")
