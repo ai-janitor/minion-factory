@@ -90,18 +90,15 @@ def classes_with(capability: str) -> set[str]:
 from minion.defaults import CLASS_STALENESS_SECONDS as CLASS_STALENESS_SECONDS  # noqa: E402,F811
 
 # ---------------------------------------------------------------------------
-# Battle plan / task / raid log enums
+# Battle plan / raid log enums
+# Re-exported from defaults.py (canonical source) to maintain backwards compat.
 # ---------------------------------------------------------------------------
 
-BATTLE_PLAN_STATUSES = {"active", "superseded", "completed", "abandoned", "obsolete"}
+from minion.defaults import BATTLE_PLAN_STATUSES as BATTLE_PLAN_STATUSES  # noqa: E402,F811
+from minion.defaults import RAID_LOG_PRIORITIES as RAID_LOG_PRIORITIES  # noqa: E402,F811
 
-RAID_LOG_PRIORITIES = {"low", "normal", "high", "critical"}
-
-TASK_STATUSES = {
-    "open", "assigned", "in_progress", "fixed", "verified",
-    "closed", "abandoned", "completed", "stale", "obsolete",
-}
-# VALID_TRANSITIONS removed — all transition logic lives in DAG YAML flows
+# TASK_STATUSES removed — dead code, never imported. Terminal status logic
+# lives in tasks/dag.py (TERMINAL_STATUSES + flow.is_terminal()).
 
 # ---------------------------------------------------------------------------
 # Trigger words (brevity codes)

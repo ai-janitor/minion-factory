@@ -133,11 +133,13 @@ def test_staleness_seconds_coder_shorter_than_lead():
 # ---------------------------------------------------------------------------
 
 
-def test_task_statuses_contains_lifecycle_states():
-    """TASK_STATUSES includes all expected DAG states."""
-    from minion.auth import TASK_STATUSES
-    for status in ("open", "assigned", "in_progress", "fixed", "verified", "closed"):
-        assert status in TASK_STATUSES
+def test_task_statuses_live_in_dag():
+    """TASK_STATUSES removed from auth — terminal status logic lives in tasks/dag.py."""
+    from minion.tasks.dag import TERMINAL_STATUSES
+    # TERMINAL_STATUSES is the single source of truth for terminal states
+    assert isinstance(TERMINAL_STATUSES, frozenset)
+    assert "closed" in TERMINAL_STATUSES
+    assert "abandoned" in TERMINAL_STATUSES
 
 
 # ---------------------------------------------------------------------------

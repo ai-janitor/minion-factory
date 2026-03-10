@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 
-from minion.auth import BATTLE_PLAN_STATUSES, RAID_LOG_PRIORITIES
+from minion.defaults import BATTLE_PLAN_STATUSES, RAID_LOG_PRIORITIES
 from minion.db import get_db, now_iso
 from minion.fs import (
     atomic_write_file,

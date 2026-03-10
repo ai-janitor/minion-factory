@@ -183,6 +183,16 @@ TRIGGER_WORDS: dict[str, str] = {
     "recon": "Investigate before acting. Gather intel first.",
 }
 
+# ---------------------------------------------------------------------------
+# Battle plan / raid log enums — used by warroom.py
+# ---------------------------------------------------------------------------
+# Canonical source for status/priority validation sets. Placed here to keep
+# auth.py free of non-auth constants (same pattern as staleness/triggers above).
+
+BATTLE_PLAN_STATUSES: set[str] = {"active", "superseded", "completed", "abandoned", "obsolete"}
+
+RAID_LOG_PRIORITIES: set[str] = {"low", "normal", "high", "critical"}
+
 
 # Cross-project coordination — colon-separated list of project paths
 ENV_PROJECTS = "MINION_PROJECTS"
