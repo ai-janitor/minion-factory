@@ -27,6 +27,8 @@ from __future__ import annotations
 import os
 import traceback
 
+from minion.defaults import ENV_PROJECT_DIR
+
 
 def register(router) -> None:
     """Register lifecycle endpoints with the router dispatch table."""
@@ -42,8 +44,8 @@ def _with_project_db(project_path: str):
     Returns the old value for restoration.
     """
     # PSEUDO: save old MINION_PROJECT_DIR, set new one, return old
-    old = os.environ.get("MINION_PROJECT_DIR")
-    os.environ["MINION_PROJECT_DIR"] = project_path
+    old = os.environ.get(ENV_PROJECT_DIR)
+    os.environ[ENV_PROJECT_DIR] = project_path
     return old
 
 
@@ -51,9 +53,9 @@ def _restore_project_db(old_value):
     """Restore previous MINION_PROJECT_DIR after lifecycle call."""
     # PSEUDO: if old was None, delete env var; else restore it
     if old_value is None:
-        os.environ.pop("MINION_PROJECT_DIR", None)
+        os.environ.pop(ENV_PROJECT_DIR, None)
     else:
-        os.environ["MINION_PROJECT_DIR"] = old_value
+        os.environ[ENV_PROJECT_DIR] = old_value
 
 
 def handle_cold_start(handler, db_path: str, **kwargs) -> None:
@@ -92,7 +94,7 @@ def handle_cold_start(handler, db_path: str, **kwargs) -> None:
             handler._json_response(404, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _restore_project_db(old)
@@ -134,7 +136,7 @@ def handle_refresh(handler, db_path: str, **kwargs) -> None:
             handler._json_response(404, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _restore_project_db(old)
@@ -182,7 +184,7 @@ def handle_fenix_down(handler, db_path: str, **kwargs) -> None:
             handler._json_response(404, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _restore_project_db(old)
