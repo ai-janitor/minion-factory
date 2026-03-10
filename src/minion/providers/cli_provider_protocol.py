@@ -30,11 +30,33 @@ class BaseProvider(ABC):
     def prompt_guardrails(self) -> str:
         ...
 
+    def _classify_error(self, line: str) -> Optional[str]:
+        """Classify a verbose error line into a short summary.
+
+        Override in subclasses to add provider-specific error patterns (JSON
+        structure, status codes, etc.). Return None if the line is not a
+        recognized error. Falls back to _extract_error_summary for generic
+        large-output detection.
+
+        This is the provider-specific hook called by filter_log_line.
+        """
+        return self._extract_error_summary(line)
+
     def filter_log_line(self, line: str, error_log: Path) -> str:
         """Parse raw output line, return cleaned version for tmux pane.
 
-        Default: return as-is. Override for providers that dump verbose errors.
+        Shared structure: if line is long, classify the error, log it, and
+        return a short summary. Subclasses override _classify_error for
+        provider-specific patterns — not this method.
         """
+        stripped = line.rstrip("\n")
+        if not stripped or len(stripped) <= 500:
+            return line
+
+        summary = self._classify_error(stripped)
+        if summary:
+            self._append_error_log(error_log, stripped)
+            return f"[{self.agent_name}] {summary}. Full error: {error_log}\n"
         return line
 
     @property
@@ -46,6 +68,24 @@ class BaseProvider(ABC):
         return ""
 
     # shared helpers
+
+    @staticmethod
+    def _append_error_log(error_log: Path, content: str) -> None:
+        """Append a timestamped error entry to the provider error log file.
+
+        Shared by all providers that override filter_log_line to capture verbose
+        errors. Extracted here to avoid duplication across codex.py and gemini.py.
+        """
+        from datetime import datetime
+        try:
+            error_log.parent.mkdir(parents=True, exist_ok=True)
+            with open(error_log, "a") as f:
+                f.write(f"\n--- {datetime.now().isoformat()} ---\n")
+                f.write(content)
+                f.write("\n")
+        except OSError as exc:
+            import sys
+            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)
 
     @staticmethod
     def _extract_error_summary(line: str, max_normal: int = 500) -> Optional[str]:

@@ -14,13 +14,12 @@ Implementation order: 4th (depends on project_db + discovery).
 
 from __future__ import annotations
 
-import os
 from urllib.parse import urlparse, parse_qs
 
 from minion.defaults import MAX_DOC_SIZE
 from minion.network.server import _DB_LOCK
-from minion.network.discovery import discover_projects, resolve_project_path
-from minion.network.project_db import get_project_db
+from minion.network.discovery import discover_projects
+from minion.network.handlers._resolve_project_or_404 import resolve_project_or_404
 
 
 def register(router) -> None:
@@ -33,22 +32,6 @@ def register(router) -> None:
     router.add_get("/projects/{name}/raid-log", handle_project_raid_log)
 
 
-def _resolve_or_404(handler, db_path: str, project_name: str):
-    """Resolve project_name to path and get DB connection, or send 404."""
-    project_path = resolve_project_path(db_path, project_name, _DB_LOCK)
-    if not project_path:
-        handler._json_response(404, {"error": f"Project '{project_name}' not found"})
-        return None, None
-    conn = get_project_db(project_path)
-    if conn is None:
-        handler._json_response(404, {
-            "error": f"Project '{project_name}' has no .work/minion.db",
-            "path": project_path,
-        })
-        return project_path, None
-    return project_path, conn
-
-
 def handle_list_projects(handler, db_path: str, **kwargs) -> None:
     """GET /projects — list all discovered projects with agent counts."""
     projects = discover_projects(db_path, _DB_LOCK)
@@ -57,7 +40,7 @@ def handle_list_projects(handler, db_path: str, **kwargs) -> None:
 
 def handle_project_agents(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/agents — agents from project-local DB with full detail."""
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 
@@ -109,7 +92,7 @@ def handle_project_agents(handler, db_path: str, name: str = "", **kwargs) -> No
 
 def handle_project_tasks(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/tasks — tasks from project-local DB."""
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 
@@ -149,7 +132,7 @@ def handle_project_tasks(handler, db_path: str, name: str = "", **kwargs) -> Non
 def handle_task_lineage(handler, db_path: str, name: str = "",
                         task_id: str = "", **kwargs) -> None:
     """GET /projects/{name}/tasks/{id}/lineage — task detail + full status history."""
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 
@@ -188,7 +171,7 @@ def handle_task_lineage(handler, db_path: str, name: str = "",
 
 def handle_project_messages(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/messages — messages from project-local DB."""
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 
@@ -240,7 +223,7 @@ def handle_project_messages(handler, db_path: str, name: str = "", **kwargs) -> 
 
 def handle_project_raid_log(handler, db_path: str, name: str = "", **kwargs) -> None:
     """GET /projects/{name}/raid-log — raid log entries from project-local DB."""
-    project_path, conn = _resolve_or_404(handler, db_path, name)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
         return
 

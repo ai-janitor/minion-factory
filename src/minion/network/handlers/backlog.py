@@ -15,9 +15,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse, parse_qs
 
-from minion.network.server import _DB_LOCK
-from minion.network.discovery import resolve_project_path
-from minion.network.project_db import get_project_db
+from minion.network.handlers._resolve_project_or_404 import resolve_project_or_404
 
 
 def register(router) -> None:
@@ -43,13 +41,8 @@ def handle_list_backlog(handler, db_path: str, name: str = "", **kwargs) -> None
     # PSEUDO: if ?status filter → add WHERE status=?
     # PSEUDO: ORDER BY priority DESC, created_at ASC
     # PSEUDO: return {"backlog": [...]}
-    project_path = resolve_project_path(db_path, name, _DB_LOCK)
-    if not project_path:
-        handler._json_response(404, {"error": f"Project '{name}' not found"})
-        return
-    conn = get_project_db(project_path)
+    project_path, conn = resolve_project_or_404(handler, db_path, name)
     if conn is None:
-        handler._json_response(404, {"error": f"Project '{name}' has no .work/minion.db"})
         return
 
     parsed = urlparse(handler.path)
