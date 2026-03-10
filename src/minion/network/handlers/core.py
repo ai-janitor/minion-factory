@@ -292,7 +292,8 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
         handler._json_response(400, {"error": "Validation failed", "details": errors})
         return
 
-    name = body.get("name", "").strip()
+    # Validate required field: name (strip whitespace after schema validation)
+    name = body.get("name", "").strip() if isinstance(body.get("name"), str) else ""
     if not name:
         handler._json_response(400, {"error": "name is required"})
         return

@@ -26,11 +26,12 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--port", default=8377, type=int, help="TCP port (default: 8377)")
     @click.option("--db-path", default="", help="SQLite DB path (default: ~/.minion/network.db)")
     @click.option("--token", default="", help="Cluster auth token (or set MINION_CLUSTER_TOKEN)")
+    @click.option("--no-auth", is_flag=True, default=False, help="Allow starting without auth token (DEVELOPMENT ONLY)")
     @click.pass_context
-    def network_serve(ctx: click.Context, port: int, db_path: str, token: str) -> None:
+    def network_serve(ctx: click.Context, port: int, db_path: str, token: str, no_auth: bool) -> None:
         """Start the API GLOBAL coordinator server."""
         from minion.network.server import serve as _serve
-        _serve(port=port, db_path=db_path, token=token)
+        _serve(port=port, db_path=db_path, token=token, allow_no_auth=no_auth)
 
     @network_group.command("gen-cert")
     @click.pass_context

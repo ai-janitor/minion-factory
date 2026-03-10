@@ -23,6 +23,9 @@ from minion.network.auth import AuthMixin
 
 _DB_LOCK = threading.Lock()
 
+# Maximum request body size (1 MB) — prevents DoS via oversized payloads
+MAX_BODY_SIZE = 1 * 1024 * 1024
+
 
 def _get_server_db(db_path: str) -> sqlite3.Connection:
     return _db_connect(db_path)
@@ -63,12 +66,11 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB — guard against DoS via large Content-Length
-
     def _read_body(self) -> bytes:
+        """Read request body, enforcing MAX_BODY_SIZE limit."""
         length = int(self.headers.get("Content-Length", 0))
-        if length > self._MAX_BODY_SIZE:
-            self._json_response(413, {"error": f"Request body too large (max {self._MAX_BODY_SIZE} bytes)"})
+        if length > MAX_BODY_SIZE:
+            self._json_response(413, {"error": f"Request body too large (max {MAX_BODY_SIZE} bytes)"})
             return b""
         return self.rfile.read(length)
 
@@ -82,6 +84,7 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
         return True
 
     def _parse_json_body(self) -> dict | None:
+        """Parse request body as JSON. Returns None if body is too large, wrong content-type, or invalid."""
         if not self._check_content_type_json():
             return None
         raw = self._read_body()
@@ -189,7 +192,7 @@ def gen_cert(common_name: str = "minion-network") -> dict[str, str]:
     return {"cert": cert_path, "key": key_path}
 
 
-def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
+def serve(port: int = 8377, db_path: str = "", token: str = "", allow_no_auth: bool = False) -> None:
     """Start the API GLOBAL coordinator server with TLS by default.
 
     TLS uses ~/.minion/tls/cert.pem + key.pem (generate with gen_cert()).
@@ -200,6 +203,8 @@ def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
         db_path: Path to the network coordinator SQLite DB.
                  Defaults to ~/.minion/network.db.
         token: Shared cluster token for auth. Falls back to MINION_CLUSTER_TOKEN env var.
+        allow_no_auth: If True, allow starting without an auth token (dev mode).
+                       Falls back to MINION_NETWORK_NO_AUTH=1 env var.
     """
     if not db_path:
         db_path = os.path.join(os.path.expanduser("~"), ".minion", "network.db")
@@ -213,6 +218,22 @@ def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
     if not token:
         from minion.defaults import resolve_cluster_token
         token = resolve_cluster_token()
+
+    # Require auth token at startup — refuse to start without one unless explicitly allowed
+    if not allow_no_auth:
+        allow_no_auth = os.environ.get("MINION_NETWORK_NO_AUTH", "") == "1"
+
+    if not token and not allow_no_auth:
+        print("ERROR: No auth token configured. The server refuses to start without authentication.")
+        print("")
+        print("Set a cluster token using one of:")
+        print("  1. --token <secret>                  (CLI argument)")
+        print("  2. MINION_CLUSTER_TOKEN=<secret>      (environment variable)")
+        print("")
+        print("To explicitly run without auth (DEVELOPMENT ONLY):")
+        print("  3. --no-auth                          (CLI flag)")
+        print("  4. MINION_NETWORK_NO_AUTH=1            (environment variable)")
+        raise SystemExit(1)
 
     # Build router and register all handler endpoints
     from minion.network.router import Router

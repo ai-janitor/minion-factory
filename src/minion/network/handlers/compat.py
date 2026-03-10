@@ -16,6 +16,7 @@ Implementation order: after handlers/projects.py (depends on project resolution)
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -63,6 +64,10 @@ def _auto_project_name(db_path: str) -> str | None:
     return projects[0]["name"]
 
 
+# Field length limits for /api/login
+_LOGIN_FIELD_MAX = 256
+
+
 def handle_api_login(handler, db_path: str, **kwargs) -> None:
     """POST /api/login — bridge from username/password to cluster token auth.
 
@@ -75,6 +80,16 @@ def handle_api_login(handler, db_path: str, **kwargs) -> None:
         handler._json_response(400, {"error": "Invalid JSON body"})
         return
 
+    # Validate field types and lengths
+    for field in ("username", "password"):
+        val = body.get(field)
+        if val is not None and not isinstance(val, str):
+            handler._json_response(400, {"error": f"{field} must be a string"})
+            return
+        if isinstance(val, str) and len(val) > _LOGIN_FIELD_MAX:
+            handler._json_response(400, {"error": f"{field} exceeds maximum length of {_LOGIN_FIELD_MAX} characters"})
+            return
+
     password = body.get("password", "")
     expected = handler.token
 
@@ -83,7 +98,7 @@ def handle_api_login(handler, db_path: str, **kwargs) -> None:
         handler._json_response(200, {"ok": True, "token": "dev-mode"})
         return
 
-    if password == expected:
+    if hmac.compare_digest(password, expected):
         handler._json_response(200, {"ok": True, "token": expected})
     else:
         handler._json_response(401, {"ok": False, "error": "Invalid credentials"})
