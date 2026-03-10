@@ -84,6 +84,11 @@ def test_handler_modules_all_imported():
         "register_overview",
         "register_scaling",
         "register_compat",
+        # SU-18: New CLI-parity handlers
+        "register_lifecycle",
+        "register_agent_context",
+        "register_task_workflow",
+        "register_diagnostics",
     ]
     for name in expected_registers:
         assert hasattr(handlers, name), f"Handler register function '{name}' not exported from handlers/__init__.py"
@@ -121,3 +126,15 @@ def test_expected_core_routes_exist():
     # Essential POST routes
     assert any("/register" in p for p in post_patterns), "Missing /register route"
     assert any("/send" in p for p in post_patterns), "Missing /send route"
+
+    # SU-18: New CLI-parity routes
+    assert any("/lifecycle/cold-start" in p for p in post_patterns), "Missing /lifecycle/cold-start route"
+    assert any("/lifecycle/refresh" in p for p in post_patterns), "Missing /lifecycle/refresh route"
+    assert any("/lifecycle/fenix-down" in p for p in post_patterns), "Missing /lifecycle/fenix-down route"
+    assert any("/agents" in p and "/context" in p for p in post_patterns), "Missing /agents/{name}/context route"
+    assert any("/tasks/complete-phase" in p for p in post_patterns), "Missing /tasks/complete-phase route"
+    assert any("/tasks/result" in p for p in post_patterns), "Missing /tasks/result route"
+    assert any("/tasks/review" in p for p in post_patterns), "Missing /tasks/review route"
+    assert any("/tasks/test" in p for p in post_patterns), "Missing /tasks/test route"
+    assert any("/db/stats" in p for p in get_patterns), "Missing /db/stats route"
+    assert any("/tasks" in p and "/lineage" in p for p in get_patterns), "Missing /tasks/{id}/lineage route"
