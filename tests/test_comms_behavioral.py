@@ -164,3 +164,146 @@ def test_send_to_unregistered_returns_error():
     register(agent_name="atlas", agent_class="lead")
     result = send(from_agent="atlas", to_agent="nonexistent", message="hello")
     assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# SU-04: Cross-repo delivery — narrowed exceptions, error dicts, schema compat
+# ---------------------------------------------------------------------------
+
+
+def test_cross_repo_permission_error_returns_error_dict(tmp_path, monkeypatch):
+    """SU-04: PermissionError on coordinator DB returns error dict, not None."""
+    from minion.comms.delivery import route_cross_repo
+
+    def _raise_perm(*a, **kw):
+        raise PermissionError("read-only filesystem")
+
+    monkeypatch.setattr("minion.comms.delivery.get_coordinator_db", _raise_perm)
+    result = route_cross_repo(to_agent="bob", from_agent="alice", message="hi", now="2026-03-10T00:00:00")
+    assert isinstance(result, dict)
+    assert "error" in result
+    assert "permission" in result["error"].lower()
+
+
+def test_cross_repo_database_error_returns_error_dict(tmp_path, monkeypatch):
+    """SU-04: DatabaseError on coordinator DB returns error dict, not None."""
+    import sqlite3 as _sqlite3
+    from minion.comms.delivery import route_cross_repo
+
+    def _raise_db_err(*a, **kw):
+        raise _sqlite3.DatabaseError("malformed database")
+
+    monkeypatch.setattr("minion.comms.delivery.get_coordinator_db", _raise_db_err)
+    result = route_cross_repo(to_agent="bob", from_agent="alice", message="hi", now="2026-03-10T00:00:00")
+    assert isinstance(result, dict)
+    assert "error" in result
+    assert "corrupt" in result["error"].lower() or "unreadable" in result["error"].lower()
+
+
+def test_cross_repo_operational_error_returns_none(tmp_path, monkeypatch):
+    """SU-04: OperationalError (DB not found) returns None — agent not found globally."""
+    import sqlite3 as _sqlite3
+    from minion.comms.delivery import route_cross_repo
+
+    def _raise_op_err(*a, **kw):
+        raise _sqlite3.OperationalError("no such table: agents")
+
+    monkeypatch.setattr("minion.comms.delivery.get_coordinator_db", _raise_op_err)
+    result = route_cross_repo(to_agent="bob", from_agent="alice", message="hi", now="2026-03-10T00:00:00")
+    assert result is None
+
+
+def test_cross_repo_stale_project_path_returns_error_dict(tmp_path, monkeypatch):
+    """SU-04: When target project path no longer exists, return error dict (not None)."""
+    import sqlite3 as _sqlite3
+    from minion.comms.delivery import route_cross_repo
+
+    # Mock coordinator to return a non-existent project path
+    class FakeCoord:
+        def execute(self, *a, **kw):
+            return self
+
+        def fetchone(self):
+            return {"project_path": "/nonexistent/stale/project"}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("minion.comms.delivery.get_coordinator_db", lambda: FakeCoord())
+    result = route_cross_repo(to_agent="bob", from_agent="alice", message="hi", now="2026-03-10T00:00:00")
+    assert isinstance(result, dict)
+    assert "error" in result
+    assert "stale" in result["error"].lower()
+
+
+def test_cross_repo_schema_compat_missing_columns(tmp_path, monkeypatch):
+    """SU-04: Schema compatibility check handles missing columns gracefully."""
+    import sqlite3 as _sqlite3
+    from minion.comms.delivery import route_cross_repo
+
+    # Set up a real coordinator DB and remote project with a minimal messages table
+    remote_project = tmp_path / "remote-project"
+    remote_work = remote_project / ".work"
+    remote_work.mkdir(parents=True)
+    remote_db_path = str(remote_work / "minion.db")
+
+    # Create remote DB with a stripped-down messages table (missing is_cc column)
+    rconn = _sqlite3.connect(remote_db_path)
+    rconn.execute("""
+        CREATE TABLE messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_agent TEXT NOT NULL,
+            to_agent TEXT NOT NULL,
+            content_file TEXT,
+            timestamp TEXT,
+            read_flag INTEGER DEFAULT 0
+        )
+    """)
+    rconn.commit()
+    rconn.close()
+
+    # Mock coordinator to return the remote project path
+    class FakeCoord:
+        def execute(self, *a, **kw):
+            return self
+
+        def fetchone(self):
+            return {"project_path": str(remote_project)}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("minion.comms.delivery.get_coordinator_db", lambda: FakeCoord())
+
+    result = route_cross_repo(to_agent="bob", from_agent="alice", message="test msg", now="2026-03-10T00:00:00")
+    # Should succeed (gracefully handle missing columns) — status "sent"
+    assert isinstance(result, dict)
+    assert result.get("status") == "sent" or "error" not in result or "warning" in result
+
+
+# ---------------------------------------------------------------------------
+# SU-07: is_cross_project() — auth helper
+# ---------------------------------------------------------------------------
+
+
+def test_is_cross_project_same_dir(monkeypatch):
+    """SU-07: is_cross_project() returns False when MINION_PROJECT_DIR matches cwd."""
+    import os
+    from minion.auth import is_cross_project
+    cwd = os.getcwd()
+    monkeypatch.setenv("MINION_PROJECT_DIR", cwd)
+    assert is_cross_project() is False
+
+
+def test_is_cross_project_different_dir(monkeypatch):
+    """SU-07: is_cross_project() returns True when MINION_PROJECT_DIR differs from cwd."""
+    from minion.auth import is_cross_project
+    monkeypatch.setenv("MINION_PROJECT_DIR", "/some/other/project")
+    assert is_cross_project() is True
+
+
+def test_is_cross_project_unset(monkeypatch):
+    """SU-07: is_cross_project() returns False when MINION_PROJECT_DIR not set."""
+    from minion.auth import is_cross_project
+    monkeypatch.delenv("MINION_PROJECT_DIR", raising=False)
+    assert is_cross_project() is False

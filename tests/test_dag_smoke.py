@@ -308,3 +308,195 @@ def test_dag_smoke(isolated_db):
     # Parent requirement must be completed
     final_stage = _req_stage(db_path, parent_path)
     assert final_stage == "completed", f"Parent requirement not completed — stage: '{final_stage}'"
+
+
+# ---------------------------------------------------------------------------
+# SU-05: "stale" in TERMINAL_STATUSES
+# ---------------------------------------------------------------------------
+
+
+def test_stale_is_terminal_status(isolated_db):
+    """SU-05: 'stale' is a member of TERMINAL_STATUSES."""
+    from minion.tasks.dag import TERMINAL_STATUSES
+    assert "stale" in TERMINAL_STATUSES
+
+
+def test_terminal_statuses_contains_all_expected(isolated_db):
+    """SU-05: TERMINAL_STATUSES contains closed, abandoned, obsolete, completed, stale."""
+    from minion.tasks.dag import TERMINAL_STATUSES
+    expected = {"closed", "abandoned", "obsolete", "completed", "stale"}
+    assert expected == TERMINAL_STATUSES
+
+
+def test_stale_rollup_all_children_stale(isolated_db):
+    """SU-05: When all child tasks are stale, parent requirement becomes stale."""
+    tmp_path = isolated_db
+    db_path = str(tmp_path / ".work" / "minion.db")
+
+    lead = "lead-stale"
+    register_agent_db(lead, "lead")
+    _insert_battle_plan(db_path, lead)
+
+    from minion.requirements.crud import create, update_stage
+
+    parent_path = "features/stale-parent"
+    create(file_path=parent_path, title="Stale Parent", description="Test stale rollup", created_by=lead)
+    update_stage(parent_path, "decomposing")
+
+    from minion.requirements.decompose import decompose
+    spec = {"children": [
+        {"slug": "child-a", "title": "A", "description": "a", "task_type": "bugfix"},
+        {"slug": "child-b", "title": "B", "description": "b", "task_type": "bugfix"},
+    ]}
+    decompose(parent_path, spec, agent_name=lead)
+
+    # Manually set parent_id on child requirements (decompose doesn't set this)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    parent_req = conn.execute(
+        "SELECT id FROM requirements WHERE file_path = ?", (parent_path,)
+    ).fetchone()
+    child_reqs = conn.execute(
+        "SELECT id FROM requirements WHERE file_path LIKE ? AND id != ?",
+        (f"{parent_path}/%", parent_req["id"]),
+    ).fetchall()
+    for cr in child_reqs:
+        conn.execute(
+            "UPDATE requirements SET parent_id = ? WHERE id = ?",
+            (parent_req["id"], cr["id"]),
+        )
+
+    # Set all child tasks to stale directly
+    tasks = conn.execute("SELECT id FROM tasks WHERE requirement_path LIKE ?", (f"{parent_path}/%",)).fetchall()
+    for t in tasks:
+        conn.execute("UPDATE tasks SET status = 'stale' WHERE id = ?", (t["id"],))
+    conn.commit()
+    conn.close()
+
+    # Trigger rollup for each task — each task rolls up its child requirement,
+    # then child requirements (with parent_id set) roll up to parent
+    from minion.tasks.rollup import check_and_rollup
+    from minion.db import get_db
+    db = get_db()
+    try:
+        for t in tasks:
+            check_and_rollup(db, t["id"], "task")
+    finally:
+        db.close()
+    # Parent should have been rolled up to stale
+    parent_stage = _req_stage(db_path, parent_path)
+    assert parent_stage == "stale", f"Expected parent stale, got '{parent_stage}'"
+
+
+def test_stale_rollup_mixed_children(isolated_db):
+    """SU-05: Mix of stale + completed children -> parent advances normally (not stale)."""
+    tmp_path = isolated_db
+    db_path = str(tmp_path / ".work" / "minion.db")
+
+    lead = "lead-mixed"
+    register_agent_db(lead, "lead")
+    _insert_battle_plan(db_path, lead)
+
+    from minion.requirements.crud import create, update_stage
+
+    parent_path = "features/mixed-parent"
+    create(file_path=parent_path, title="Mixed Parent", description="Test mixed rollup", created_by=lead)
+    update_stage(parent_path, "decomposing")
+
+    from minion.requirements.decompose import decompose
+    spec = {"children": [
+        {"slug": "mix-a", "title": "A", "description": "a", "task_type": "bugfix"},
+        {"slug": "mix-b", "title": "B", "description": "b", "task_type": "bugfix"},
+    ]}
+    decompose(parent_path, spec, agent_name=lead)
+
+    # Set one child stale, one closed
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    tasks = conn.execute("SELECT id FROM tasks WHERE requirement_path LIKE ?", (f"{parent_path}/%",)).fetchall()
+    conn.execute("UPDATE tasks SET status = 'stale' WHERE id = ?", (tasks[0]["id"],))
+    conn.execute("UPDATE tasks SET status = 'closed' WHERE id = ?", (tasks[1]["id"],))
+    conn.commit()
+    conn.close()
+
+    from minion.tasks.rollup import check_and_rollup
+    from minion.db import get_db
+    db = get_db()
+    try:
+        results = check_and_rollup(db, tasks[0]["id"], "task")
+    finally:
+        db.close()
+    parent_stage = _req_stage(db_path, parent_path)
+    # With mixed statuses, parent should NOT be stale — should advance normally
+    assert parent_stage != "stale", f"Mixed children should not produce stale parent, got '{parent_stage}'"
+
+
+# ---------------------------------------------------------------------------
+# SU-03: Self-review bypass prevention
+# ---------------------------------------------------------------------------
+
+
+def test_self_review_blocked_for_same_agent(isolated_db):
+    """SU-03: Agent who last advanced a task cannot self-review at a review stage."""
+    tmp_path = isolated_db
+    db_path = str(tmp_path / ".work" / "minion.db")
+
+    register_agent_db("oracle-self", "oracle")
+    register_agent_db("lead-sr", "lead")
+    _insert_battle_plan(db_path, "lead-sr")
+
+    # Create a task and walk it to the 'fixed' stage (review stage with oracle eligible)
+    from minion.db import now_iso
+    now = now_iso()
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO tasks (title, task_file, created_by, status, created_at, updated_at, flow_type) "
+        "VALUES (?, ?, ?, 'fixed', ?, ?, 'bugfix')",
+        ("SR test task", "tasks/sr-test.md", "lead-sr", now, now),
+    )
+    task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    # Insert transition_log showing oracle-self was the last to advance
+    conn.execute(
+        "INSERT INTO transition_log (entity_type, entity_id, from_status, to_status, triggered_by, created_at) "
+        "VALUES ('task', ?, 'qe', 'fixed', 'oracle-self', ?)",
+        (task_id, now),
+    )
+    conn.commit()
+    conn.close()
+
+    from minion.tasks.update_task import complete_phase
+    result = complete_phase("oracle-self", task_id, passed=True)
+    assert "error" in result
+    assert "BLOCKED" in result["error"]
+    assert "self-review" in result["error"]
+
+
+def test_self_review_lead_bypass(isolated_db):
+    """SU-03: Lead class bypasses self-review check — can review own work."""
+    tmp_path = isolated_db
+    db_path = str(tmp_path / ".work" / "minion.db")
+
+    register_agent_db("lead-bypass", "lead")
+    _insert_battle_plan(db_path, "lead-bypass")
+
+    from minion.db import now_iso
+    now = now_iso()
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT INTO tasks (title, task_file, created_by, status, created_at, updated_at, flow_type) "
+        "VALUES (?, ?, ?, 'fixed', ?, ?, 'bugfix')",
+        ("Lead bypass test", "tasks/lead-bypass.md", "lead-bypass", now, now),
+    )
+    task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.execute(
+        "INSERT INTO transition_log (entity_type, entity_id, from_status, to_status, triggered_by, created_at) "
+        "VALUES ('task', ?, 'qe', 'fixed', 'lead-bypass', ?)",
+        (task_id, now),
+    )
+    conn.commit()
+    conn.close()
+
+    from minion.tasks.update_task import complete_phase
+    result = complete_phase("lead-bypass", task_id, passed=True)
+    # Lead should NOT be blocked — lead bypasses self-review check
+    assert "error" not in result or "self-review" not in result.get("error", "")
