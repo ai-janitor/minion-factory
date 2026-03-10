@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from pathlib import Path
+
 from minion.db import get_db, now_iso
+from minion.defaults import resolve_db_path
 from minion.backlog.path_resolution_and_slug import VALID_PRIORITIES, VALID_STATUSES
 
 
@@ -81,6 +84,10 @@ def update_item(
 
         cursor.execute("SELECT * FROM backlog WHERE file_path = ?", (actual_file_path,))
         updated = cursor.fetchone()
-        return dict(updated)
+        result = dict(updated)
+        # Include resolved project path so the user can see which DB was hit
+        resolved = db if db is not None else resolve_db_path()
+        result["project"] = str(Path(resolved).parent.parent)
+        return result
     finally:
         conn.close()
