@@ -35,7 +35,18 @@ def check_and_rollup(
     *,
     context_dir: Path | None = None,
 ) -> list[RollupResult]:
-    """Check if closing this child should advance its parent. Returns rollup chain."""
+    """Check if closing this child should advance its parent. Returns rollup chain.
+
+    Time complexity: O(C * D) where C = number of sibling children per parent level,
+    D = depth of parent chain (task -> requirement -> parent requirement -> grandparent...).
+    Each level queries all siblings to check terminal status, then recurses up.
+    Worst case with deeply nested requirements: O(C * D) DB queries.
+    """
+    # Precondition assertions — backlog #63
+    assert db is not None, "db connection must not be None"
+    assert isinstance(child_id, int) and child_id > 0, f"child_id must be a positive int, got {child_id}"
+    assert child_type in ("task", "requirement"), f"child_type must be 'task' or 'requirement', got '{child_type}'"
+
     results: list[RollupResult] = []
 
     if child_type == "task":

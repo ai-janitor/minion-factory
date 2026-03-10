@@ -13,6 +13,7 @@ from typing import Any, Optional, TYPE_CHECKING
 
 from minion.db.connection import connect as _connect
 from ._constants import utc_now_iso, _get_rss_bytes
+from minion.state_machines import DAEMON_TRANSITIONS, validate_transition, InvalidTransition
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,6 +61,19 @@ class StateMixin:
             return {}
 
     def _write_state(self, status: str, **extra: Any) -> None:
+        # Validate daemon state transition — backlog #83
+        old_state = self._read_state().get("status", "idle")
+        try:
+            validate_transition(DAEMON_TRANSITIONS, "daemon", old_state, status)
+        except InvalidTransition:
+            # Log but don't crash — daemon stability takes priority over strict enforcement
+            import sys
+            print(
+                f"WARNING: invalid daemon state transition '{old_state}' -> '{status}' "
+                f"for {self.agent_name}",
+                file=sys.stderr,
+            )
+
         payload = {
             "agent": self.agent_name,
             "provider": self.agent_cfg.provider,

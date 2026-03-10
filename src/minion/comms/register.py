@@ -40,6 +40,12 @@ def register(
     crew: str = "",
     scope: str = "project",
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert agent_class, "agent_class must not be empty"
+    assert len(agent_name) <= 64, f"agent_name too long ({len(agent_name)} chars, max 64)"
+    assert " " not in agent_name, f"agent_name must not contain spaces: '{agent_name}'"
+
     if transport not in ("terminal", "daemon", "daemon-ts"):
         return {"error": f"Invalid transport '{transport}'. Must be 'terminal', 'daemon', or 'daemon-ts'."}
     if agent_class not in VALID_CLASSES:
@@ -227,6 +233,8 @@ def register(
 
 
 def deregister(agent_name: str) -> dict[str, object]:
+    # Precondition — backlog #63
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -314,6 +322,17 @@ def set_status(agent_name: str, status: str) -> dict[str, object]:
     conn = get_db()
     now = now_iso()
     try:
+        # Validate agent status transition — backlog #83
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM agents WHERE name = ?", (agent_name,))
+        row = cursor.fetchone()
+        if row:
+            from minion.state_machines import AGENT_STATUS_TRANSITIONS, validate_transition, InvalidTransition
+            try:
+                validate_transition(AGENT_STATUS_TRANSITIONS, "agent_status", row["status"], status)
+            except InvalidTransition as exc:
+                return {"error": str(exc)}
+
         conn.execute(
             "UPDATE agents SET status = ?, last_seen = ? WHERE name = ?",
             (status, now, agent_name),

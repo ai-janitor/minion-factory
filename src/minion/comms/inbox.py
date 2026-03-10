@@ -20,7 +20,10 @@ from minion.db import (
 from minion.fs import read_content_file
 
 
-def check_inbox(agent_name: str) -> dict[str, object]:
+def check_inbox(agent_name: str, msg_type: str | None = None) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
@@ -72,6 +75,10 @@ def check_inbox(agent_name: str) -> dict[str, object]:
             msg["content"] = read_content_file(msg.get("content_file"))
             if msg.get("is_cc"):
                 msg["cc_note"] = f"[CC] originally to: {msg.get('cc_original_to', 'unknown')}"
+
+        # Filter by msg_type if requested — backlog #66
+        if msg_type:
+            all_messages = [m for m in all_messages if m.get("msg_type") == msg_type]
 
         _, stale_msg = staleness_check(cursor, agent_name)
 

@@ -20,9 +20,40 @@ from ._constants import AgentRunResult, MAX_CONSOLE_STREAM_CHARS
 from ..triggers import handle_phoenix_down
 
 if TYPE_CHECKING:
+    from pathlib import Path as _PathType
     from ..config import SwarmConfig, AgentConfig
     from ..buffer import RollingBuffer
     from minion.providers.cli_provider_protocol import BaseProvider
+
+
+# ---------------------------------------------------------------------------
+# Stream log rotation — backlog #73
+# ---------------------------------------------------------------------------
+# Purpose: Prevent unbounded stream.jsonl growth by rotating when file exceeds max size.
+# Pseudo-logic:
+#   1. Check if stream_log exists and exceeds MAX_STREAM_LOG_BYTES
+#   2. If so, rename current file to .stream.jsonl.1 (overwriting previous rotation)
+#   3. Caller then opens a fresh stream.jsonl for appending
+# Time complexity: O(1) — single stat + rename, no file content scanning.
+
+MAX_STREAM_LOG_BYTES = 10 * 1024 * 1024  # 10 MB default
+
+
+def _rotate_stream_log(stream_log: _PathType, max_bytes: int = MAX_STREAM_LOG_BYTES) -> bool:
+    """Rotate stream.jsonl if it exceeds max_bytes. Returns True if rotated.
+
+    Precondition: stream_log path must be a Path object.
+    Postcondition: if rotated, stream_log no longer exists; .jsonl.1 has old content.
+    """
+    assert max_bytes > 0, f"max_bytes must be positive, got {max_bytes}"
+    try:
+        if stream_log.exists() and stream_log.stat().st_size > max_bytes:
+            rotated = stream_log.with_suffix(".jsonl.1")
+            stream_log.rename(rotated)
+            return True
+    except OSError:
+        pass  # File access race — safe to ignore, next invocation will retry
+    return False
 
 
 class ExecutionMixin:
@@ -110,7 +141,9 @@ class ExecutionMixin:
         t.start()
 
         # Raw stream log — full stream-json for context inspection
+        # Rotate if file exceeds max size (default 10MB) — backlog #73
         stream_log = self.config.logs_dir / f"{self.agent_name}.stream.jsonl"
+        _rotate_stream_log(stream_log)
         stream_fp = open(stream_log, "a")
 
         timed_out = False

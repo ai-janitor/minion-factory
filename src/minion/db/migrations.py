@@ -332,6 +332,20 @@ def _migrate_v13(conn: sqlite3.Connection) -> None:
     log.info("v13: added promoted_by column to backlog table")
 
 
+def _migrate_v14(conn: sqlite3.Connection) -> None:
+    """Add msg_type to messages — typed message taxonomy (backlog #66).
+
+    Valid types: order, sitrep, query, response, alert, system.
+    Default NULL for backward compat — existing untyped messages stay untyped.
+    """
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN msg_type TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # column already exists (re-run safe)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_msg_type ON messages(msg_type)")
+    log.info("v14: added msg_type column and index to messages table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -348,6 +362,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (11, "Create intel_docs and intel_links tables", _migrate_v11),
     (12, "Add flow_hint column to backlog table", _migrate_v12),
     (13, "Add promoted_by column to backlog table", _migrate_v13),
+    (14, "Add msg_type column to messages table", _migrate_v14),
 ]
 
 
@@ -366,6 +381,9 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     migration is rolled back and the error propagates — later migrations
     are skipped so the DB stays at the last successful version.
     """
+    # Precondition assertion — backlog #63
+    assert conn is not None, "DB connection must not be None"
+
     if not _MIGRATIONS:
         return
 

@@ -28,12 +28,29 @@ from minion.fs import (
 )
 
 
+# Valid message types — backlog #66: typed message taxonomy
+VALID_MSG_TYPES = {"order", "sitrep", "query", "response", "alert", "system"}
+
+
 def send(
     from_agent: str,
     to_agent: str,
     message: str,
     cc: str = "",
+    msg_type: str | None = None,
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert from_agent, "from_agent must not be empty"
+    assert to_agent, "to_agent must not be empty"
+    assert message, "message must not be empty"
+    assert from_agent != to_agent or to_agent == "all", "Cannot send a message to yourself"
+
+    # Validate msg_type if provided — backlog #66
+    if msg_type is not None:
+        assert msg_type in VALID_MSG_TYPES, (
+            f"Invalid msg_type '{msg_type}'. Valid: {sorted(VALID_MSG_TYPES)}"
+        )
+
     # Normalize broadcast alias
     if to_agent == "broadcast":
         to_agent = "all"
@@ -104,10 +121,10 @@ def send(
         content_file = message_file_path(to_agent, from_agent)
         atomic_write_file(content_file, message)
 
-        # Insert metadata into DB
+        # Insert metadata into DB (with optional msg_type — backlog #66)
         cursor.execute(
-            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc) VALUES (?, ?, ?, ?, 0, 0)",
-            (from_agent, to_agent, content_file, now),
+            "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag, is_cc, msg_type) VALUES (?, ?, ?, ?, 0, 0, ?)",
+            (from_agent, to_agent, content_file, now, msg_type),
         )
 
         # Build CC list: explicit + auto-CC lead
@@ -123,9 +140,9 @@ def send(
                 atomic_write_file(cc_file, message)
                 cursor.execute(
                     """INSERT INTO messages
-                       (from_agent, to_agent, content_file, timestamp, read_flag, is_cc, cc_original_to)
-                       VALUES (?, ?, ?, ?, 0, 1, ?)""",
-                    (from_agent, cc_agent, cc_file, now, to_agent),
+                       (from_agent, to_agent, content_file, timestamp, read_flag, is_cc, cc_original_to, msg_type)
+                       VALUES (?, ?, ?, ?, 0, 1, ?, ?)""",
+                    (from_agent, cc_agent, cc_file, now, to_agent, msg_type),
                 )
 
         # Update sender's last_seen
@@ -158,6 +175,8 @@ def send(
             "from": from_agent,
             "to": to_agent,
         }
+        if msg_type:
+            result["msg_type"] = msg_type
         if cc_agents:
             result["cc"] = cc_agents
         if triggers_found:

@@ -47,6 +47,10 @@ def resolve_next(
         passed: Whether the current phase passed or failed
         explicit_target: Override target (for alt_next or dead_end transitions)
     """
+    # Precondition assertions — backlog #63
+    assert flow is not None, "flow must not be None"
+    assert current_status, "current_status must not be empty"
+
     if flow.is_terminal(current_status):
         return TransitionResult(
             success=False, from_status=current_status, to_status=None,
@@ -127,6 +131,11 @@ def apply_transition(
     Does NOT write to DB — caller handles the actual UPDATE.
     This keeps the engine pure and testable.
     """
+    # Precondition assertions — backlog #63
+    assert flow_type, "flow_type must not be empty"
+    assert current_status, "current_status must not be empty"
+    assert entity_type in ("task", "requirement"), f"entity_type must be 'task' or 'requirement', got '{entity_type}'"
+
     flow = load_flow(flow_type, flows_dir=flows_dir)
 
     # Step 1: Resolve next status

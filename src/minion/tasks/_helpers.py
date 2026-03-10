@@ -81,6 +81,13 @@ def agent_past_scaffolding(agent_name: str, conn: sqlite3.Connection | None = No
 
 def _log_transition(cursor: sqlite3.Cursor, task_id: int, from_status: str | None, to_status: str, agent: str, timestamp: str) -> None:
     """Record a status transition in transition_log."""
+    # Precondition assertions — backlog #63
+    assert cursor is not None, "cursor must not be None"
+    assert isinstance(task_id, int) and task_id > 0, f"task_id must be a positive int, got {task_id}"
+    assert to_status, "to_status must not be empty"
+    assert agent, "agent must not be empty"
+    assert timestamp, "timestamp must not be empty"
+
     cursor.execute(
         "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) VALUES (?, 'task', ?, ?, ?, ?)",
         (task_id, from_status, to_status, agent, timestamp),

@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp       TEXT,
     read_flag       INTEGER DEFAULT 0,
     is_cc           INTEGER DEFAULT 0,
-    cc_original_to  TEXT DEFAULT NULL
+    cc_original_to  TEXT DEFAULT NULL,
+    msg_type        TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS broadcast_reads (

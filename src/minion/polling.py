@@ -81,7 +81,12 @@ def is_poll_alive(agent: str, project_path: str) -> bool:
 
 
 def _fetch_messages(agent: str) -> list[dict[str, Any]]:
-    """Fetch and mark-read all unread messages (direct + broadcast). Same as check-inbox."""
+    """Fetch and mark-read all unread messages (direct + broadcast). Same as check-inbox.
+
+    Time complexity: O(M + B) where M = unread direct messages, B = unread broadcasts.
+    Sorting: O((M+B) * log(M+B)).
+    File I/O: O(M+B) content file reads.
+    """
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
@@ -140,7 +145,13 @@ def _fetch_messages(agent: str) -> list[dict[str, Any]]:
 
 
 def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
-    """Find claimable tasks for this agent without claiming them."""
+    """Find claimable tasks for this agent without claiming them.
+
+    Time complexity: O(T * B) where T = candidate tasks (max 10 per priority tier),
+    B = average blocked_by list length per task. For each candidate, checks blocker
+    status (O(B) query) and DAG eligibility (O(1) lookup). Total bounded by
+    O(40 * B) due to LIMIT 10 on each of 4 priority tiers.
+    """
     from minion.flow_bridge import active_statuses
 
     conn = get_db()
@@ -284,6 +295,11 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
       - signal: "stand_down" or "retire" (if exit_code 3)
       - transport_hint: restart reminder for terminal agents
     """
+    # Precondition assertions — backlog #63
+    assert agent, "agent name must not be empty"
+    assert interval > 0, f"interval must be positive, got {interval}"
+    assert timeout >= 0, f"timeout must be non-negative, got {timeout}"
+
     # Single instance: kill any existing poll for this agent
     _kill_existing_poll(agent)
     _write_pidfile(agent)
@@ -298,6 +314,13 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
 
 
 def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dict[str, Any]:
+    """Inner poll loop — checks signals, messages, and tasks each iteration.
+
+    Time complexity per iteration: O(M + B + T*B) where M = message count query (O(1)),
+    B = broadcast count query (O(1) with subquery), T*B = task finding (see _find_available_tasks).
+    Loop runs at most timeout/interval iterations. Each iteration is O(T*B) dominated.
+    The seen_task_ids set prevents re-surfacing tasks: O(1) membership check per task.
+    """
     elapsed = 0
     seen_task_ids: set[int] = set()
     # Heartbeat every ~30 min so idle agents don't get pruned by the 6-hour rule

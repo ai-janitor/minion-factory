@@ -33,8 +33,11 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--to", "-t", "to_agent", required=True)
     @click.option("--message", "-m", required=True)
     @click.option("--cc", default="")
+    @click.option("--type", "msg_type", default=None,
+                  type=click.Choice(["order", "sitrep", "query", "response", "alert", "system"], case_sensitive=False),
+                  help="Message type for filtering (optional)")
     @click.pass_context
-    def send_local(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str) -> None:
+    def send_local(ctx: click.Context, from_agent: str, to_agent: str, message: str, cc: str, msg_type: str | None) -> None:
         """Send to a LOCAL agent (same repo) or 'all' for broadcast.
 
         \b
@@ -42,7 +45,7 @@ def register_commands(cli: click.Group) -> None:
         Target must be registered in the same project.
         For cross-repo, use: minion comms send global"""
         from minion.comms import send as _send
-        _output(_send(from_agent, to_agent, message, cc), ctx.obj["human"])
+        _output(_send(from_agent, to_agent, message, cc, msg_type=msg_type), ctx.obj["human"])
 
     @send_group.command("global")
     @click.option("--from", "-f", "from_agent", required=True)
@@ -63,12 +66,16 @@ def register_commands(cli: click.Group) -> None:
     @_agent_option(required=True)
     @click.option("--silent", is_flag=True, default=False,
                   help="Raw message content only, no JSON. Empty output if no messages. For hooks.")
+    @click.option("--type", "msg_type", default=None,
+                  type=click.Choice(["order", "sitrep", "query", "response", "alert", "system"], case_sensitive=False),
+                  help="Filter messages by type")
     @click.pass_context
-    def check_inbox(ctx: click.Context, agent: str, silent: bool) -> None:
+    def check_inbox(ctx: click.Context, agent: str, silent: bool, msg_type: str | None) -> None:
         """Check and clear unread messages.
 
         Use --silent for PostToolUse hooks: prints only message content,
-        nothing if inbox is empty. Designed for high-frequency automated calls."""
+        nothing if inbox is empty. Designed for high-frequency automated calls.
+        Use --type to filter by message type (order, sitrep, query, response, alert, system)."""
         if silent:
             from minion.comms import check_inbox_silent as _check_inbox_silent
             output = _check_inbox_silent(agent)
@@ -76,7 +83,7 @@ def register_commands(cli: click.Group) -> None:
                 click.echo(output)
         else:
             from minion.comms import check_inbox as _check_inbox
-            _output(_check_inbox(agent), ctx.obj["human"])
+            _output(_check_inbox(agent, msg_type=msg_type), ctx.obj["human"])
 
     @comms_group.command("purge-inbox")
     @_agent_option(required=True)

@@ -41,7 +41,11 @@ class TaskFlow:
     dead_ends: list[str] = field(default_factory=list)
 
     def _resolve_skip(self, stage_name: str | None, seen: set[str] | None = None) -> str | None:
-        """Follow skip chain until we hit a non-skipped stage or None."""
+        """Follow skip chain until we hit a non-skipped stage or None.
+
+        Time complexity: O(k) where k = length of skip chain (bounded by number of stages).
+        Space complexity: O(k) for the seen set (cycle detection).
+        """
         if stage_name is None:
             return None
         if seen is None:
@@ -58,7 +62,10 @@ class TaskFlow:
 
     def next_status(self, current: str, passed: bool = True) -> str | None:
         """Given current status and pass/fail, return the next status.
-        Resolves skip stages — if next stage has skip=true, jump to the one after."""
+        Resolves skip stages — if next stage has skip=true, jump to the one after.
+
+        Time complexity: O(1) dict lookup + O(k) skip resolution.
+        """
         stage = self.stages.get(current)
         if stage is None or stage.terminal:
             return None
@@ -67,7 +74,10 @@ class TaskFlow:
 
     def workers_for(self, status: str, class_required: str) -> list[str] | None:
         """Which agent classes can work on this stage for a task with given class_required.
-        Returns None if the already-assigned agent continues."""
+        Returns None if the already-assigned agent continues.
+
+        Time complexity: O(1) — two dict lookups.
+        """
         stage = self.stages.get(status)
         if stage is None:
             return None
@@ -85,6 +95,8 @@ class TaskFlow:
 
         Returns dict mapping class_name → list of stage names where that class is needed.
         Skips stages where workers is None (current assignee continues).
+
+        Time complexity: O(S * W) where S = number of stages, W = max workers per stage.
         """
         class_stages: dict[str, list[str]] = {}
         for stage_name, stage in self.stages.items():
@@ -102,7 +114,10 @@ class TaskFlow:
         return stage.requires
 
     def valid_transitions(self, current: str) -> set[str]:
-        """All valid next statuses from current (including dead_ends and alt_next)."""
+        """All valid next statuses from current (including dead_ends and alt_next).
+
+        Time complexity: O(D + k) where D = number of dead_ends, k = skip chain length.
+        """
         stage = self.stages.get(current)
         if stage is None or stage.terminal:
             return set()
@@ -142,6 +157,8 @@ class TaskFlow:
 
         Walks the happy path from the gated stage. If current_status is the
         gated stage or any stage reachable from it, returns True.
+
+        Time complexity: O(S) where S = number of stages (linear walk + linear scan for gate).
         """
         # Find the stage with this gate
         gated_stage = None
@@ -169,6 +186,8 @@ class TaskFlow:
         """Render DAG as inline text showing phases and current position.
 
         Example: open → assigned → [IN_PROGRESS] → fixed(oracle) → verified(lead) → closed
+
+        Time complexity: O(S) where S = number of stages (linear walk of happy path).
         """
         # Walk the happy path from first stage
         parts: list[str] = []
