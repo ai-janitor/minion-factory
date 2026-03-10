@@ -322,6 +322,17 @@ def set_status(agent_name: str, status: str) -> dict[str, object]:
     conn = get_db()
     now = now_iso()
     try:
+        # Validate agent status transition — backlog #83
+        cursor = conn.cursor()
+        cursor.execute("SELECT status FROM agents WHERE name = ?", (agent_name,))
+        row = cursor.fetchone()
+        if row:
+            from minion.state_machines import AGENT_STATUS_TRANSITIONS, validate_transition, InvalidTransition
+            try:
+                validate_transition(AGENT_STATUS_TRANSITIONS, "agent_status", row["status"], status)
+            except InvalidTransition as exc:
+                return {"error": str(exc)}
+
         conn.execute(
             "UPDATE agents SET status = ?, last_seen = ? WHERE name = ?",
             (status, now, agent_name),
