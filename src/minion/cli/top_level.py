@@ -212,6 +212,52 @@ def register_commands(cli: click.Group) -> None:
             result["errors"] = errors
         _output(result, ctx.obj["human"])
 
+    @cli.command("completions")
+    @click.option("--shell", type=click.Choice(["bash", "zsh", "fish"]), default=None,
+                  help="Shell type (auto-detected if omitted)")
+    def completions_cmd(shell: str | None) -> None:
+        """Print shell completion setup instructions.
+
+        Click provides built-in shell completion for all commands, options,
+        and arguments. Run the printed eval line in your shell profile to
+        enable tab-completion for the minion CLI.
+
+        \b
+        Examples:
+          minion completions          # auto-detect shell
+          minion completions --shell zsh
+          minion completions --shell bash
+          minion completions --shell fish
+        """
+        # Auto-detect shell from $SHELL env var
+        if shell is None:
+            shell_env = os.environ.get("SHELL", "")
+            if "zsh" in shell_env:
+                shell = "zsh"
+            elif "fish" in shell_env:
+                shell = "fish"
+            else:
+                shell = "bash"
+
+        # Click uses _<PROGNAME>_COMPLETE env var convention
+        instructions = {
+            "zsh": (
+                '# Add to ~/.zshrc:\n'
+                'eval "$(_MINION_COMPLETE=zsh_source minion)"'
+            ),
+            "bash": (
+                '# Add to ~/.bashrc:\n'
+                'eval "$(_MINION_COMPLETE=bash_source minion)"'
+            ),
+            "fish": (
+                '# Add to ~/.config/fish/completions/minion.fish:\n'
+                '_MINION_COMPLETE=fish_source minion | source'
+            ),
+        }
+        click.echo(f"Shell completion for {shell}:\n")
+        click.echo(instructions[shell])
+        click.echo(f"\nAfter adding, restart your shell or run: source ~/.{shell}rc")
+
     @cli.command("docs")
     @click.option("--format", "fmt", type=click.Choice(["markdown", "json"]), default="markdown",
                   help="Output format")
