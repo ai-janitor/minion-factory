@@ -5,6 +5,7 @@ import os
 import sqlite3
 from typing import Any, TYPE_CHECKING
 
+from minion.db.connection import connect as _connect
 from ._constants import utc_now_iso, _get_rss_bytes, AgentRunResult
 
 if TYPE_CHECKING:
@@ -24,8 +25,7 @@ class DBMixin:
     def _write_agent_runtime(self, crew: str | None = None) -> None:
         """Write PID, crew to the agents table. Child PID + RSS written per-invocation."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _connect(self.config.comms_db)
             conn.execute(
                 "UPDATE agents SET pid = ?, crew = ? WHERE name = ?",
                 (self._child_pid, crew, self.agent_name),
@@ -39,8 +39,7 @@ class DBMixin:
         """Write the current child PID + its RSS to agents (current state)."""
         try:
             rss = _get_rss_bytes(self._child_pid)
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _connect(self.config.comms_db)
             conn.execute(
                 "UPDATE agents SET pid = ?, rss_bytes = ? WHERE name = ?",
                 (self._child_pid, rss, self.agent_name),
@@ -53,8 +52,7 @@ class DBMixin:
     def _insert_invocation_start(self) -> int | None:
         """INSERT a row into invocation_log when child spawns. Returns row id."""
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _connect(self.config.comms_db)
             cur = conn.execute(
                 """INSERT INTO invocation_log
                    (agent_name, pid, model, generation, rss_bytes, started_at)
@@ -83,8 +81,7 @@ class DBMixin:
             return
         try:
             rss = _get_rss_bytes(self._child_pid)
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=5)
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = _connect(self.config.comms_db)
             conn.execute(
                 """UPDATE invocation_log SET
                    rss_bytes = ?, input_tokens = ?, output_tokens = ?,
@@ -176,7 +173,7 @@ class DBMixin:
             conn.execute("PRAGMA busy_timeout=5000")
             cur = conn.cursor()
             cur.execute(
-                "SELECT content FROM messages WHERE to_agent = ? AND read = 0",
+                "SELECT content FROM messages WHERE to_agent = ? AND read_flag = 0",
                 (self.agent_name,),
             )
             for row in cur.fetchall():
@@ -185,8 +182,8 @@ class DBMixin:
                     conn.close()
                     return True
             conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._log(f"WARNING: _has_pending_halt failed: {exc}")
         return False
 
     def _fetch_fenix_records(self) -> list[dict[str, Any]]:
