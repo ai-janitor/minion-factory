@@ -25,6 +25,8 @@ import os
 import traceback
 from datetime import datetime
 
+from minion.defaults import ENV_PROJECT_DIR
+
 
 def register(router) -> None:
     """Register agent context endpoints with the router dispatch table."""
@@ -77,8 +79,8 @@ def handle_set_context(handler, db_path: str, name: str = "", **kwargs) -> None:
     files_modified = body.get("files_modified", "")
 
     # PSEUDO: set MINION_PROJECT_DIR, call the DB update, restore
-    old_proj = os.environ.get("MINION_PROJECT_DIR")
-    os.environ["MINION_PROJECT_DIR"] = project_path
+    old_proj = os.environ.get(ENV_PROJECT_DIR)
+    os.environ[ENV_PROJECT_DIR] = project_path
     try:
         from minion.db import get_db, now_iso
 
@@ -128,10 +130,10 @@ def handle_set_context(handler, db_path: str, name: str = "", **kwargs) -> None:
             "context": context,
             "hp": hp_str or "updated",
         })
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         if old_proj is None:
-            os.environ.pop("MINION_PROJECT_DIR", None)
+            os.environ.pop(ENV_PROJECT_DIR, None)
         else:
-            os.environ["MINION_PROJECT_DIR"] = old_proj
+            os.environ[ENV_PROJECT_DIR] = old_proj

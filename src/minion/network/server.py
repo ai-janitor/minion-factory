@@ -150,8 +150,8 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
                     self._html_response(html)
                     self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
                     return
-            except Exception:
-                pass  # Fall through to auth-required routes
+            except (ImportError, OSError):
+                pass  # Fall through to auth-required routes if dashboard views unavailable
 
         # API endpoints — auth required
         if not self.require_auth():
@@ -255,7 +255,8 @@ def serve(port: int = 8377, db_path: str = "", token: str = "", allow_no_auth: b
 
     # Require auth token at startup — refuse to start without one unless explicitly allowed
     if not allow_no_auth:
-        allow_no_auth = os.environ.get("MINION_NETWORK_NO_AUTH", "") == "1"
+        from minion.defaults import resolve_network_no_auth
+        allow_no_auth = resolve_network_no_auth()
 
     if not token and not allow_no_auth:
         print("ERROR: No auth token configured. The server refuses to start without authentication.")

@@ -26,6 +26,8 @@ from __future__ import annotations
 import os
 import traceback
 
+from minion.defaults import ENV_PROJECT_DIR
+
 
 def register(router) -> None:
     """Register task workflow endpoints with the router dispatch table."""
@@ -37,17 +39,17 @@ def register(router) -> None:
 
 def _setup_project(project_path: str):
     """Set MINION_PROJECT_DIR and return old value for restoration."""
-    old = os.environ.get("MINION_PROJECT_DIR")
-    os.environ["MINION_PROJECT_DIR"] = project_path
+    old = os.environ.get(ENV_PROJECT_DIR)
+    os.environ[ENV_PROJECT_DIR] = project_path
     return old
 
 
 def _teardown_project(old_value):
     """Restore previous MINION_PROJECT_DIR."""
     if old_value is None:
-        os.environ.pop("MINION_PROJECT_DIR", None)
+        os.environ.pop(ENV_PROJECT_DIR, None)
     else:
-        os.environ["MINION_PROJECT_DIR"] = old_value
+        os.environ[ENV_PROJECT_DIR] = old_value
 
 
 def _validate_base_fields(body: dict) -> tuple[str, int, str, str | None]:
@@ -111,7 +113,7 @@ def handle_complete_phase(handler, db_path: str, **kwargs) -> None:
             handler._json_response(400, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _teardown_project(old)
@@ -169,7 +171,7 @@ def handle_result(handler, db_path: str, **kwargs) -> None:
             handler._json_response(400, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _teardown_project(old)
@@ -221,7 +223,7 @@ def handle_review(handler, db_path: str, **kwargs) -> None:
             handler._json_response(400, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _teardown_project(old)
@@ -271,7 +273,7 @@ def handle_test(handler, db_path: str, **kwargs) -> None:
             handler._json_response(400, result)
         else:
             handler._json_response(200, {"status": "ok", **result})
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})
     finally:
         _teardown_project(old)

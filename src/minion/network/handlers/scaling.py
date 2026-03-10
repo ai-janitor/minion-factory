@@ -16,6 +16,8 @@ Not registered in router.py — endpoints are unreachable by design.
 
 from __future__ import annotations
 
+from minion.defaults import resolve_max_agents
+
 
 def register(router) -> None:
     """Register scaling endpoints with the router dispatch table.
@@ -68,7 +70,7 @@ def handle_capacity(handler, db_path: str, **kwargs) -> None:
     Response: {"machines": [{"machine_id": "...", "running_agents": N,
                "max_agents": N, "available_slots": N, "specs": {...}}]}
     """
-    # PSEUDO: max_agents = int(os.environ.get("MINION_MAX_AGENTS", "5"))
+    # PSEUDO: max_agents = resolve_max_agents()
     # PSEUDO: with DB_LOCK:
     #   SELECT machine_id, COUNT(*) as running, machine_specs
     #   FROM agents
