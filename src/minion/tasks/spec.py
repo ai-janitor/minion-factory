@@ -1,10 +1,16 @@
-"""Read the spec file (task_file) for a task by ID."""
+"""Read the spec file (task_file) for a task by ID.
+
+Purpose: Read the spec file (task_file) for a task by ID.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Read the spec file (task_file) for a task by ID. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import get_db
+from minion.fs import MAX_DOC_SIZE
 
 
 def get_spec(task_id: int) -> dict[str, object]:
@@ -35,6 +41,10 @@ def get_spec(task_id: int) -> dict[str, object]:
 
         if not os.path.exists(task_file):
             return {"error": f"Task #{task_id} spec file not found: {task_file}"}
+
+        size = os.path.getsize(task_file)
+        if size > MAX_DOC_SIZE:
+            return {"error": f"Task #{task_id} spec file too large ({size} bytes > {MAX_DOC_SIZE})", "task_file": task_file}
 
         with open(task_file) as fh:
             contents = fh.read()

@@ -1,11 +1,16 @@
-"""Show, set, and append the persistent project war plan doc."""
+"""Show, set, and append the persistent project war plan doc.
+
+Purpose: Show, set, and append the persistent project war plan doc.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Show, set, and append the persistent project war plan doc. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import get_db
-from minion.fs import atomic_write_file
+from minion.fs import atomic_write_file, MAX_DOC_SIZE
 
 
 def _war_plan_path() -> str:
@@ -19,6 +24,9 @@ def show_war_plan() -> dict[str, object]:
     path = _war_plan_path()
     if not os.path.exists(path):
         return {"content": "", "path": path, "note": "No war plan set."}
+    size = os.path.getsize(path)
+    if size > MAX_DOC_SIZE:
+        return {"error": f"War plan too large to read ({size} bytes > {MAX_DOC_SIZE})", "path": path}
     with open(path, encoding="utf-8") as fh:
         content = fh.read()
     return {"content": content, "path": path}
@@ -63,6 +71,9 @@ def append_war_plan(agent_name: str, text: str) -> dict[str, object]:
     path = _war_plan_path()
     existing = ""
     if os.path.exists(path):
+        size = os.path.getsize(path)
+        if size > MAX_DOC_SIZE:
+            return {"error": f"War plan too large to append ({size} bytes > {MAX_DOC_SIZE})", "path": path, "agent": agent_name}
         with open(path, encoding="utf-8") as fh:
             existing = fh.read()
 

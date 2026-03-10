@@ -1,8 +1,16 @@
-"""Read the content of a registered intel doc."""
+"""Read the content of a registered intel doc.
+
+Purpose: Read the content of a registered intel doc.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Read the content of a registered intel doc. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import os
+
 from minion.db import get_db
+from minion.fs import MAX_DOC_SIZE
 
 
 def read_doc(slug: str, summary: bool = False) -> dict[str, object]:
@@ -22,6 +30,9 @@ def read_doc(slug: str, summary: bool = False) -> dict[str, object]:
         conn.close()
 
     try:
+        size = os.path.getsize(path)
+        if size > MAX_DOC_SIZE:
+            return {"error": f"File too large: {path} ({size} bytes > {MAX_DOC_SIZE})", "slug": slug}
         with open(path, encoding="utf-8") as fh:
             content = fh.read()
     except OSError:

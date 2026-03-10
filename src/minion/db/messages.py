@@ -1,14 +1,17 @@
 """Message-related DB helpers — triggers, onboarding, trigger codebook.
-
 Functions that scan messages for trigger words, load onboarding docs,
 and format the trigger codebook display.
-"""
+
+Purpose: Message-related DB helpers — triggers, onboarding, trigger codebook.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: Message-related DB helpers — triggers, onboarding, trigger codebook. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import os
 
-from minion.defaults import resolve_docs_dir
+from minion.defaults import resolve_docs_dir, MAX_DOC_SIZE
 
 DOCS_DIR = resolve_docs_dir()
 
@@ -41,13 +44,13 @@ def load_onboarding(agent_class: str) -> str:
     parts: list[str] = []
 
     protocol_path = os.path.join(DOCS_DIR, "protocol-common.md")
-    if os.path.exists(protocol_path):
+    if os.path.exists(protocol_path) and os.path.getsize(protocol_path) <= MAX_DOC_SIZE:
         with open(protocol_path) as f:
             parts.append(f.read())
 
     if agent_class:
         class_path = os.path.join(DOCS_DIR, f"protocol-{agent_class}.md")
-        if os.path.exists(class_path):
+        if os.path.exists(class_path) and os.path.getsize(class_path) <= MAX_DOC_SIZE:
             with open(class_path) as f:
                 parts.append(f.read())
 

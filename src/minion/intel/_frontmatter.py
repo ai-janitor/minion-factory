@@ -1,8 +1,14 @@
-"""Parse YAML frontmatter from intel markdown docs."""
+"""Parse YAML frontmatter from intel markdown docs.
+
+Purpose: Parse YAML frontmatter from intel markdown docs.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Parse YAML frontmatter from intel markdown docs. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 
 log = logging.getLogger(__name__)
@@ -24,8 +30,13 @@ def _parse_frontmatter(path: str) -> dict[str, object]:
     Returns defaults for any missing key. Never raises — logs and returns
     defaults on parse error or missing file.
     """
+    from minion.fs import MAX_DOC_SIZE
     result: dict[str, object] = {k: list(v) if isinstance(v, list) else v for k, v in _DEFAULTS.items()}
     try:
+        size = os.path.getsize(path)
+        if size > MAX_DOC_SIZE:
+            log.warning("_parse_frontmatter: skipping %s — file too large (%d bytes)", path, size)
+            return result
         with open(path, encoding="utf-8") as fh:
             content = fh.read()
     except OSError as exc:

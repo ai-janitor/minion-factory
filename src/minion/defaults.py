@@ -1,8 +1,11 @@
 """Shared constants — env var names, default paths, resolvers.
-
 Single source of truth for path resolution across all minion subsystems.
 Merges commsv2/defaults.py + swarm/config.py path logic.
-"""
+
+Purpose: Shared constants — env var names, default paths, resolvers.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Shared constants — env var names, default paths, resolvers. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
@@ -34,6 +37,14 @@ WORK_DIR_NAME = ".work"
 
 # Project-local runtime directory for daemon logs, pids, state
 SWARM_DIR_NAME = ".minion-swarm"
+
+# ---------------------------------------------------------------------------
+# File size limits
+# ---------------------------------------------------------------------------
+
+# Maximum file size for unbounded reads — guard against memory exhaustion.
+# Applies to intel docs, task specs, backlog READMEs, message files.
+MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 # ---------------------------------------------------------------------------

@@ -1,16 +1,28 @@
-"""Kill, defer, and reopen backlog items — lifecycle boundary operations."""
+"""Kill, defer, and reopen backlog items — lifecycle boundary operations.
+
+Purpose: Kill, defer, and reopen backlog items — lifecycle boundary operations.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Kill, defer, and reopen backlog items — lifecycle boundary operations. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import connect, get_db
+from minion.fs import MAX_DOC_SIZE
 from .path_resolution_and_slug import _get_backlog_path, _now_iso
 
 
 def _read_readme(file_path: str) -> str:
-    """Read the README.md for a backlog item folder."""
+    """Read the README.md for a backlog item folder.
+
+    Raises ValueError if the file exceeds MAX_DOC_SIZE.
+    """
     readme_path = os.path.join(file_path, "README.md")
+    size = os.path.getsize(readme_path)
+    if size > MAX_DOC_SIZE:
+        raise ValueError(f"README too large to read: {readme_path} ({size} bytes > {MAX_DOC_SIZE})")
     with open(readme_path) as f:
         return f.read()
 

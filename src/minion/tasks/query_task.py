@@ -1,10 +1,16 @@
-"""Read-only task queries — no writes, no side effects."""
+"""Read-only task queries — no writes, no side effects.
+
+Purpose: Read-only task queries — no writes, no side effects.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Read-only task queries — no writes, no side effects. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
 import os
 
 from minion.db import get_db
+from minion.fs import MAX_DOC_SIZE
 from .flow_gates_and_validation import _get_flow
 
 
@@ -27,6 +33,8 @@ def _inline_file(path: str | None) -> str | None:
     if not os.path.exists(resolved):
         return None
     try:
+        if os.path.getsize(resolved) > MAX_DOC_SIZE:
+            return None
         with open(resolved) as f:
             return f.read()
     except Exception:
@@ -44,6 +52,8 @@ def _inline_requirement(req_path: str | None) -> str | None:
     if not os.path.exists(readme):
         return None
     try:
+        if os.path.getsize(readme) > MAX_DOC_SIZE:
+            return None
         with open(readme) as f:
             return f.read()
     except Exception:

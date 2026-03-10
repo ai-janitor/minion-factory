@@ -1,19 +1,25 @@
 """Filesystem helpers — path builders, atomic writes, directory setup.
-
 Content lives on disk following the Vercel pattern:
   <timestamp>-<agent>-<slug>.md
-
 SQLite stores the path; agents read the file directly.
-"""
+
+Purpose: Filesystem helpers — path builders, atomic writes, directory setup.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Filesystem helpers — path builders, atomic writes, directory setup. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
 from datetime import datetime
 
 from minion.db import RUNTIME_DIR
+from minion.defaults import MAX_DOC_SIZE  # noqa: F401 — re-exported for callers
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Base directories
@@ -103,8 +109,12 @@ def atomic_write_file(path: str, content: str) -> str:
 
 
 def read_content_file(path: str | None) -> str:
-    """Read a content file, returning empty string if missing or None."""
+    """Read a content file, returning empty string if missing, None, or too large."""
     if not path or not os.path.exists(path):
+        return ""
+    size = os.path.getsize(path)
+    if size > MAX_DOC_SIZE:
+        log.warning("read_content_file: skipping %s — file too large (%d bytes > %d)", path, size, MAX_DOC_SIZE)
         return ""
     with open(path) as f:
         return f.read()
