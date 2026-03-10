@@ -26,6 +26,7 @@ packages = ["src/minion"]
 "task-flows" = "minion/task-flows"
 "src/minion/prompts/capabilities" = "minion/prompts/capabilities"
 "src/minion/prompts/roles" = "minion/prompts/roles"
+"src/minion/templates" = "minion/templates"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
