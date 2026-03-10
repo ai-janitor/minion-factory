@@ -1,28 +1,34 @@
-# Worker Checklist — tui-fixer
+# Worker Checklist — tui-stale-debug
 
-## Problem
-The TUI dashboard shows "waiting for work" and stale "last seen" for agents that are actually active as subagents (spawned via Claude Code Agent tool). These agents register via `minion agent register` but never update their heartbeat or status during execution, so the dashboard shows stale data.
+## Bug
+Dashboard shows "stale" status for agents that were registered/heartbeated seconds ago.
+Example: `napoleon` shows "stale" and "15s ago" simultaneously — those contradict. 15s ago is NOT stale.
 
-## Goal
-Make the dashboard more useful for agents that registered but don't heartbeat frequently. Two fixes:
+## Root Cause
+Timezone mismatch between timestamp writers and readers:
+- `daemon/watcher.py` and `daemon/runner/_constants.py` use `utc_now_iso()` → `datetime.now(timezone.utc).isoformat()` → stores `+00:00` suffix (timezone-aware UTC)
+- `db/helpers.py` uses `now_iso()` → `datetime.datetime.now().isoformat()` → stores naive local time (no timezone)
+- Both write to the same `last_seen` / `hp_updated_at` columns in the agents table
+- Readers (monitoring, network handlers, db/agents enrichment) parse with `fromisoformat()` then subtract `datetime.now()` (naive)
+- Python 3.13 raises `TypeError: can't subtract offset-naive and offset-aware datetimes`
+- Exception handlers either return "offline"/"stale" (wrong) or propagate the error
 
-1. **Stale agent detection** — if an agent's `last_seen` is old but they registered recently, show a different status indicator (e.g. "no heartbeat" instead of the registered status)
-2. **Agent status from context** — the `set-context` command updates `last_seen`. The dashboard query should use the most recent of `last_seen` or registration time.
+## Files
+- `src/minion/daemon/watcher.py` — `utc_now_iso()` stores UTC-aware timestamps
+- `src/minion/daemon/runner/_constants.py` — duplicate `utc_now_iso()`
+- `src/minion/db/helpers.py` — `now_iso()` stores naive local timestamps
+- `src/minion/db/agents.py` — `enrich_agent_row()` compares timestamps (catches ValueError, not TypeError)
+- `src/minion/monitoring.py` — `_agent_judgment()` same mismatch
+- `src/minion/network/handlers/core.py` — `_compute_presence()` same mismatch
+- `src/minion/dashboard/render.py` — agent display needs staleness computation
+- `src/minion/dashboard/queries.py` — agent query fetches `last_seen`, `hp_updated_at`
 
-## Files to modify:
-- src/minion/dashboard/queries.py — agent query needs to include registered_at, context_updated_at, and use COALESCE for effective last_seen
-- src/minion/dashboard/render.py — render logic for stale vs active vs no-heartbeat agents
+## Fix Approach
+1. Normalize `utc_now_iso()` to use naive local time (same as `now_iso()`) — all timestamps consistent
+2. Fix all `fromisoformat` + `datetime.now()` comparisons to handle both aware and naive timestamps safely
+3. Add `_parse_timestamp()` helper that strips timezone info for safe comparison with `datetime.now()`
 
-## Approach:
-- Schema has: registered_at, last_seen, context_updated_at columns on agents table
-- Query: add registered_at to SELECT, compute effective_last_seen as COALESCE(last_seen, context_updated_at, registered_at)
-- Render: compute staleness from effective_last_seen; agents registered <10min ago with no heartbeat get "active (no hb)" dim indicator; truly stale agents (>5min) get red indicator
-- Keep existing ANSI color scheme
-
-## Verify:
-- Read the rendered output logic to confirm the change
-- `uv run pytest` passes
-
-- [yes] Implemented
-- [yes] Tested
-- [ ] Changes committed
+- [x] Root cause identified
+- [x] Fix implemented
+- [x] Tests pass (219 passed)
+- [x] Committed

@@ -61,13 +61,15 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
         turn_input=a.get("hp_turn_input"), turn_output=a.get("hp_turn_output"),
     )
 
+    from minion.db.helpers import parse_iso_to_naive_local
+
     threshold = CLASS_STALENESS_SECONDS.get(a.get("agent_class", ""))
     stale = False
     if threshold and a.get("context_updated_at"):
         try:
-            updated = datetime.datetime.fromisoformat(a["context_updated_at"])
+            updated = parse_iso_to_naive_local(a["context_updated_at"])
             stale = (now - updated).total_seconds() > threshold
-        except ValueError:
+        except (ValueError, TypeError):
             import sys
             print(f"WARNING: corrupt context_updated_at for {a.get('name')}: {a['context_updated_at']!r}", file=sys.stderr)
     elif threshold and not a.get("context_updated_at"):
@@ -76,9 +78,9 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
 
     if a.get("last_seen"):
         try:
-            ls = datetime.datetime.fromisoformat(a["last_seen"])
+            ls = parse_iso_to_naive_local(a["last_seen"])
             a["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
-        except ValueError:
+        except (ValueError, TypeError):
             import sys
             print(f"WARNING: corrupt last_seen for {a.get('name')}: {a['last_seen']!r}", file=sys.stderr)
 
@@ -115,8 +117,9 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
         )
 
     try:
-        updated = datetime.datetime.fromisoformat(context_updated_at)
-    except ValueError:
+        from minion.db.helpers import parse_iso_to_naive_local
+        updated = parse_iso_to_naive_local(context_updated_at)
+    except (ValueError, TypeError):
         import sys
         print(f"WARNING: corrupt context_updated_at for {agent_name}: {context_updated_at!r}", file=sys.stderr)
         return False, ""

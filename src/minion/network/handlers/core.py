@@ -119,7 +119,8 @@ def _compute_presence(last_seen: str | None) -> str:
     if not last_seen:
         return "offline"
     try:
-        ts = datetime.fromisoformat(last_seen)
+        from minion.db.helpers import parse_iso_to_naive_local
+        ts = parse_iso_to_naive_local(last_seen)
         now = datetime.now()
         age_mins = (now - ts).total_seconds() / 60
         if age_mins < _PRESENCE_ONLINE_MINS:

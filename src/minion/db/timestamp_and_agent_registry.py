@@ -16,6 +16,21 @@ def now_iso() -> str:
     return datetime.datetime.now().isoformat()
 
 
+def parse_iso_to_naive_local(ts: str) -> datetime.datetime:
+    """Parse an ISO timestamp to a naive local-time datetime.
+
+    Handles both naive timestamps (from now_iso()) and timezone-aware
+    timestamps (from utc_now_iso()). Aware timestamps are converted to
+    local time then stripped of tzinfo so they can be safely subtracted
+    from datetime.datetime.now() without TypeError.
+    """
+    dt = datetime.datetime.fromisoformat(ts)
+    if dt.tzinfo is not None:
+        # Convert UTC (or any tz) to local time, then strip tzinfo
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
 def register_agent_db(name: str, agent_class: str, model: str | None = None) -> None:
     """Insert or replace an agent row without filesystem side effects.
 
