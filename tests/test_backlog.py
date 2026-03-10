@@ -690,8 +690,10 @@ class TestBacklogCLI:
         res = _run(runner, project_dir, "backlog", "list")
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
-        assert isinstance(data, list)
-        assert len(data) >= 2
+        # list is now wrapped: {"items": [...]} to support --human/--compact routing
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert len(data["items"]) >= 2
 
     def test_list_filter_by_type(self, runner, project_dir):
         _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Bug Filter")
@@ -699,7 +701,8 @@ class TestBacklogCLI:
         res = _run(runner, project_dir, "backlog", "list", "--type", "bug")
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
-        assert all(item["type"] == "bug" for item in data)
+        items = data["items"]
+        assert all(item["type"] == "bug" for item in items)
 
     def test_show_returns_item(self, runner, project_dir):
         res = _run(runner, project_dir, "backlog", "add", "--type", "smell", "--title", "Long Func")
