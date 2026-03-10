@@ -162,14 +162,14 @@ def register(
         result["tools"] = get_tools_for_class(agent_class)
 
         # Merge crew YAML context when --crew is provided
-        # SU-13: Lazy import to break comms->crew bidirectional coupling at module level.
-        # crew/__init__.py imports comms.register transitively via crew/recruit.py.
-        # This lazy import keeps runtime dependency one-directional (comms calls crew only when needed).
+        # Task #128: merge_crew_context lives here (not in crew/) to break
+        # the comms<->crew bidirectional coupling. crew imports comms (one-way).
+        # comms uses lazy imports to crew submodules (spawn, config) — never
+        # the crew package itself — to avoid circular import at module load.
         zone = ""
         capabilities: list[str] = []
         if crew:
-            from minion.crew import merge_crew_context
-            crew_ctx = merge_crew_context(crew, agent_name)
+            crew_ctx = _merge_crew_context(crew, agent_name)
             result.update(crew_ctx)
             zone = crew_ctx.get("zone", "")
             capabilities = list(crew_ctx.get("capabilities", []))
@@ -477,3 +477,46 @@ def who() -> dict[str, object]:
         return {"agents": agents}
     finally:
         conn.close()
+
+
+def _merge_crew_context(crew: str, agent_name: str) -> dict[str, object]:
+    """Extract agent context (zone, capabilities, system prompt) from a crew YAML.
+
+    Returns a dict with keys: crew, zone, capabilities, system_prompt_excerpt,
+    crew_warning, crew_error — depending on what was found.
+
+    Task #128: Moved here from crew/__init__.py to break the comms<->crew
+    bidirectional coupling. Uses lazy imports to crew submodules (spawn, config)
+    instead of importing the crew package.
+    """
+    result: dict[str, object] = {}
+    # Lazy imports to crew submodules — avoids importing minion.crew package
+    # which would re-trigger the circular dependency (crew imports comms).
+    from minion.crew.spawn import _find_crew_file
+    from minion.crew.config import load_config
+
+    crew_file = _find_crew_file(crew)
+    if not crew_file:
+        result["crew_warning"] = f"Crew '{crew}' not found — skipping crew context"
+        return result
+
+    try:
+        crew_cfg = load_config(crew_file)
+        agent_cfg = crew_cfg.agents.get(agent_name)
+        if not agent_cfg:
+            result["crew_error"] = (
+                f"Agent '{agent_name}' not found in crew '{crew}'. "
+                f"Available: {', '.join(sorted(crew_cfg.agents.keys()))}"
+            )
+        else:
+            result["crew"] = crew
+            if agent_cfg.zone:
+                result["zone"] = agent_cfg.zone
+            if agent_cfg.capabilities:
+                result["capabilities"] = list(agent_cfg.capabilities)
+            if agent_cfg.system:
+                result["system_prompt_excerpt"] = agent_cfg.system[:200]
+    except (ValueError, OSError, KeyError) as exc:
+        result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
+
+    return result
