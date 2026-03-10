@@ -70,6 +70,7 @@ def register_commands(cli: click.Group) -> None:
           minion api start --insecure            # Dev mode, no auth
         """
         import getpass
+        import sys
 
         token = ""
         if not insecure:
@@ -82,8 +83,8 @@ def register_commands(cli: click.Group) -> None:
             # Priority 2: env var
             if not token:
                 token = os.environ.get("MINION_CLUSTER_TOKEN", "")
-            # Priority 3: interactive prompt
-            if not token:
+            # Priority 3: interactive prompt — only when stdin is a real TTY (not an agent/pipe)
+            if not token and sys.stdin.isatty():
                 token = getpass.getpass("Cluster auth token: ")
             if not token:
                 raise click.UsageError(
@@ -157,8 +158,10 @@ def register_commands(cli: click.Group) -> None:
         """Resolve token from -p file, env var, or getpass prompt.
 
         --insecure makes token optional but doesn't ignore -p or env var.
+        getpass only called when stdin is a real TTY — agents and pipes get a UsageError instead.
         """
         import getpass
+        import sys
         token = ""
         if password_file:
             with open(password_file) as f:
@@ -167,7 +170,7 @@ def register_commands(cli: click.Group) -> None:
                 raise click.UsageError(f"Password file '{password_file}' is empty.")
         if not token:
             token = os.environ.get("MINION_CLUSTER_TOKEN", "")
-        if not token and not insecure:
+        if not token and not insecure and sys.stdin.isatty():
             token = getpass.getpass("Cluster auth token: ")
         if not token and not insecure:
             raise click.UsageError("Auth token required. Use -p <file>, env var, or prompt.")
