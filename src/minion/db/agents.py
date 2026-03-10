@@ -102,6 +102,10 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
 
     Returns (is_stale, message). is_stale=True means BLOCKED.
     """
+    # Precondition assertions — backlog #63
+    assert cursor is not None, "cursor must not be None"
+    assert agent_name, "agent_name must not be empty"
+
     from minion.defaults import CLASS_STALENESS_SECONDS
 
     cursor.execute(

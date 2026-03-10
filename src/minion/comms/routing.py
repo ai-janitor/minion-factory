@@ -39,6 +39,9 @@ def _remove_roster_file(agent_name: str, project_path: str) -> None:
 
 def deregister_global(agent_name: str) -> dict[str, object]:
     """Remove an agent from the coordinator DB. Lead-only."""
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+
     try:
         coord = get_coordinator_db()
         try:
@@ -87,6 +90,12 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
     Agents with active tasks (open/assigned/in_progress/fixed) in their project
     are protected from pruning regardless of staleness.
     """
+    # Precondition assertions — backlog #63
+    if not isinstance(stale_minutes, int):
+        raise TypeError(f"stale_minutes must be int, got {type(stale_minutes).__name__}")
+    if stale_minutes < 1:
+        raise ValueError(f"stale_minutes must be >= 1, got {stale_minutes}")
+
     cutoff = (datetime.datetime.now() - datetime.timedelta(minutes=stale_minutes)).isoformat()
     try:
         coord = get_coordinator_db()

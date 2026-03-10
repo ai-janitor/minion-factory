@@ -304,6 +304,13 @@ def deregister(agent_name: str) -> dict[str, object]:
 
 
 def rename(old_name: str, new_name: str) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert old_name, "old_name must not be empty"
+    assert new_name, "new_name must not be empty"
+    assert old_name != new_name, "old_name and new_name must differ"
+    assert " " not in new_name, f"new_name must not contain spaces: '{new_name}'"
+    assert len(new_name) <= 64, f"new_name too long ({len(new_name)} chars, max 64)"
+
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -326,6 +333,10 @@ def rename(old_name: str, new_name: str) -> dict[str, object]:
 
 
 def set_status(agent_name: str, status: str) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert status, "status must not be empty"
+
     conn = get_db()
     now = now_iso()
     try:
@@ -358,6 +369,19 @@ def set_context(
     hp: int | None = None,
     files_modified: str = "",
 ) -> dict[str, object]:
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert context, "context must not be empty"
+    if hp is not None:
+        if not isinstance(hp, int):
+            raise TypeError(f"hp must be int or None, got {type(hp).__name__}")
+        if not (0 <= hp <= 100):
+            raise ValueError(f"hp must be 0-100, got {hp}")
+    if tokens_used < 0:
+        raise ValueError(f"tokens_used must be non-negative, got {tokens_used}")
+    if tokens_limit < 0:
+        raise ValueError(f"tokens_limit must be non-negative, got {tokens_limit}")
+
     conn = get_db()
     now = now_iso()
     try:

@@ -21,6 +21,10 @@ def scan_triggers(message: str) -> list[str]:
 
     Only matches deliberate !!trigger!! pattern — not casual mentions.
     """
+    # Precondition assertions — backlog #63
+    if not isinstance(message, str):
+        raise TypeError(f"message must be str, got {type(message).__name__}")
+
     from minion.defaults import TRIGGER_WORDS
     lower = message.lower()
     return [word for word in TRIGGER_WORDS if f"!!{word}!!" in lower]
@@ -41,6 +45,10 @@ def format_trigger_codebook() -> str:
 
 def load_onboarding(agent_class: str) -> str:
     """Load protocol + class profile docs from runtime directory."""
+    # Precondition assertions — backlog #63
+    if not isinstance(agent_class, str):
+        raise TypeError(f"agent_class must be str, got {type(agent_class).__name__}")
+
     parts: list[str] = []
 
     protocol_path = os.path.join(DOCS_DIR, "protocol-common.md")

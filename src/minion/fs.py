@@ -57,6 +57,12 @@ def _timestamp() -> str:
 
 def inbox_path(agent_name: str) -> str:
     """Return the inbox directory for an agent, creating it if needed."""
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert "/" not in agent_name and "\\" not in agent_name, (
+        f"agent_name must not contain path separators: '{agent_name}'"
+    )
+
     p = os.path.join(INBOX_DIR, agent_name)
     os.makedirs(p, exist_ok=True)
     return p
@@ -64,6 +70,10 @@ def inbox_path(agent_name: str) -> str:
 
 def message_file_path(to_agent: str, from_agent: str, slug: str = "msg") -> str:
     """Build path: inbox/<to>/<ts>-<from>-<slug>.md"""
+    # Precondition assertions — backlog #63
+    assert to_agent, "to_agent must not be empty"
+    assert from_agent, "from_agent must not be empty"
+
     d = inbox_path(to_agent)
     fname = f"{_timestamp()}-{_slugify(from_agent, 20)}-{_slugify(slug, 20)}.md"
     return os.path.join(d, fname)
@@ -71,6 +81,9 @@ def message_file_path(to_agent: str, from_agent: str, slug: str = "msg") -> str:
 
 def battle_plan_file_path(agent_name: str) -> str:
     """Build path: battle-plans/<ts>-<agent>-plan.md"""
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+
     os.makedirs(BATTLE_PLAN_DIR, exist_ok=True)
     fname = f"{_timestamp()}-{_slugify(agent_name, 20)}-plan.md"
     return os.path.join(BATTLE_PLAN_DIR, fname)
@@ -78,6 +91,13 @@ def battle_plan_file_path(agent_name: str) -> str:
 
 def raid_log_file_path(agent_name: str, priority: str) -> str:
     """Build path: raid-log/<ts>-<agent>-<priority>.md"""
+    # Precondition assertions — backlog #63
+    assert agent_name, "agent_name must not be empty"
+    assert priority, "priority must not be empty"
+    assert priority in ("low", "normal", "high", "critical"), (
+        f"Invalid priority '{priority}'. Must be low/normal/high/critical."
+    )
+
     os.makedirs(RAID_LOG_DIR, exist_ok=True)
     fname = f"{_timestamp()}-{_slugify(agent_name, 20)}-{priority}.md"
     return os.path.join(RAID_LOG_DIR, fname)
@@ -92,6 +112,14 @@ def atomic_write_file(path: str, content: str) -> str:
 
     Returns the final path.
     """
+    # Precondition assertions — backlog #63
+    if not isinstance(path, str):
+        raise TypeError(f"path must be str, got {type(path).__name__}")
+    if not path:
+        raise ValueError("path must not be empty")
+    if not isinstance(content, str):
+        raise TypeError(f"content must be str, got {type(content).__name__}")
+
     d = os.path.dirname(path)
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
