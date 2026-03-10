@@ -46,7 +46,12 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Daemon agents with HP metrics for bar rendering."""
+    """Daemon agents with HP metrics for bar rendering.
+
+    Computes effective_last_seen as the most recent of last_seen,
+    context_updated_at, or registered_at — so newly registered agents
+    that haven't heartbeated yet don't show "never".
+    """
     cursor = conn.execute("""
         SELECT
             name,
@@ -56,7 +61,13 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             COALESCE(hp_input_tokens, 0)  + COALESCE(hp_output_tokens, 0)  AS tokens_used,
             COALESCE(hp_tokens_limit, 0)                                    AS tokens_limit,
             hp_updated_at,
-            last_seen
+            last_seen,
+            registered_at,
+            MAX(
+                COALESCE(last_seen, ''),
+                COALESCE(context_updated_at, ''),
+                COALESCE(registered_at, '')
+            ) AS effective_last_seen
         FROM agents
         WHERE transport IN ('daemon', 'daemon-ts', 'terminal')
         ORDER BY agent_class, name
