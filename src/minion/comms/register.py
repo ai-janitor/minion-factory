@@ -373,14 +373,30 @@ def set_context(
                 (context, now, now, hp_turn_input, 100, now, agent_name),
             )
         else:
-            conn.execute(
-                """UPDATE agents
-                   SET context_summary = ?,
-                       context_updated_at = ?,
-                       last_seen = ?
-                   WHERE name = ?""",
-                (context, now, now, agent_name),
-            )
+            if tokens_used and tokens_limit:
+                # Terminal agents providing token counts — populate hp_input/output_tokens
+                # so the TUI dashboard token bar renders correctly (backlog #111)
+                conn.execute(
+                    """UPDATE agents
+                       SET context_summary = ?,
+                           context_updated_at = ?,
+                           last_seen = ?,
+                           hp_input_tokens = ?,
+                           hp_output_tokens = 0,
+                           hp_tokens_limit = ?,
+                           hp_updated_at = ?
+                       WHERE name = ?""",
+                    (context, now, now, tokens_used, tokens_limit, now, agent_name),
+                )
+            else:
+                conn.execute(
+                    """UPDATE agents
+                       SET context_summary = ?,
+                           context_updated_at = ?,
+                           last_seen = ?
+                       WHERE name = ?""",
+                    (context, now, now, agent_name),
+                )
         conn.commit()
 
         result: dict[str, object] = {"status": "ok", "agent": agent_name, "context": context}

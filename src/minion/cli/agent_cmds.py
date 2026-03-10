@@ -24,7 +24,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("register")
     @click.option("--name", "-n", required=True)
-    @click.option("--class", "-c", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
+    @click.option("--class", "-c", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
     @click.option("--model", default="")
     @click.option("--description", default="")
     @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
