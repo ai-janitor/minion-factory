@@ -110,7 +110,7 @@ def handle_get_flow(handler, db_path: str, project_name: str = "",
             return
         except FileNotFoundError:
             continue
-        except Exception as e:
+        except (ValueError, KeyError) as e:
             handler._json_response(500, {"error": f"Failed to load flow: {e}"})
             return
 

@@ -87,7 +87,7 @@ def set_battle_plan(agent_name: str, plan: str) -> dict[str, object]:
         plan_file = battle_plan_file_path(agent_name)
         try:
             atomic_write_file(plan_file, plan)
-        except Exception as exc:
+        except OSError as exc:
             return {"error": f"BLOCKED: Failed to write battle plan file: {exc}"}
 
         # Atomically supersede old plan and insert new one
@@ -179,7 +179,7 @@ def log_raid(agent_name: str, entry: str, priority: str = "normal") -> dict[str,
         entry_file = raid_log_file_path(agent_name, priority)
         try:
             atomic_write_file(entry_file, entry)
-        except Exception as exc:
+        except OSError as exc:
             return {"error": f"BLOCKED: Failed to write raid log file: {exc}"}
 
         with conn:

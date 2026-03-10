@@ -66,7 +66,7 @@ def _prune_local_stale_agents(cutoff: str) -> None:
         finally:
             local.close()
     except Exception:
-        pass
+        pass  # broad catch: best-effort activity touch — never block caller  # broad catch: best-effort pruning — never block caller
 
 
 def touch_coordinator_activity(agent_name: str) -> None:
@@ -116,4 +116,4 @@ def touch_coordinator_activity(agent_name: str) -> None:
         finally:
             conn.close()
     except Exception:
-        pass
+        pass  # broad catch: best-effort activity touch — never block caller

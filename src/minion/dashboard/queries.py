@@ -155,7 +155,7 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
     try:
         mode = conn.execute("PRAGMA journal_mode").fetchone()
         stats["journal_mode"] = mode[0] if mode else "unknown"
-    except Exception:
+    except sqlite3.DatabaseError:
         stats["journal_mode"] = "unknown"
 
     # Row counts per table
@@ -167,9 +167,9 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
             try:
                 count = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
                 stats["tables"][table_name] = count
-            except Exception:
+            except sqlite3.DatabaseError:
                 stats["tables"][table_name] = -1
-    except Exception:
+    except sqlite3.DatabaseError:
         pass
 
     # Agent breakdown
@@ -177,7 +177,7 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
         stats["agents"]["total"] = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         for row in conn.execute("SELECT agent_class, COUNT(*) as cnt FROM agents GROUP BY agent_class").fetchall():
             stats["agents"][row["agent_class"] or "unknown"] = row["cnt"]
-    except Exception:
+    except sqlite3.DatabaseError:
         pass
 
     # Task breakdown
@@ -185,7 +185,7 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
         stats["tasks"]["total"] = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
             stats["tasks"][row["status"]] = row["cnt"]
-    except Exception:
+    except sqlite3.DatabaseError:
         pass
 
     return stats
@@ -237,7 +237,7 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             LIMIT 20
         """)
         return cursor.fetchall()
-    except Exception:
+    except sqlite3.DatabaseError:
         return []
 
 

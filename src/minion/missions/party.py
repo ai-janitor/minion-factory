@@ -47,7 +47,7 @@ def _scan_all_characters(project_dir: str = ".") -> list[dict[str, Any]]:
                         "role": agent_cfg.get("role", "coder"),
                         "skills": agent_cfg.get("skills", []),
                     })
-            except Exception as exc:
+            except (ValueError, OSError, KeyError) as exc:
                 log.warning("failed to parse crew %s: %s", crew_name, exc)
                 continue
 

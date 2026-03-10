@@ -73,7 +73,7 @@ def format_inbox(docs_dir: Path, poll_data: Dict[str, Any], agent: str) -> str:
                 import json as _json
                 try:
                     files = _json.loads(files)
-                except Exception:
+                except (ValueError, TypeError):
                     files = [files]
             inbox_lines.append(f"  Manifest: {manifest}" if manifest else "  (no manifest)")
             inbox_lines.append(f"  Files written: {', '.join(files)}")

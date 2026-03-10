@@ -96,7 +96,7 @@ def handle_overview(handler, db_path: str, **kwargs) -> None:
                 else:
                     result["agents"]["by_hp_tier"]["unknown"] += 1
         except Exception:
-            pass
+            pass  # broad catch: project DB may have missing tables
 
     handler._json_response(200, result)
 
@@ -201,7 +201,7 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                 except (ValueError, TypeError):
                     pass
         except Exception:
-            pass
+            pass  # broad catch: project DB may have missing tables
 
     # Sort: critical first, then warning
     severity_order = {"critical": 0, "warning": 1, "info": 2}
@@ -251,6 +251,6 @@ def handle_task_lineage(handler, db_path: str, task_id: str = "", **kwargs) -> N
                     "timestamp": row["created_at"],
                 })
         except Exception:
-            pass
+            pass  # broad catch: transition_log may not exist
 
     handler._json_response(200, {"task_id": tid, "transitions": transitions})

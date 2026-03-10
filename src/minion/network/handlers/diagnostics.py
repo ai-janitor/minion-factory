@@ -78,7 +78,7 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
                         count = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
                         coordinator_stats["tables"][table_name] = count
                     except Exception:
-                        coordinator_stats["tables"][table_name] = -1
+                        coordinator_stats["tables"][table_name] = -1  # broad catch: table may not be queryable
             finally:
                 conn.close()
 
@@ -110,9 +110,9 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
                             count = pconn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
                             proj_info["tables"][table_name] = count
                         except Exception:
-                            proj_info["tables"][table_name] = -1
+                            proj_info["tables"][table_name] = -1  # broad catch: table may not be queryable
                 except Exception:
-                    pass
+                    pass  # broad catch: project DB may be in unexpected state
 
             project_stats.append(proj_info)
 
@@ -122,5 +122,5 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
             "project_count": len(project_stats),
         })
 
-    except Exception as e:
+    except Exception as e:  # broad catch: top-level handler returns 500 on any failure
         handler._json_response(500, {"error": str(e), "traceback": traceback.format_exc()})

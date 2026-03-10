@@ -49,7 +49,7 @@ def set_war_plan(agent_name: str, content: str) -> dict[str, object]:
     path = _war_plan_path()
     try:
         atomic_write_file(path, content)
-    except Exception as exc:
+    except OSError as exc:
         return {"error": f"BLOCKED: Failed to write war plan: {exc}"}
     return {"status": "set", "path": path, "agent": agent_name}
 
@@ -79,6 +79,6 @@ def append_war_plan(agent_name: str, text: str) -> dict[str, object]:
 
     try:
         atomic_write_file(path, existing + text + "\n")
-    except Exception as exc:
+    except OSError as exc:
         return {"error": f"BLOCKED: Failed to append to war plan: {exc}"}
     return {"status": "appended", "path": path, "agent": agent_name}

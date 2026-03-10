@@ -418,7 +418,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             )
             conn.execute("COMMIT")
             log.info("Applied schema migration v%d: %s", version, description)
-        except Exception:
+        except Exception:  # broad catch: any migration failure must be rolled back and re-raised
             conn.execute("ROLLBACK")
             log.exception("Schema migration v%d failed, rolled back", version)
             raise

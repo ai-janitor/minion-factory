@@ -99,7 +99,7 @@ def list_crews() -> dict[str, object]:
                         leads = [legacy_lead]
                 members = {n: c.get("role", "?") for n, c in agents_cfg.items()}
                 crews.append({"crew": crew_name, "lead": leads, "members": members})
-            except Exception as exc:
+            except (ValueError, OSError, KeyError) as exc:
                 crews.append({"crew": crew_name, "error": f"parse failed: {exc}"})
 
     return {"crews": crews}

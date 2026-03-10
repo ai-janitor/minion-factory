@@ -33,7 +33,7 @@ def register_commands(cli: click.Group) -> None:
             try:
                 m = load_mission(name)
                 missions.append({"name": m.name, "description": m.description, "requires": m.requires})
-            except Exception as exc:
+            except (ValueError, OSError, KeyError) as exc:
                 missions.append({"name": name, "error": f"parse failed: {exc}"})
         _output({"missions": missions}, ctx.obj["human"], ctx.obj["compact"])
 

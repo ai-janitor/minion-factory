@@ -56,11 +56,11 @@ class NetworkClient:
             try:
                 err_body = json.loads(e.read())
                 return err_body
-            except Exception:
+            except (ValueError, KeyError):
                 return {"error": f"HTTP {e.code}: {e.reason}"}
         except urllib.error.URLError as e:
             return {"error": f"Network unreachable: {e.reason}"}
-        except Exception as e:
+        except (OSError, ValueError) as e:
             return {"error": f"Request failed: {e}"}
 
     def register(

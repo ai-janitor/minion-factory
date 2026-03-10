@@ -15,6 +15,8 @@ New endpoint — not in ui/server.js.
 
 from __future__ import annotations
 
+import sqlite3
+import sqlite3
 from urllib.parse import urlparse, parse_qs
 
 from minion.network.handlers._resolve_project_or_404 import resolve_project_or_404
@@ -70,7 +72,7 @@ def handle_list_requirements(handler, db_path: str, name: str = "", **kwargs) ->
 
     try:
         rows = conn.execute(query, args).fetchall()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -88,7 +90,7 @@ def handle_list_requirements(handler, db_path: str, name: str = "", **kwargs) ->
             closed = task_rows["closed"] if task_rows else 0
             req["linked_task_count"] = total
             req["completion_pct"] = round(closed / total * 100) if total > 0 else 0
-        except Exception:
+        except sqlite3.DatabaseError:
             req["linked_task_count"] = 0
             req["completion_pct"] = 0
         requirements.append(req)
@@ -130,7 +132,7 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
 
     try:
         row = conn.execute("SELECT * FROM requirements WHERE id = ?", (req_id,)).fetchone()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -150,7 +152,7 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         stage_history = [dict(r) for r in history_rows]
-    except Exception:
+    except sqlite3.DatabaseError:
         pass  # transition_log may not exist
 
     # Children
@@ -161,7 +163,7 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         children = [dict(r) for r in child_rows]
-    except Exception:
+    except sqlite3.DatabaseError:
         pass
 
     # Linked tasks
@@ -173,7 +175,7 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         linked_tasks = [dict(r) for r in task_rows]
-    except Exception:
+    except sqlite3.DatabaseError:
         pass
 
     total = len(linked_tasks)

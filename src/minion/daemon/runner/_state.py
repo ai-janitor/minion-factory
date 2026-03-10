@@ -98,7 +98,7 @@ class StateMixin:
                 conn.commit()
                 conn.close()
             except Exception:
-                pass
+                pass  # broad catch: best-effort RSS update — never block daemon
 
     def _reset_for_respawn(self) -> None:
         """Reset daemon state for a fresh generation after context death."""
