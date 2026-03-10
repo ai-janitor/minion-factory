@@ -69,7 +69,7 @@ def register_commands(cli: click.Group) -> None:
 
     @crew_group.command("recruit")
     @click.option("--name", "-n", required=True, help="Agent name")
-    @click.option("--class", "agent_class", default=None, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor"]))
+    @click.option("--class", "agent_class", default=None, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
     @click.option("--crew", required=True, help="Running crew to join (tmux session crew-<name>)")
     @click.option("--from-crew", default="", help="Source crew YAML to pull character config from")
     @click.option("--capabilities", default="", help="Comma-separated capabilities (code,review,...)")
