@@ -1,4 +1,9 @@
-"""Shared helpers for task CRUD operations."""
+"""Shared helpers for task CRUD operations.
+
+Purpose: Shared helpers for task CRUD operations.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Shared helpers for task CRUD operations. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

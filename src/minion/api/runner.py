@@ -1,10 +1,12 @@
 """API server runner — entry point for the forked daemon child process.
-
 Invoked as: python -m minion.api.runner --port 8377
-
 Registers SIGTERM handler for graceful shutdown, then calls serve().
 This module is what subprocess.Popen launches in daemon.py start().
-"""
+
+Purpose: API server runner — entry point for the forked daemon child process.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: API server runner — entry point for the forked daemon child process. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""List backlog items with optional type/priority/status filters."""
+"""List backlog items with optional type/priority/status filters.
+
+Purpose: List backlog items with optional type/priority/status filters.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: List backlog items with optional type/priority/status filters. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,7 +1,10 @@
 """Walk the Click command tree and emit a structured CLI schema.
-
 Used by `minion docs` to auto-generate cli-reference.md from the source of truth.
-"""
+
+Purpose: Walk the Click command tree and emit a structured CLI schema.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Walk the Click command tree and emit a structured CLI schema. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

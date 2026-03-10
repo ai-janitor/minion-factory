@@ -1,4 +1,9 @@
-"""Tests for register() with --crew flag (T92)."""
+"""Tests for register() with --crew flag (T92).
+
+Purpose: Tests for register() with --crew flag (T92).
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for register() with --crew flag (T92). NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

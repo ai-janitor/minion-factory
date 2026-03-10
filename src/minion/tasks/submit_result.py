@@ -1,4 +1,9 @@
-"""Submit a result file for a task."""
+"""Submit a result file for a task.
+
+Purpose: Submit a result file for a task.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Submit a result file for a task. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

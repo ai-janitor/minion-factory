@@ -1,7 +1,10 @@
 """Comms group — send (local/global), check-inbox, purge-inbox, list-history.
-
 Messaging between agents within a repo (local) or across repos (global).
-"""
+
+Purpose: Comms group — send (local/global), check-inbox, purge-inbox, list-history.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Comms group — send (local/global), check-inbox, purge-inbox, list-history. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""War Room — battle plans and raid log."""
+"""War Room — battle plans and raid log.
+
+Purpose: War Room — battle plans and raid log.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: War Room — battle plans and raid log. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

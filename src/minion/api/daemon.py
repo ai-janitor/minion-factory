@@ -1,12 +1,14 @@
 """API server daemon lifecycle — start, stop, status, restart.
-
 Manages the network API server as a background process.
 State file: ~/.minion/api-server.json {pid, port, started_at, tls_enabled}
 Log file: ~/.minion/api-server.log
 PID tracked in state file — no separate .pid file needed.
-
 Reuses patterns from crew/lifecycle.py (SIGTERM → grace → SIGKILL).
-"""
+
+Purpose: API server daemon lifecycle — start, stop, status, restart.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: API server daemon lifecycle — start, stop, status, restart. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

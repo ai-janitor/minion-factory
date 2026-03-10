@@ -1,8 +1,11 @@
 """Reference integrity tests for network API route-to-handler mapping.
-
 Ensures every registered route points to a callable handler, no dead routes
 exist, and all handler modules are properly imported and registered.
-"""
+
+Purpose: Reference integrity tests for network API route-to-handler mapping.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Reference integrity tests for network API route-to-handler mapping. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

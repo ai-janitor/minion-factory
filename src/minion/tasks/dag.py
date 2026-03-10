@@ -1,4 +1,9 @@
-"""TaskFlow — query transitions, workers, and requirements from a loaded DAG."""
+"""TaskFlow — query transitions, workers, and requirements from a loaded DAG.
+
+Purpose: TaskFlow — query transitions, workers, and requirements from a loaded DAG.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: TaskFlow — query transitions, workers, and requirements from a loaded DAG. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

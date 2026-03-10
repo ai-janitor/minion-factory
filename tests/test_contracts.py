@@ -1,4 +1,9 @@
-"""Validate contract JSON files and the Python contract loader."""
+"""Validate contract JSON files and the Python contract loader.
+
+Purpose: Validate contract JSON files and the Python contract loader.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Validate contract JSON files and the Python contract loader. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

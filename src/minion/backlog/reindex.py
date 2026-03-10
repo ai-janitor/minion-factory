@@ -1,4 +1,9 @@
-"""Rebuild the backlog DB index by scanning the filesystem."""
+"""Rebuild the backlog DB index by scanning the filesystem.
+
+Purpose: Rebuild the backlog DB index by scanning the filesystem.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Rebuild the backlog DB index by scanning the filesystem. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

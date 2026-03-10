@@ -1,4 +1,9 @@
-"""Spawn party — orchestrates crew creation from YAML."""
+"""Spawn party — orchestrates crew creation from YAML.
+
+Purpose: Spawn party — orchestrates crew creation from YAML.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Spawn party — orchestrates crew creation from YAML. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

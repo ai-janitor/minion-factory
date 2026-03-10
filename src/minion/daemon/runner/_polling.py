@@ -1,4 +1,9 @@
-"""Polling — inbox polling, work checking, standdown/wake logic."""
+"""Polling — inbox polling, work checking, standdown/wake logic.
+
+Purpose: Polling — inbox polling, work checking, standdown/wake logic.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Polling — inbox polling, work checking, standdown/wake logic. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json

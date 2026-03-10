@@ -1,8 +1,11 @@
 """Agent registration — register, deregister, rename, set_status, set_context, who.
-
 Manages agent lifecycle in both the local project DB and the global coordinator DB.
 Handles onboarding, crew context merging, roster file management, and HP tracking.
-"""
+
+Purpose: Agent registration — register, deregister, rename, set_status, set_context, who.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Agent registration — register, deregister, rename, set_status, set_context, who. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

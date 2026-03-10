@@ -1,4 +1,9 @@
-"""Load protocol docs (protocol-common.md + protocol-{role}.md)."""
+"""Load protocol docs (protocol-common.md + protocol-{role}.md).
+
+Purpose: Load protocol docs (protocol-common.md + protocol-{role}.md).
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Load protocol docs (protocol-common.md + protocol-{role}.md). NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

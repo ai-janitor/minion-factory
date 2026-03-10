@@ -1,4 +1,9 @@
-"""Bulk-register project docs into the intel index — scan a directory and auto-derive slugs and tags."""
+"""Bulk-register project docs into the intel index — scan a directory and auto-derive slugs and tags.
+
+Purpose: Bulk-register project docs into the intel index — scan a directory and auto-derive slugs and tags.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Bulk-register project docs into the intel index — scan a directory and auto-derive slugs and tags. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

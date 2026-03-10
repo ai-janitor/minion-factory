@@ -1,4 +1,9 @@
-"""Update priority and/or status of an existing backlog item."""
+"""Update priority and/or status of an existing backlog item.
+
+Purpose: Update priority and/or status of an existing backlog item.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Update priority and/or status of an existing backlog item. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

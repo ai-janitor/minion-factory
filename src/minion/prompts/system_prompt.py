@@ -1,4 +1,9 @@
-"""Merge crew-level system_prefix with agent system prompt."""
+"""Merge crew-level system_prefix with agent system prompt.
+
+Purpose: Merge crew-level system_prefix with agent system prompt.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Merge crew-level system_prefix with agent system prompt. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Stand down, retire, stop, and zone handoff — crew dismissal and agent lifecycle."""
+"""Stand down, retire, stop, and zone handoff — crew dismissal and agent lifecycle.
+
+Purpose: Stand down, retire, stop, and zone handoff — crew dismissal and agent lifecycle.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Stand down, retire, stop, and zone handoff — crew dismissal and agent lifecycle. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,9 +1,12 @@
 """Decompose a parent requirement into children from a spec file.
-
 One command replaces ~5 manual steps per child: mkdir, write README,
 register, create task, link task. A 3-child decomposition goes from
 ~15 operations to one.
-"""
+
+Purpose: Decompose a parent requirement into children from a spec file.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility: Decompose a parent requirement into children from a spec file. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

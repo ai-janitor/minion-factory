@@ -1,9 +1,12 @@
 """Daemon config loader — shares dataclasses with crew/config.py (DRY).
-
 AgentConfig and SwarmConfig are defined once in crew/config.py. Daemon
 reuses them — the extra fields (skills, scope) have defaults and are
 simply unused by daemon code.
-"""
+
+Purpose: Daemon config loader — shares dataclasses with crew/config.py (DRY).
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Daemon config loader — shares dataclasses with crew/config.py (DRY). NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

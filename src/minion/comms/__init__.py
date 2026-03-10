@@ -1,8 +1,11 @@
 """Comms package — re-exports all public functions.
-
 Consumer imports never change: `from minion.comms import send, check_inbox` still works.
 Internals are split by concern across submodules.
-"""
+
+Purpose: Comms package — re-exports all public functions.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Comms package — re-exports all public functions. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from minion.comms.inbox import (
     check_inbox,

@@ -1,5 +1,4 @@
 """Transition engine — single entry point for all DAG state transitions.
-
 Every status change flows through `apply_transition()`:
   1. Load flow for entity's flow_type
   2. Validate target is in allowed transition set
@@ -8,7 +7,11 @@ Every status change flows through `apply_transition()`:
   5. Apply transition (update DB row)
   6. Log to transition history
   7. Clear assignment if next stage needs different worker class
-"""
+
+Purpose: Transition engine — single entry point for all DAG state transitions.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Transition engine — single entry point for all DAG state transitions. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

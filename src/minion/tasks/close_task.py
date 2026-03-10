@@ -1,4 +1,9 @@
-"""Close and reopen tasks — lifecycle boundary operations."""
+"""Close and reopen tasks — lifecycle boundary operations.
+
+Purpose: Close and reopen tasks — lifecycle boundary operations.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Close and reopen tasks — lifecycle boundary operations. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Entry point for `python -m minion.daemon --config ... --agent ...`."""
+"""Entry point for `python -m minion.daemon --config ... --agent ...`.
+
+Purpose: Entry point for `python -m minion.daemon --config ... --agent ...`.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Entry point for `python -m minion.daemon --config ... --agent ...`. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 import argparse
 

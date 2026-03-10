@@ -1,4 +1,9 @@
-"""Lifecycle — cold_start, refresh, fenix_down, debrief, end_session."""
+"""Lifecycle — cold_start, refresh, fenix_down, debrief, end_session.
+
+Purpose: Lifecycle — cold_start, refresh, fenix_down, debrief, end_session.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Lifecycle — cold_start, refresh, fenix_down, debrief, end_session. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

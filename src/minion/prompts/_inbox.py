@@ -1,4 +1,9 @@
-"""Format inbox messages and tasks for inline prompt injection."""
+"""Format inbox messages and tasks for inline prompt injection.
+
+Purpose: Format inbox messages and tasks for inline prompt injection.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Format inbox messages and tasks for inline prompt injection. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

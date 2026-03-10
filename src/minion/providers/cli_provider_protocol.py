@@ -1,3 +1,10 @@
+"""Cli Provider Protocol.
+
+Purpose: Cli Provider Protocol module.
+Rationale: Extracted into own module for single-responsibility provider configuration.
+Responsibility: Cli Provider Protocol. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source.
+"""
 from __future__ import annotations
 
 import re

@@ -1,4 +1,9 @@
-"""Load boot-sequence contract or fallback."""
+"""Load boot-sequence contract or fallback.
+
+Purpose: Load boot-sequence contract or fallback.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Load boot-sequence contract or fallback. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

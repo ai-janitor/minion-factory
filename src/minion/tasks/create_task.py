@@ -1,4 +1,9 @@
-"""Create and assign tasks."""
+"""Create and assign tasks.
+
+Purpose: Create and assign tasks.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Create and assign tasks. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Crew — spawn, stand down, retire, stop, hand off, logs."""
+"""Crew — spawn, stand down, retire, stop, hand off, logs.
+
+Purpose: Crew — spawn, stand down, retire, stop, hand off, logs.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Crew — spawn, stand down, retire, stop, hand off, logs. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from minion.crew.config import AgentConfig, SwarmConfig, load_config
 from minion.crew.lifecycle import hand_off_zone, interrupt_agent, retire_agent, stand_down, stop_agent_process

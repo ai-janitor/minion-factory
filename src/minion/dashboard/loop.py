@@ -1,11 +1,14 @@
 """Main dashboard poll loop — 2-second refresh cycle.
-
 Entry point: run()
 - Resolves DB path via env or cwd
 - Catches KeyboardInterrupt and SIGTERM for clean exit
 - Opens a fresh SQLite connection each cycle to get latest WAL snapshot
 - Uses PRAGMA query_only=ON to guard against accidental writes
-"""
+
+Purpose: Main dashboard poll loop — 2-second refresh cycle.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Main dashboard poll loop — 2-second refresh cycle. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

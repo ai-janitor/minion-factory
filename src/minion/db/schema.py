@@ -1,8 +1,11 @@
 """SQL schema definitions for all tables.
-
 Contains the CREATE TABLE statements for comms, tasks, requirements,
 schema versioning, and coordinator tables. No runtime logic — just DDL strings.
-"""
+
+Purpose: SQL schema definitions for all tables.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: SQL schema definitions for all tables. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 _COMMS_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS agents (

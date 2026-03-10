@@ -1,9 +1,12 @@
 """Tests for create_result() — result file creation + phase advancement fix.
-
 The fix in result.py: after submit_result(), complete_phase() is called to
 advance the task status through the DAG. These tests verify the combined
 behavior: result_file is set AND status advances past 'assigned'.
-"""
+
+Purpose: Tests for create_result() — result file creation + phase advancement fix.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for create_result() — result file creation + phase advancement fix. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

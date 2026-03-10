@@ -1,4 +1,9 @@
-"""Validation constants for task flow YAML schema."""
+"""Validation constants for task flow YAML schema.
+
+Purpose: Validation constants for task flow YAML schema.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Validation constants for task flow YAML schema. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 REQUIRED_STAGE_KEYS = {"description"}
 TERMINAL_STAGE_KEYS = {"description", "terminal", "workers", "protocol"}

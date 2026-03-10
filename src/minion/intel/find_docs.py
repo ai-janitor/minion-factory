@@ -1,4 +1,9 @@
-"""Find intel docs by tag or path fragment."""
+"""Find intel docs by tag or path fragment.
+
+Purpose: Find intel docs by tag or path fragment.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Find intel docs by tag or path fragment. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

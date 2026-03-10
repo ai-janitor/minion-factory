@@ -1,11 +1,14 @@
 """Parent-child rollup — advance parent when all children reach terminal state.
-
 When a child task closes:
   1. Query all siblings (same parent_id or requirement_id)
   2. Check if all siblings are terminal
   3. If yes, advance parent through the engine (gates, validation)
   4. Recursive — parent rollup may trigger grandparent rollup
-"""
+
+Purpose: Parent-child rollup — advance parent when all children reach terminal state.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Parent-child rollup — advance parent when all children reach terminal state. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

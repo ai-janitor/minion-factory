@@ -1,7 +1,10 @@
 """War-plan group — show, set, append.
-
 Persistent project war plan stored in .work/intel/.
-"""
+
+Purpose: War-plan group — show, set, append.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: War-plan group — show, set, append. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

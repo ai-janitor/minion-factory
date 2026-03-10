@@ -1,8 +1,11 @@
 """Write itemized-requirements.md from a structured spec file.
-
 Accepts a YAML spec with numbered items and writes them as a numbered
 list to the requirement's folder, then advances stage to 'itemized'.
-"""
+
+Purpose: Write itemized-requirements.md from a structured spec file.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility: Write itemized-requirements.md from a structured spec file. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

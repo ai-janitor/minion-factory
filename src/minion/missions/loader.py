@@ -1,4 +1,9 @@
-"""YAML loading, search paths, and validation for mission templates."""
+"""YAML loading, search paths, and validation for mission templates.
+
+Purpose: YAML loading, search paths, and validation for mission templates.
+Rationale: Extracted into own module for single-responsibility mission orchestration.
+Responsibility: YAML loading, search paths, and validation for mission templates. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

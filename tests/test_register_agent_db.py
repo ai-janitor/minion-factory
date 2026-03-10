@@ -1,4 +1,9 @@
-"""Tests for register_agent_db() DB isolation (T83)."""
+"""Tests for register_agent_db() DB isolation (T83).
+
+Purpose: Tests for register_agent_db() DB isolation (T83).
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for register_agent_db() DB isolation (T83). NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

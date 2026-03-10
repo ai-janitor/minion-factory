@@ -1,4 +1,9 @@
-"""Module-level constants, helpers, and the AgentRunResult dataclass."""
+"""Module-level constants, helpers, and the AgentRunResult dataclass.
+
+Purpose: Module-level constants, helpers, and the AgentRunResult dataclass.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Module-level constants, helpers, and the AgentRunResult dataclass. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

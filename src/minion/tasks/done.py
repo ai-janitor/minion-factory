@@ -1,8 +1,11 @@
 """Fast-close for externally completed tasks.
-
 Bypasses the normal assign/pull/submit-result/close ceremony for work
 done outside the minion DAG (worktrees, Claude Code agents, etc.).
-"""
+
+Purpose: Fast-close for externally completed tasks.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Fast-close for externally completed tasks. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

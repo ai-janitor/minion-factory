@@ -1,4 +1,9 @@
-"""Centralized prompt assembly for minion agents."""
+"""Centralized prompt assembly for minion agents.
+
+Purpose: Centralized prompt assembly for minion agents.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Centralized prompt assembly for minion agents. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from .boot_prompt import build_boot_prompt
 from .inbox_prompt import build_inbox_prompt

@@ -1,4 +1,9 @@
-"""Update task state and complete DAG phases."""
+"""Update task state and complete DAG phases.
+
+Purpose: Update task state and complete DAG phases.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Update task state and complete DAG phases. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Alerting — send alerts to lead agent via CLI or watcher."""
+"""Alerting — send alerts to lead agent via CLI or watcher.
+
+Purpose: Alerting — send alerts to lead agent via CLI or watcher.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Alerting — send alerts to lead agent via CLI or watcher. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

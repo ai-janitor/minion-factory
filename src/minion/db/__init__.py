@@ -1,8 +1,11 @@
 """DB package — re-exports all public names.
-
 Consumer imports never change: `from minion.db import get_db, init_db` still works.
 Internals are split by concern across submodules.
-"""
+
+Purpose: DB package — re-exports all public names.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: DB package — re-exports all public names. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from __future__ import annotations
 

@@ -1,9 +1,12 @@
 """Root Click group, global options (-C, --human, --compact), and shared helpers.
-
 This module defines the `cli` group and the `_agent_option` / `_store_heartbeat_agent`
 helpers used across all command modules. Submodules register their commands/groups
 onto `cli` at import time via `register_*` functions called from this file's tail.
-"""
+
+Purpose: Root Click group, global options (-C, --human, --compact), and shared helpers.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Root Click group, global options (-C, --human, --compact), and shared helpers. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

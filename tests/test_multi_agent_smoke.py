@@ -1,5 +1,4 @@
 """Multi-agent coordination smoke test.
-
 Exercises the full task DAG with two agents and blocked_by dependencies:
   1. Register lead + coder agents
   2. Create task 1 (unblocked) and task 2 (blocked by task 1)
@@ -7,7 +6,11 @@ Exercises the full task DAG with two agents and blocked_by dependencies:
   4. Verify task 2 becomes unblocked (pullable)
   5. Coder 2 pulls task 2, submits result, lead closes it
   6. Verify both tasks closed
-"""
+
+Purpose: Multi-agent coordination smoke test.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Multi-agent coordination smoke test. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

@@ -1,8 +1,11 @@
 """Roll up full requirement lineage into a single markdown report.
-
 Reads filesystem (source of truth) for content, enriches with DB for
 stage/completion/task status.
-"""
+
+Purpose: Roll up full requirement lineage into a single markdown report.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility: Roll up full requirement lineage into a single markdown report. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

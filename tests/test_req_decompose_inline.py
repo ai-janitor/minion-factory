@@ -1,4 +1,9 @@
-"""Tests for req decompose --inline flag and stdin (T85)."""
+"""Tests for req decompose --inline flag and stdin (T85).
+
+Purpose: Tests for req decompose --inline flag and stdin (T85).
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for req decompose --inline flag and stdin (T85). NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

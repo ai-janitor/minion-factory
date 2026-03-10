@@ -1,7 +1,10 @@
 """Global group — who, send, deregister, prune.
-
 Cross-repo coordination via ~/.minion/coordinator.db.
-"""
+
+Purpose: Global group — who, send, deregister, prune.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Global group — who, send, deregister, prune. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

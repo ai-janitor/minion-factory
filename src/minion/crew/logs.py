@@ -1,4 +1,9 @@
-"""Agent log tailing — read and follow daemon log files."""
+"""Agent log tailing — read and follow daemon log files.
+
+Purpose: Agent log tailing — read and follow daemon log files.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Agent log tailing — read and follow daemon log files. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import sys

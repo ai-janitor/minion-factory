@@ -1,9 +1,12 @@
 """Versioned schema migrations (v1 through v13).
-
 Each migration is an idempotent callable that receives a sqlite3.Connection.
 Migrations run in order inside individual transactions — failure rolls back
 only the failed migration.
-"""
+
+Purpose: Versioned schema migrations (v1 through v13).
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: Versioned schema migrations (v1 through v13). NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

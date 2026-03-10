@@ -1,4 +1,9 @@
-"""Suggest relevant intel docs for a topic or task — keyword search across tags, slug, and description."""
+"""Suggest relevant intel docs for a topic or task — keyword search across tags, slug, and description.
+
+Purpose: Suggest relevant intel docs for a topic or task — keyword search across tags, slug, and description.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Suggest relevant intel docs for a topic or task — keyword search across tags, slug, and description. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

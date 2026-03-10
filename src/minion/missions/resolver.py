@@ -1,4 +1,9 @@
-"""Greedy set-cover: required capabilities → minimum class slots."""
+"""Greedy set-cover: required capabilities → minimum class slots.
+
+Purpose: Greedy set-cover: required capabilities → minimum class slots.
+Rationale: Extracted into own module for single-responsibility mission orchestration.
+Responsibility: Greedy set-cover: required capabilities → minimum class slots. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

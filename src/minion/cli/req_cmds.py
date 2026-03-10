@@ -1,7 +1,10 @@
 """Req group — register, reindex, list, tree, status, update, link, unlinked, orphans, create, decompose, itemize, findings, report.
-
 Track requirements through the decomposition pipeline: seed to completed.
-"""
+
+Purpose: Req group — register, reindex, list, tree, status, update, link, unlinked, orphans, create, decompose, itemize, findings, report.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Req group — register, reindex, list, tree, status, update, link, unlinked, orphans, create, decompose, itemize, findings, report. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""CLI output formatting — JSON, human-readable, and compact modes."""
+"""CLI output formatting — JSON, human-readable, and compact modes.
+
+Purpose: CLI output formatting — JSON, human-readable, and compact modes.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: CLI output formatting — JSON, human-readable, and compact modes. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json

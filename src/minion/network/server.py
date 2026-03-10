@@ -1,10 +1,13 @@
 """API GLOBAL coordinator server — stdlib http.server, zero external deps.
-
 Endpoints delegated to handlers/ via router.py dispatch table.
 Core endpoints (6): /health, /who, /register, /send, /inbox/{agent}, /messages/recent
 Dashboard endpoints: /projects, /projects/{name}/agents|tasks|messages|raid-log, etc.
 See router.py for the full route table and handlers/ for endpoint implementations.
-"""
+
+Purpose: API GLOBAL coordinator server — stdlib http.server, zero external deps.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: API GLOBAL coordinator server — stdlib http.server, zero external deps. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

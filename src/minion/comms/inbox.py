@@ -1,8 +1,11 @@
 """Inbox operations — check_inbox, check_inbox_silent, get_history, purge_inbox.
-
 Handles reading messages (direct + broadcast), marking as read,
 WAL snapshot isolation ordering, and content file inlining.
-"""
+
+Purpose: Inbox operations — check_inbox, check_inbox_silent, get_history, purge_inbox.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Inbox operations — check_inbox, check_inbox_silent, get_history, purge_inbox. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

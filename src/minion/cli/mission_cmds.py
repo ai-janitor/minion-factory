@@ -1,7 +1,10 @@
 """Mission group — list, suggest, spawn.
-
 Compose a crew from a mission description. AI suggests roles and skills.
-"""
+
+Purpose: Mission group — list, suggest, spawn.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Mission group — list, suggest, spawn. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

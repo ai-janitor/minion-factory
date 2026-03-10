@@ -1,4 +1,9 @@
-"""Build the history block for post-compaction context recovery."""
+"""Build the history block for post-compaction context recovery.
+
+Purpose: Build the history block for post-compaction context recovery.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Build the history block for post-compaction context recovery. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

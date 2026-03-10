@@ -1,4 +1,9 @@
-"""Register an intel doc in the index."""
+"""Register an intel doc in the index.
+
+Purpose: Register an intel doc in the index.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Register an intel doc in the index. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

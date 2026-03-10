@@ -1,4 +1,9 @@
-"""Intel index — queryable knowledge layer over .work/intel/ and project docs."""
+"""Intel index — queryable knowledge layer over .work/intel/ and project docs.
+
+Purpose: Intel index — queryable knowledge layer over .work/intel/ and project docs.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Intel index — queryable knowledge layer over .work/intel/ and project docs. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from .add_doc import add_doc
 from .list_docs import list_docs

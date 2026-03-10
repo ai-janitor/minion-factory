@@ -1,7 +1,10 @@
 """Daemon group — run, start, stop, logs.
-
 Start, stop, and tail logs for individual daemon agents.
-"""
+
+Purpose: Daemon group — run, start, stop, logs.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Daemon group — run, start, stop, logs. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

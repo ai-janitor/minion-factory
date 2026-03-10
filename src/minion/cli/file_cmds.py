@@ -1,7 +1,10 @@
 """File group — claim, release, list-claims.
-
 File ownership to prevent editing conflicts between agents.
-"""
+
+Purpose: File group — claim, release, list-claims.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: File group — claim, release, list-claims. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

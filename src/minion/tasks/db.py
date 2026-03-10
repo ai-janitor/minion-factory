@@ -1,4 +1,9 @@
-"""SQLite persistence for DAG-based project/task management with transition audit logging."""
+"""SQLite persistence for DAG-based project/task management with transition audit logging.
+
+Purpose: SQLite persistence for DAG-based project/task management with transition audit logging.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: SQLite persistence for DAG-based project/task management with transition audit logging. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Add a new item to the backlog."""
+"""Add a new item to the backlog.
+
+Purpose: Add a new item to the backlog.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Add a new item to the backlog. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

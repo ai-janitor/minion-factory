@@ -1,4 +1,9 @@
-"""Mission spawn — resolve party slots and spawn a dynamic crew."""
+"""Mission spawn — resolve party slots and spawn a dynamic crew.
+
+Purpose: Mission spawn — resolve party slots and spawn a dynamic crew.
+Rationale: Extracted into own module for single-responsibility mission orchestration.
+Responsibility: Mission spawn — resolve party slots and spawn a dynamic crew. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

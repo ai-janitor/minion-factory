@@ -1,4 +1,9 @@
-"""List all registered intel docs, with optional tag filter."""
+"""List all registered intel docs, with optional tag filter.
+
+Purpose: List all registered intel docs, with optional tag filter.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: List all registered intel docs, with optional tag filter. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

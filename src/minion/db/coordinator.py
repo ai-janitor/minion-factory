@@ -1,8 +1,11 @@
 """Coordinator DB — global agent registry at ~/.minion/coordinator.db.
-
 Manages the coordinator schema, initialization, activity tracking,
 and auto-pruning of stale agents across projects.
-"""
+
+Purpose: Coordinator DB — global agent registry at ~/.minion/coordinator.db.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: Coordinator DB — global agent registry at ~/.minion/coordinator.db. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

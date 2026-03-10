@@ -1,11 +1,14 @@
 """Poll loop — replaces poll.sh with first-class Python.
-
 Returns actionable content (messages + available tasks) in one response.
 Exit codes (minion-swarm contract):
   0 — content delivered (messages and/or tasks)
   1 — timeout reached
   3 — stand_down/retire signal detected
-"""
+
+Purpose: Poll loop — replaces poll.sh with first-class Python.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Poll loop — replaces poll.sh with first-class Python. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

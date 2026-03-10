@@ -1,7 +1,10 @@
 """Agent group — register, deregister, rename, set-context, set-status, who, cold-start.
-
 Identity and lifecycle management for individual agents.
-"""
+
+Purpose: Agent group — register, deregister, rename, set-context, set-status, who, cold-start.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Agent group — register, deregister, rename, set-context, set-status, who, cold-start. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

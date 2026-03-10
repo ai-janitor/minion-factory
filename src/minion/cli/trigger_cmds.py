@@ -1,7 +1,10 @@
 """Trigger group — list, clear-moon-crash.
-
 Manage trigger words that flag messages for special handling.
-"""
+
+Purpose: Trigger group — list, clear-moon-crash.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Trigger group — list, clear-moon-crash. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Prompt building — boot, inbox, watcher prompts."""
+"""Prompt building — boot, inbox, watcher prompts.
+
+Purpose: Prompt building — boot, inbox, watcher prompts.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Prompt building — boot, inbox, watcher prompts. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import re

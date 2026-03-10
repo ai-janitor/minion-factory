@@ -1,10 +1,8 @@
 """Network tier — cross-machine agent comms via HTTP API.
-
 Three-tier routing hierarchy:
   LOCAL         (.work/minion.db, same repo)
   SYSTEM GLOBAL (~/.minion/coordinator.db, same machine)
   API GLOBAL    (HTTP server, cross-machine)
-
 Modules:
   server.py      — HTTP server entry point (delegates to router + handlers)
   client.py      — HTTP client for API consumers
@@ -16,7 +14,11 @@ Modules:
   outbox.py      — Outbound message queue (unchanged)
   dashboard.py   — Inline HTML dashboard (unchanged)
   handlers/      — Endpoint handler modules (core, projects, flows, etc.)
-"""
+
+Purpose: Network tier — cross-machine agent comms via HTTP API.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Network tier — cross-machine agent comms via HTTP API. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from .server import serve
 from .client import NetworkClient

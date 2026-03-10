@@ -1,9 +1,12 @@
 """Agent-related DB helpers — enrichment, staleness, HP summary.
-
 Functions that read/transform agent rows from the agents table.
 Separated from connection/schema because they import from minion.auth
 (deferred to avoid circular imports).
-"""
+
+Purpose: Agent-related DB helpers — enrichment, staleness, HP summary.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: Agent-related DB helpers — enrichment, staleness, HP summary. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

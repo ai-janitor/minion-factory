@@ -1,4 +1,9 @@
-"""Monitoring — party_status, check_activity, check_freshness, sitrep, update_hp."""
+"""Monitoring — party_status, check_activity, check_freshness, sitrep, update_hp.
+
+Purpose: Monitoring — party_status, check_activity, check_freshness, sitrep, update_hp.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Monitoring — party_status, check_activity, check_freshness, sitrep, update_hp. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

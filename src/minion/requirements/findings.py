@@ -1,8 +1,11 @@
 """Write findings.md for a requirement from structured input.
-
 Accepts root_cause, evidence list, and recommendation — writes the
 markdown file and advances the requirement stage to findings_ready.
-"""
+
+Purpose: Write findings.md for a requirement from structured input.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility: Write findings.md for a requirement from structured input. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

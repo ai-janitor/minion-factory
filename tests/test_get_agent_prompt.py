@@ -1,4 +1,9 @@
-"""Tests for get_agent_prompt() — crew agent prompt lookup."""
+"""Tests for get_agent_prompt() — crew agent prompt lookup.
+
+Purpose: Tests for get_agent_prompt() — crew agent prompt lookup.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for get_agent_prompt() — crew agent prompt lookup. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

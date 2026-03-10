@@ -1,16 +1,18 @@
 """Daemon trigger handlers — extracted from runner.py for visibility.
-
 Each trigger has a clear contract:
 - When it fires
 - What it does
 - What the daemon does next
-
 Triggers:
     phoenix_down  — agent context exhausted (HP ≤ 5%), daemon respawns with fresh session
     stand_down    — leader dismissed the party (poll exit code 3), daemon exits
     standdown     — no available work after task completion, daemon polls cheaply (no API calls)
     signal        — SIGTERM/SIGINT received, daemon exits
-"""
+
+Purpose: Daemon trigger handlers — extracted from runner.py for visibility.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Daemon trigger handlers — extracted from runner.py for visibility. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

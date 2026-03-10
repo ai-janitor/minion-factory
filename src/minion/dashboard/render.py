@@ -1,9 +1,12 @@
 """ANSI screen rendering for the TUI dashboard.
-
 Produces a single string representing the full screen.
 clear_and_print() flushes it atomically to stdout.
 No external dependencies — pure ANSI escape codes.
-"""
+
+Purpose: ANSI screen rendering for the TUI dashboard.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: ANSI screen rendering for the TUI dashboard. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

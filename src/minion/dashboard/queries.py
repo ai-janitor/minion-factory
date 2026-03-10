@@ -1,8 +1,11 @@
 """SQL queries for the TUI dashboard.
-
 All queries use PRAGMA query_only=ON connection — no writes permitted.
 Returns list[sqlite3.Row] so render layer can access columns by name.
-"""
+
+Purpose: SQL queries for the TUI dashboard.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: SQL queries for the TUI dashboard. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

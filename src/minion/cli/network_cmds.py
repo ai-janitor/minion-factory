@@ -1,7 +1,10 @@
 """Network group — serve, gen-cert, status, who, outbox.
-
 Cross-machine agent comms via API GLOBAL tier.
-"""
+
+Purpose: Network group — serve, gen-cert, status, who, outbox.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Network group — serve, gen-cert, status, who, outbox. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

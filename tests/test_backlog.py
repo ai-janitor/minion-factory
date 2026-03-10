@@ -1,4 +1,9 @@
-"""Tests for the backlog subsystem — unit, CRUD integration, promote, kill/defer, and CLI."""
+"""Tests for the backlog subsystem — unit, CRUD integration, promote, kill/defer, and CLI.
+
+Purpose: Tests for the backlog subsystem — unit, CRUD integration, promote, kill/defer, and CLI.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for the backlog subsystem — unit, CRUD integration, promote, kill/defer, and CLI. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

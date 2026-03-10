@@ -1,7 +1,10 @@
 """Role-level prompt injection.
-
 Each subdirectory owns prompts for one agent class (lead, coder, etc.).
-"""
+
+Purpose: Role-level prompt injection.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Role-level prompt injection. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from __future__ import annotations
 

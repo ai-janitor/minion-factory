@@ -1,8 +1,11 @@
 """Small utility functions — timestamps, agent registration.
-
 Shared helpers that don't fit neatly into agents/messages/connection but
 are used across the codebase.
-"""
+
+Purpose: Small utility functions — timestamps, agent registration.
+Rationale: Extracted into own module for single-responsibility database access.
+Responsibility: Small utility functions — timestamps, agent registration. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

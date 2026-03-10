@@ -1,4 +1,9 @@
-"""HP tracking — extract token usage from stream-json, update HP in DB."""
+"""HP tracking — extract token usage from stream-json, update HP in DB.
+
+Purpose: HP tracking — extract token usage from stream-json, update HP in DB.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: HP tracking — extract token usage from stream-json, update HP in DB. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json

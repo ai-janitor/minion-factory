@@ -1,4 +1,9 @@
-"""Stream parsing — render stream-json lines, detect compaction markers."""
+"""Stream parsing — render stream-json lines, detect compaction markers.
+
+Purpose: Stream parsing — render stream-json lines, detect compaction markers.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Stream parsing — render stream-json lines, detect compaction markers. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json

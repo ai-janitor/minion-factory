@@ -1,10 +1,13 @@
 """Gate resolution — check preconditions before allowing a DAG transition.
-
 Three gate types:
   1. Filesystem artifacts — file exists and is not empty (supports globs)
   2. DB conditions — query child/sibling task states
   3. Task preconditions — check task row fields
-"""
+
+Purpose: Gate resolution — check preconditions before allowing a DAG transition.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Gate resolution — check preconditions before allowing a DAG transition. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

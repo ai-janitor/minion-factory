@@ -1,7 +1,10 @@
 """Intel group — add, list, find, get, read, link, suggest, register-docs, for-task, reindex.
-
 Index, link, and query .work/intel/ knowledge docs.
-"""
+
+Purpose: Intel group — add, list, find, get, read, link, suggest, register-docs, for-task, reindex.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Intel group — add, list, find, get, read, link, suggest, register-docs, for-task, reindex. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

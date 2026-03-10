@@ -1,4 +1,9 @@
-"""Offline outbox — queue messages when API GLOBAL is unreachable, deliver on next poll."""
+"""Offline outbox — queue messages when API GLOBAL is unreachable, deliver on next poll.
+
+Purpose: Offline outbox — queue messages when API GLOBAL is unreachable, deliver on next poll.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Offline outbox — queue messages when API GLOBAL is unreachable, deliver on next poll. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

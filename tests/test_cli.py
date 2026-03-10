@@ -1,4 +1,9 @@
-"""CLI group smoke tests."""
+"""CLI group smoke tests.
+
+Purpose: CLI group smoke tests.
+Rationale: Test coverage for the corresponding module.
+Responsibility: CLI group smoke tests. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 import click
 from click.testing import CliRunner
 from minion.cli import cli

@@ -1,4 +1,9 @@
-"""Tests for update_stage skip=True shortcut (T81)."""
+"""Tests for update_stage skip=True shortcut (T81).
+
+Purpose: Tests for update_stage skip=True shortcut (T81).
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for update_stage skip=True shortcut (T81). NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

@@ -1,8 +1,11 @@
 """Backwards-compat aliases — old flat command names registered on the root CLI.
-
 All aliases are hidden from --help to encourage the new grouped syntax,
 but remain functional so existing scripts and agents don't break.
-"""
+
+Purpose: Backwards-compat aliases — old flat command names registered on the root CLI.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Backwards-compat aliases — old flat command names registered on the root CLI. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

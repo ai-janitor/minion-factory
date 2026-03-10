@@ -1,9 +1,12 @@
 """Message sending — send() local and send_global() cross-repo.
-
 send() delivers within the local project DB with inbox discipline,
 CC handling, trigger detection, and lead auto-CC.
 send_global() always routes through the coordinator DB for cross-repo delivery.
-"""
+
+Purpose: Message sending — send() local and send_global() cross-repo.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Message sending — send() local and send_global() cross-repo. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

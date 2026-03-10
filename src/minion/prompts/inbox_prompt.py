@@ -1,4 +1,9 @@
-"""Compose the full inbox prompt from protocol + rules + inbox sections."""
+"""Compose the full inbox prompt from protocol + rules + inbox sections.
+
+Purpose: Compose the full inbox prompt from protocol + rules + inbox sections.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Compose the full inbox prompt from protocol + rules + inbox sections. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

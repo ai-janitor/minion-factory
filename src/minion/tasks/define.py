@@ -1,4 +1,9 @@
-"""Define a task: create spec file + task record in one command."""
+"""Define a task: create spec file + task record in one command.
+
+Purpose: Define a task: create spec file + task record in one command.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Define a task: create spec file + task record in one command. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

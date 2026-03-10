@@ -1,4 +1,9 @@
-"""Verify the minion console script entry point resolves."""
+"""Verify the minion console script entry point resolves.
+
+Purpose: Verify the minion console script entry point resolves.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Verify the minion console script entry point resolves. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 from minion.cli import cli
 
 

@@ -1,4 +1,9 @@
-"""Rebuild intel_docs and intel_links from filesystem frontmatter."""
+"""Rebuild intel_docs and intel_links from filesystem frontmatter.
+
+Purpose: Rebuild intel_docs and intel_links from filesystem frontmatter.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Rebuild intel_docs and intel_links from filesystem frontmatter. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

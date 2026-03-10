@@ -1,7 +1,10 @@
 """Task group — create, assign, update, list, get, pull, complete-phase, block, done, result, review, test, spec, lineage, define.
-
 Work item lifecycle: creation through DAG-routed completion.
-"""
+
+Purpose: Task group — create, assign, update, list, get, pull, complete-phase, block, done, result, review, test, spec, lineage, define.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Task group — create, assign, update, list, get, pull, complete-phase, block, done, result, review, test, spec, lineage, define. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

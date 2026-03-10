@@ -1,8 +1,11 @@
 """HTTP client for API GLOBAL network tier — stdlib urllib, zero external deps.
-
 All methods return dicts matching the server's JSON responses.
 Failures return {"error": "..."} instead of raising.
-"""
+
+Purpose: HTTP client for API GLOBAL network tier — stdlib urllib, zero external deps.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: HTTP client for API GLOBAL network tier — stdlib urllib, zero external deps. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

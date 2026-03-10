@@ -1,3 +1,10 @@
+"""  Init  .
+
+Purpose:   Init   module.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility:   Init  . NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic.
+"""
 from .crud import (
     create,
     register,

@@ -1,5 +1,4 @@
 """End-to-end DAG smoke test — walks a requirement seed to completed.
-
 Exercises the full integration path:
   1. Register a lead agent
   2. Create a requirement via the Python API
@@ -9,7 +8,11 @@ Exercises the full integration path:
   6. Walk each child task through: pull → result → review → test → done
   7. Advance parent requirement to completed
   8. Assert final state: all tasks closed, requirement completed
-"""
+
+Purpose: End-to-end DAG smoke test — walks a requirement seed to completed.
+Rationale: Test coverage for the corresponding module.
+Responsibility: End-to-end DAG smoke test — walks a requirement seed to completed. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

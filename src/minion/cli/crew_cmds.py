@@ -1,7 +1,10 @@
 """Crew group — list, spawn, stand-down, halt, recruit, hand-off-zone, status.
-
 Spawn agent crews from YAML, manage party health, and coordinate handoffs.
-"""
+
+Purpose: Crew group — list, spawn, stand-down, halt, recruit, hand-off-zone, status.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Crew group — list, spawn, stand-down, halt, recruit, hand-off-zone, status. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

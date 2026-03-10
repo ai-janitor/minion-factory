@@ -1,4 +1,9 @@
-"""Task comments — mid-flight context injection and phase input tracking."""
+"""Task comments — mid-flight context injection and phase input tracking.
+
+Purpose: Task comments — mid-flight context injection and phase input tracking.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Task comments — mid-flight context injection and phase input tracking. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

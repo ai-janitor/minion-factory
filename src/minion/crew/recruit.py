@@ -1,4 +1,9 @@
-"""Recruit — add an ad-hoc agent into a running crew's tmux session."""
+"""Recruit — add an ad-hoc agent into a running crew's tmux session.
+
+Purpose: Recruit — add an ad-hoc agent into a running crew's tmux session.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Recruit — add an ad-hoc agent into a running crew's tmux session. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

@@ -1,7 +1,10 @@
 """Bridge to task DAG engine — all queries route through YAML-defined flows.
-
 No fallbacks. Missing YAML = hard failure.
-"""
+
+Purpose: Bridge to task DAG engine — all queries route through YAML-defined flows.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Bridge to task DAG engine — all queries route through YAML-defined flows. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

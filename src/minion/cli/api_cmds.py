@@ -1,9 +1,12 @@
 """API group — server daemon + remote client CLI.
-
 Server: start/stop/status/restart the network API server daemon.
 Remote: set-remote + remote-* commands for operating against remote servers.
 Manages state via ~/.minion/api-server.json and ~/.minion/remotes.json.
-"""
+
+Purpose: API group — server daemon + remote client CLI.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: API group — server daemon + remote client CLI. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

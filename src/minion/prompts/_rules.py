@@ -1,4 +1,9 @@
-"""Load daemon rules from contract or fallback, plus capability prompts."""
+"""Load daemon rules from contract or fallback, plus capability prompts.
+
+Purpose: Load daemon rules from contract or fallback, plus capability prompts.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Load daemon rules from contract or fallback, plus capability prompts. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

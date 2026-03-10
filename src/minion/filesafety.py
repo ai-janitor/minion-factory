@@ -1,4 +1,9 @@
-"""File Safety — claim, release, get_claims."""
+"""File Safety — claim, release, get_claims.
+
+Purpose: File Safety — claim, release, get_claims.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: File Safety — claim, release, get_claims. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

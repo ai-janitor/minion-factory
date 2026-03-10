@@ -1,4 +1,9 @@
-"""Get all intel docs linked to a specific task."""
+"""Get all intel docs linked to a specific task.
+
+Purpose: Get all intel docs linked to a specific task.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Get all intel docs linked to a specific task. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

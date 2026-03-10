@@ -1,4 +1,9 @@
-"""Missions — capability-driven team composition."""
+"""Missions — capability-driven team composition.
+
+Purpose: Missions — capability-driven team composition.
+Rationale: Extracted into own module for single-responsibility mission orchestration.
+Responsibility: Missions — capability-driven team composition. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from minion.missions.loader import load_mission, list_missions, Mission
 from minion.missions.resolver import resolve_slots

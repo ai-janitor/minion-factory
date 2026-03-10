@@ -1,4 +1,9 @@
-"""Link an intel doc to a task or requirement."""
+"""Link an intel doc to a task or requirement.
+
+Purpose: Link an intel doc to a task or requirement.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Link an intel doc to a task or requirement. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

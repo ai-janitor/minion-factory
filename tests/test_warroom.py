@@ -1,4 +1,9 @@
-"""Tests for warroom — battle plan creation and test fixtures (T78)."""
+"""Tests for warroom — battle plan creation and test fixtures (T78).
+
+Purpose: Tests for warroom — battle plan creation and test fixtures (T78).
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for warroom — battle plan creation and test fixtures (T78). NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Verify every module imports cleanly with no errors."""
+"""Verify every module imports cleanly with no errors.
+
+Purpose: Verify every module imports cleanly with no errors.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Verify every module imports cleanly with no errors. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 
 def test_import_minion():

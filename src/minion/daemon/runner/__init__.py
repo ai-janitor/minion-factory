@@ -1,5 +1,4 @@
 """Agent daemon runner — assembled from single-concern mixins.
-
 Each mixin file holds one logical concern:
     _constants    — AgentRunResult, token constants, helpers
     _stream       — stream-json parsing, compaction detection
@@ -11,7 +10,11 @@ Each mixin file holds one logical concern:
     _execution    — subprocess management, prompt processing
     _alerting     — lead agent alerts
     _watcher_mode — legacy direct-DB watcher mode
-"""
+
+Purpose: Agent daemon runner — assembled from single-concern mixins.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Agent daemon runner — assembled from single-concern mixins. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 from __future__ import annotations
 
 import signal

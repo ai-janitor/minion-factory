@@ -1,4 +1,9 @@
-"""Load shared contract JSON files from docs/contracts/."""
+"""Load shared contract JSON files from docs/contracts/.
+
+Purpose: Load shared contract JSON files from docs/contracts/.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Load shared contract JSON files from docs/contracts/. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

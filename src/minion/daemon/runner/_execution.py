@@ -1,4 +1,9 @@
-"""Agent execution — run commands, handle resume, process prompts."""
+"""Agent execution — run commands, handle resume, process prompts.
+
+Purpose: Agent execution — run commands, handle resume, process prompts.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: Agent execution — run commands, handle resume, process prompts. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

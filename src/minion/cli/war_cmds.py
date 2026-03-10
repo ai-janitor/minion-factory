@@ -1,7 +1,10 @@
 """War group — set-plan, get-plan, update-status, log, list-log.
-
 Session strategy: objectives and progress tracking.
-"""
+
+Purpose: War group — set-plan, get-plan, update-status, log, list-log.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: War group — set-plan, get-plan, update-status, log, list-log. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

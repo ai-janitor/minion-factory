@@ -1,4 +1,9 @@
-"""DB operations — invocation log, child PID tracking, session ID, compaction log."""
+"""DB operations — invocation log, child PID tracking, session ID, compaction log.
+
+Purpose: DB operations — invocation log, child PID tracking, session ID, compaction log.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: DB operations — invocation log, child PID tracking, session ID, compaction log. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os

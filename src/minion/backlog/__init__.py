@@ -1,8 +1,11 @@
 """Backlog — lightweight capture for ideas, bugs, requests, smells, and debt.
-
 Items live under .work/backlog/<type>/<slug>/ as README.md folders.
 The DB is a rebuildable index; the filesystem is the source of truth.
-"""
+
+Purpose: Backlog — lightweight capture for ideas, bugs, requests, smells, and debt.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Backlog — lightweight capture for ideas, bugs, requests, smells, and debt. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from .add_item import add
 from .close_item import kill, defer, reopen

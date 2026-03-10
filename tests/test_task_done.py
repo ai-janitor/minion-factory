@@ -1,4 +1,9 @@
-"""Tests for the done_task function — fast-close for externally completed tasks."""
+"""Tests for the done_task function — fast-close for externally completed tasks.
+
+Purpose: Tests for the done_task function — fast-close for externally completed tasks.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for the done_task function — fast-close for externally completed tasks. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

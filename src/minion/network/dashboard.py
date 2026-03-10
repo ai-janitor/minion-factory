@@ -1,4 +1,9 @@
-"""Web dashboard HTML — single-page, inline CSS+JS, token auth via localStorage."""
+"""Web dashboard HTML — single-page, inline CSS+JS, token auth via localStorage.
+
+Purpose: Web dashboard HTML — single-page, inline CSS+JS, token auth via localStorage.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Web dashboard HTML — single-page, inline CSS+JS, token auth via localStorage. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 DASHBOARD_HTML = """\
 <!DOCTYPE html>

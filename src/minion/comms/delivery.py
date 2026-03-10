@@ -1,8 +1,11 @@
 """Cross-repo message delivery — write message file + DB INSERT to remote project.
-
 Looks up target agent in the coordinator DB, writes message content to the
 target project's inbox directory, and inserts metadata into the target's local DB.
-"""
+
+Purpose: Cross-repo message delivery — write message file + DB INSERT to remote project.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Cross-repo message delivery — write message file + DB INSERT to remote project. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

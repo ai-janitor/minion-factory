@@ -1,10 +1,13 @@
 """Context lifecycle — stub creation, content checking, path resolution.
-
 Handles the three phases of context:
   1. Stage entry: create stub from template if file doesn't exist
   2. Pull-task: assemble context chain (task + parent + sibling)
   3. Stage exit: verify context file is not empty/stub-only
-"""
+
+Purpose: Context lifecycle — stub creation, content checking, path resolution.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Context lifecycle — stub creation, content checking, path resolution. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

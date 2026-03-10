@@ -1,4 +1,9 @@
-"""Claim a specific task — DAG-aware task puller."""
+"""Claim a specific task — DAG-aware task puller.
+
+Purpose: Claim a specific task — DAG-aware task puller.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Claim a specific task — DAG-aware task puller. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

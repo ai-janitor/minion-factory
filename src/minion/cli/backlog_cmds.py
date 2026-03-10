@@ -1,7 +1,10 @@
 """Backlog group — add, list, show, update, promote, kill, defer, reindex.
-
 Capture and triage ideas, bugs, requests, smells, and tech debt.
-"""
+
+Purpose: Backlog group — add, list, show, update, promote, kill, defer, reindex.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Backlog group — add, list, show, update, promote, kill, defer, reindex. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

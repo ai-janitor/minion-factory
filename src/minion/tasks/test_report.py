@@ -1,4 +1,9 @@
-"""Write test reports and advance task phase."""
+"""Write test reports and advance task phase.
+
+Purpose: Write test reports and advance task phase.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Write test reports and advance task phase. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

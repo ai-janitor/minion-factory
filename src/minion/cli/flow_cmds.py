@@ -1,7 +1,10 @@
 """Flow group — list, show, next-status, transition.
-
 Inspect task flow DAGs: stages, transitions, and routing rules.
-"""
+
+Purpose: Flow group — list, show, next-status, transition.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Flow group — list, show, next-status, transition. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

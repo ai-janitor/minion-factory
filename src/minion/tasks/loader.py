@@ -1,4 +1,9 @@
-"""YAML loading, inheritance resolution, and validation for task flow DAGs."""
+"""YAML loading, inheritance resolution, and validation for task flow DAGs.
+
+Purpose: YAML loading, inheritance resolution, and validation for task flow DAGs.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: YAML loading, inheritance resolution, and validation for task flow DAGs. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

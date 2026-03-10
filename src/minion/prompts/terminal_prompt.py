@@ -1,4 +1,9 @@
-"""Build prompt for terminal-transport agents."""
+"""Build prompt for terminal-transport agents.
+
+Purpose: Build prompt for terminal-transport agents.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Build prompt for terminal-transport agents. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

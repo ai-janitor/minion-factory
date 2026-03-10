@@ -1,4 +1,9 @@
-"""Tests for the requirements subsystem — CRUD, stage transitions, CLI commands."""
+"""Tests for the requirements subsystem — CRUD, stage transitions, CLI commands.
+
+Purpose: Tests for the requirements subsystem — CRUD, stage transitions, CLI commands.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for the requirements subsystem — CRUD, stage transitions, CLI commands. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

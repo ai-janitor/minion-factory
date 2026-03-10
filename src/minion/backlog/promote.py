@@ -1,9 +1,12 @@
 """Promote a backlog item into the requirement pipeline.
-
 Copies the backlog README.md into .work/requirements/{target}/, registers the
 requirement in the DB, and updates the backlog row to status=promoted.
 Includes DAG crew requirements and available characters on success.
-"""
+
+Purpose: Promote a backlog item into the requirement pipeline.
+Rationale: Extracted into own module for single-responsibility backlog management.
+Responsibility: Promote a backlog item into the requirement pipeline. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

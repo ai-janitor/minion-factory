@@ -1,3 +1,10 @@
+"""  Init  .
+
+Purpose:   Init   module.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility:   Init  . NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic.
+"""
 from .dag import Stage, TaskFlow, Transition
 from .db import TaskDB
 from .loader import load_flow, list_flows

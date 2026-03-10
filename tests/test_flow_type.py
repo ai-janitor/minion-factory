@@ -1,10 +1,13 @@
 """Tests for the flow_type column — covers the task_type→flow_type rename.
-
 Background: v3 migration renamed tasks.task_type to tasks.flow_type. A legacy
 migration path (_migrate) was re-adding task_type after v3 ran. Application
 code (create_task) always writes to flow_type, so tests verify that the column
 used for storage is flow_type and that flow_type carries the correct value.
-"""
+
+Purpose: Tests for the flow_type column — covers the task_type→flow_type rename.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for the flow_type column — covers the task_type→flow_type rename. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

@@ -1,4 +1,9 @@
-"""Compose the watcher-mode prompt from protocol + rules + message."""
+"""Compose the watcher-mode prompt from protocol + rules + message.
+
+Purpose: Compose the watcher-mode prompt from protocol + rules + message.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Compose the watcher-mode prompt from protocol + rules + message. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

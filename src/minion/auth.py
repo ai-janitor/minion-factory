@@ -1,4 +1,9 @@
-"""Class-based authorization, constants, and gate functions."""
+"""Class-based authorization, constants, and gate functions.
+
+Purpose: Class-based authorization, constants, and gate functions.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Class-based authorization, constants, and gate functions. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

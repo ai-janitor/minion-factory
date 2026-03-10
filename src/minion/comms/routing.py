@@ -1,8 +1,11 @@
 """Global agent routing — who_global, deregister_global, prune_global.
-
 Manages agent presence and cleanup in the coordinator DB (cross-repo registry).
 Includes task-protection logic to prevent pruning agents with active work.
-"""
+
+Purpose: Global agent routing — who_global, deregister_global, prune_global.
+Rationale: Extracted into own module for single-responsibility agent communication.
+Responsibility: Global agent routing — who_global, deregister_global, prune_global. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

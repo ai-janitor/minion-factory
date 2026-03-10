@@ -1,4 +1,9 @@
-"""Shared tmux helpers — pane management, Terminal.app integration."""
+"""Shared tmux helpers — pane management, Terminal.app integration.
+
+Purpose: Shared tmux helpers — pane management, Terminal.app integration.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Shared tmux helpers — pane management, Terminal.app integration. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

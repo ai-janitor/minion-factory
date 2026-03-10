@@ -1,12 +1,15 @@
 """Tests for the requirement-lite flow — 4-stage shortcut lifecycle.
-
 Covers:
 - requirement-lite.yaml has exactly 4 stages
 - Transitions work: seed → decomposing → tasked → completed
 - Default flow still uses the full requirement.yaml (9 stages)
 - register() stores flow_type correctly
 - update_stage() picks up flow_type from the DB
-"""
+
+Purpose: Tests for the requirement-lite flow — 4-stage shortcut lifecycle.
+Rationale: Test coverage for the corresponding module.
+Responsibility: Tests for the requirement-lite flow — 4-stage shortcut lifecycle. NOT responsible for unrelated concerns.
+Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 

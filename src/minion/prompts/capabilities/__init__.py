@@ -1,8 +1,11 @@
 """Capability-level prompt injection.
-
 Each subdirectory owns prompts for one capability (code, build, test, etc.).
 Agents get prompts injected for every capability their class grants.
-"""
+
+Purpose: Capability-level prompt injection.
+Rationale: Extracted into own module following single-responsibility principle.
+Responsibility: Capability-level prompt injection. NOT responsible for unrelated concerns.
+Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from __future__ import annotations
 

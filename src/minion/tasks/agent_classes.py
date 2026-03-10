@@ -1,4 +1,9 @@
-"""Load agent class registry from YAML — single source of truth for class definitions."""
+"""Load agent class registry from YAML — single source of truth for class definitions.
+
+Purpose: Load agent class registry from YAML — single source of truth for class definitions.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Load agent class registry from YAML — single source of truth for class definitions. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

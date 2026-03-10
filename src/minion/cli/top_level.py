@@ -1,7 +1,10 @@
 """Top-level commands — poll, sitrep, docs, register shortcuts, and other ungrouped commands.
-
 These live directly on the root CLI group, not under a subgroup.
-"""
+
+Purpose: Top-level commands — poll, sitrep, docs, register shortcuts, and other ungrouped commands.
+Rationale: Extracted into own module for single-responsibility CLI command grouping.
+Responsibility: Top-level commands — poll, sitrep, docs, register shortcuts, and other ungrouped commands. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 

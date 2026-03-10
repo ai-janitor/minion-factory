@@ -1,4 +1,9 @@
-"""State I/O — read/write agent state JSON, load resume flag, respawn reset."""
+"""State I/O — read/write agent state JSON, load resume flag, respawn reset.
+
+Purpose: State I/O — read/write agent state JSON, load resume flag, respawn reset.
+Rationale: Extracted into own module for single-responsibility daemon transport.
+Responsibility: State I/O — read/write agent state JSON, load resume flag, respawn reset. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json

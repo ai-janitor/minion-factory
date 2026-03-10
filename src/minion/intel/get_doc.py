@@ -1,4 +1,9 @@
-"""Fetch intel doc metadata and its linked entities."""
+"""Fetch intel doc metadata and its linked entities.
+
+Purpose: Fetch intel doc metadata and its linked entities.
+Rationale: Extracted into own module for single-responsibility intel management.
+Responsibility: Fetch intel doc metadata and its linked entities. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

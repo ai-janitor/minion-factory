@@ -1,9 +1,12 @@
 """Requirements CRUD — register, reindex, stage transitions, linking, queries.
-
 Paths stored in the DB are relative to .work/requirements/ so they survive
 project directory moves. The filesystem is the source of truth; the DB is a
 rebuildable runtime index.
-"""
+
+Purpose: Requirements CRUD — register, reindex, stage transitions, linking, queries.
+Rationale: Extracted into own module for single-responsibility requirement tracking.
+Responsibility: Requirements CRUD — register, reindex, stage transitions, linking, queries. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

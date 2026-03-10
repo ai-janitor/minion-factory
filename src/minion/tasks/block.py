@@ -1,4 +1,9 @@
-"""Block a task — write block report and transition to blocked status."""
+"""Block a task — write block report and transition to blocked status.
+
+Purpose: Block a task — write block report and transition to blocked status.
+Rationale: Extracted into own module for single-responsibility task management.
+Responsibility: Block a task — write block report and transition to blocked status. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 

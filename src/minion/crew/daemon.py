@@ -1,4 +1,9 @@
-"""Daemon transport — tmux pane with tail -f, in-process daemon management."""
+"""Daemon transport — tmux pane with tail -f, in-process daemon management.
+
+Purpose: Daemon transport — tmux pane with tail -f, in-process daemon management.
+Rationale: Extracted into own module for single-responsibility crew lifecycle management.
+Responsibility: Daemon transport — tmux pane with tail -f, in-process daemon management. NOT responsible for unrelated concerns.
+Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
