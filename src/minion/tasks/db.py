@@ -18,6 +18,18 @@ class TaskDB:
         self._conn = get_db()
         self._flows_dir = Path(flows_dir) if flows_dir else None
 
+    def close(self) -> None:
+        """Explicitly close the underlying SQLite connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+
+    def __enter__(self) -> "TaskDB":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     # --- helpers ---
 
     def _row_to_dict(self, row) -> dict | None:
