@@ -189,6 +189,31 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
                             f"and cannot self-review stage '{current}'. Assign a different reviewer."
                         }
 
+        # --- SU-21: Scaffolding gate enforcement ---
+        # If current stage has gate: "scaffolding", verify listed files exist on disk.
+        # Lead class bypasses this check. Empty files field = skip with warning.
+        current_stage_obj_for_gate = flow.stages.get(current)
+        if current_stage_obj_for_gate and current_stage_obj_for_gate.gate == "scaffolding":
+            # Read task's files field
+            cursor.execute("SELECT files FROM tasks WHERE id = ?", (task_id,))
+            files_row = cursor.fetchone()
+            files_field = (files_row["files"] or "") if files_row else ""
+            if files_field.strip():
+                import os as _os
+                file_paths = [f.strip() for f in files_field.split(",") if f.strip()]
+                project_root = _os.environ.get("MINION_PROJECT_DIR", _os.getcwd())
+                missing = []
+                for fp in file_paths:
+                    abs_path = _os.path.join(project_root, fp) if not _os.path.isabs(fp) else fp
+                    if not _os.path.exists(abs_path):
+                        missing.append(fp)
+                if missing and agent_class != "lead":
+                    return {
+                        "error": f"BLOCKED: Scaffolding incomplete. Missing files: {missing}. "
+                        f"Create stubs before advancing."
+                    }
+                # Lead bypass or all files present — proceed
+
         # DAG decides next status — no fallback
         new_status = flow.next_status(current, passed)
 
