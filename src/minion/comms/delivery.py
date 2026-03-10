@@ -7,11 +7,14 @@ target project's inbox directory, and inserts metadata into the target's local D
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import sqlite3
 
 from minion.db import connect, get_coordinator_db
 from minion.fs import atomic_write_file
+
+log = logging.getLogger(__name__)
 
 
 def route_cross_repo(
@@ -75,8 +78,7 @@ def route_cross_repo(
         remote_conn.close()
         db_indexed = True
     except Exception as exc:
-        import sys as _sys
-        print(f"WARNING: cross-repo DB insert failed: {type(exc).__name__}: {exc}", file=_sys.stderr)
+        log.warning("cross-repo DB insert failed: %s: %s", type(exc).__name__, exc)
         # File delivered even if DB insert fails
 
     result = {

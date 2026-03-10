@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import yaml
 
 from ._schema import REQUIRED_TOP_KEYS, VALID_STAGE_KEYS, VALID_TOP_KEYS
 from .dag import Stage, TaskFlow
+
+log = logging.getLogger(__name__)
 
 # Search order: env var, ~/.minion/task-flows/, bundled with package
 def _find_flows_dir() -> Path:
@@ -201,8 +204,7 @@ def _load_all_flows(flows_dir: Path | None = None) -> None:
             flow = _load_flow_from_disk(name, flows_path)
             _FLOW_CACHE[name] = flow
         except Exception as exc:
-            import sys
-            print(f"WARNING: failed to load flow '{name}': {exc}", file=sys.stderr)
+            log.warning("failed to load flow %r: %s", name, exc)
     _FLOWS_LOADED = True
 
 

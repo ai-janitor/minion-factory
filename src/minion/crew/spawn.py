@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 from minion.auth import VALID_CLASSES
 from minion.db import get_db, reset_db_path
@@ -358,8 +361,7 @@ def spawn_party(
             capture_output=True, text=True,
         )
         if result.returncode != 0:
-            import sys as _sys
-            print(f"WARNING: failed to spawn pane {pane_name!r}: {result.stderr.strip()}", file=_sys.stderr)
+            log.warning("failed to spawn pane %r: %s", pane_name, result.stderr.strip())
             continue
         # Move to pane 0 so dashboards/monitors sit at the top
         new_pane_idx = pane_idx

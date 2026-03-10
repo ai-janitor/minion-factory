@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 from typing import Any
 
 from minion.db import enrich_agent_row, get_db, get_lead, now_iso
 from minion.fs import atomic_write_file, message_file_path, read_content_file
+
+log = logging.getLogger(__name__)
 
 
 def _safe_mtime(file_path: str) -> str | None:
@@ -33,8 +36,7 @@ def _agent_judgment(
                 if (now - mtime_dt).total_seconds() < 5 * 60:
                     return "active"
             except ValueError:
-                import sys
-                print(f"WARNING: corrupt mtime timestamp: {mt!r}", file=sys.stderr)
+                log.warning("corrupt mtime timestamp: %r", mt)
 
     if last_seen:
         try:
@@ -46,8 +48,7 @@ def _agent_judgment(
                 return "idle"
             return "possibly dead"
         except ValueError:
-            import sys
-            print(f"WARNING: corrupt last_seen timestamp: {last_seen!r}", file=sys.stderr)
+            log.warning("corrupt last_seen timestamp: %r", last_seen)
 
     if last_task_update:
         try:
@@ -59,8 +60,7 @@ def _agent_judgment(
                 return "idle"
             return "possibly dead"
         except ValueError:
-            import sys
-            print(f"WARNING: corrupt last_task_update timestamp: {last_task_update!r}", file=sys.stderr)
+            log.warning("corrupt last_task_update timestamp: %r", last_task_update)
 
     return "possibly dead"
 
@@ -142,8 +142,7 @@ def check_activity(agent_name: str) -> dict[str, object]:
                 ls = datetime.datetime.fromisoformat(row["last_seen"])
                 result["last_seen_mins_ago"] = int((now - ls).total_seconds() // 60)
             except ValueError:
-                import sys
-                print(f"WARNING: corrupt last_seen for {agent_name}: {row['last_seen']!r}", file=sys.stderr)
+                log.warning("corrupt last_seen for %s: %r", agent_name, row["last_seen"])
 
         cursor.execute(
             """SELECT id, title, status, updated_at, activity_count, zone
@@ -336,7 +335,6 @@ def sitrep() -> dict[str, object]:
 
 def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
     """Check HP thresholds, send alerts to lead, track fired state. Own DB connection."""
-    import sys
     conn = get_db()
     now = now_iso()
     try:
@@ -370,10 +368,7 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
                         )
                         alerts_fired.append(key)
                     except Exception as exc:
-                        print(
-                            f"🚨 HP ALERT FAILED for {agent_name} (hp={hp_pct:.0f}%): {exc} — alert was: {message}",
-                            file=sys.stderr, flush=True,
-                        )
+                        log.error("HP ALERT FAILED for %s (hp=%.0f%%): %s — alert was: %s", agent_name, hp_pct, exc, message)
 
         conn.execute(
             "UPDATE agents SET hp_alerts_fired = ? WHERE name = ?",
@@ -381,10 +376,7 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
         )
         conn.commit()
     except Exception as exc:
-        print(
-            f"🚨 _fire_hp_alerts CRASHED for {agent_name} (hp={hp_pct:.0f}%): {exc}",
-            file=sys.stderr, flush=True,
-        )
+        log.error("_fire_hp_alerts CRASHED for %s (hp=%.0f%%): %s", agent_name, hp_pct, exc)
     finally:
         conn.close()
 

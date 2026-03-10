@@ -7,7 +7,10 @@ Handles onboarding, crew context merging, roster file management, and HP trackin
 from __future__ import annotations
 
 import datetime
+import logging
 import os
+
+log = logging.getLogger(__name__)
 
 from minion.auth import CLASS_MODEL_WHITELIST, VALID_CLASSES, get_tools_for_class
 from minion.db import (
@@ -116,8 +119,7 @@ def register(
             finally:
                 coord.close()
         except Exception as exc:
-            import sys
-            print(f"WARNING: coordinator DB registration failed: {exc}", file=sys.stderr)
+            log.warning("coordinator DB registration failed: %s", exc)
 
         # Tier 3: Register on API GLOBAL network server (if configured)
         try:

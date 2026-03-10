@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import List, Optional
 
 from .cli_provider_protocol import BaseProvider
+
+log = logging.getLogger(__name__)
 
 
 class GeminiProvider(BaseProvider):
@@ -98,5 +101,4 @@ class GeminiProvider(BaseProvider):
                 f.write(content)
                 f.write("\n")
         except OSError as exc:
-            import sys
-            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)
+            log.warning("failed to write error log %s: %s", error_log, exc)

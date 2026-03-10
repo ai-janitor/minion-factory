@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 import subprocess
@@ -10,6 +11,8 @@ import time
 
 from minion.comms import deregister
 from minion.db import get_db, now_iso
+
+log = logging.getLogger(__name__)
 from minion.crew._tmux import close_terminal_by_title, kill_all_crews, kill_tmux_pane_by_title
 from minion.defaults import resolve_swarm_runtime_dir
 
@@ -83,8 +86,7 @@ def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
         close_terminal_by_title(f"lead:")
         r = subprocess.run(["tmux", "kill-session", "-t", f"crew-{crew}"], capture_output=True, text=True)
         if r.returncode != 0:
-            import sys
-            print(f"WARNING: tmux kill-session crew-{crew} failed: {r.stderr.strip()}", file=sys.stderr)
+            log.warning("tmux kill-session crew-%s failed: %s", crew, r.stderr.strip())
         return {"status": "dismissed", "crew": crew}
     else:
         kill_all_crews()

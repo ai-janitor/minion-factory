@@ -13,7 +13,11 @@ import click
 
 from minion.db import init_db, reset_db_path
 from minion.fs import ensure_dirs
+from minion.logging_setup import configure_logging
 from minion.output import output as _output  # noqa: F401 — re-exported for submodules
+
+# Configure logging at CLI startup — library modules just call getLogger(__name__)
+configure_logging()
 
 
 # ---------------------------------------------------------------------------

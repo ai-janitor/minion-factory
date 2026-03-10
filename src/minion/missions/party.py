@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 import yaml
 
 from minion.crew.spawn import _all_search_paths, _find_crew_file
+
+log = logging.getLogger(__name__)
 
 
 def _scan_all_characters(project_dir: str = ".") -> list[dict[str, Any]]:
@@ -40,8 +43,7 @@ def _scan_all_characters(project_dir: str = ".") -> list[dict[str, Any]]:
                         "skills": agent_cfg.get("skills", []),
                     })
             except Exception as exc:
-                import sys
-                print(f"WARNING: failed to parse crew {crew_name}: {exc}", file=sys.stderr)
+                log.warning("failed to parse crew %s: %s", crew_name, exc)
                 continue
 
     return characters

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import signal
 import subprocess
 import sys
+
+log = logging.getLogger(__name__)
 
 
 def init_swarm(config_path: str, project_dir: str) -> None:
@@ -81,8 +84,7 @@ def stop_swarm(config_path: str) -> None:
         except ProcessLookupError:
             pass  # Already dead — expected during cleanup
         except (OSError, json.JSONDecodeError) as exc:
-            import sys
-            print(f"WARNING: stop_swarm failed to kill {state_file.name}: {exc}", file=sys.stderr)
+            log.warning("stop_swarm failed to kill %s: %s", state_file.name, exc)
 
 
 def spawn_pane(
@@ -117,7 +119,7 @@ def spawn_pane(
             capture_output=True, text=True,
         )
         if r.returncode != 0:
-            print(f"WARNING: pre-split layout rebalance failed for {tmux_session}: {r.stderr.strip()}", file=sys.stderr)
+            log.warning("pre-split layout rebalance failed for %s: %s", tmux_session, r.stderr.strip())
         result = subprocess.run([
             "tmux", "split-window", "-t", tmux_session,
             "bash", "-c", pane_cmd,
