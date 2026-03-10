@@ -8,7 +8,6 @@ See router.py for the full route table and handlers/ for endpoint implementation
 
 from __future__ import annotations
 
-import hmac
 import json
 import os
 import sqlite3
@@ -17,6 +16,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 from minion.db.connection import connect as _db_connect
+from minion.network.auth import AuthMixin
 
 _DB_LOCK = threading.Lock()
 
@@ -33,15 +33,7 @@ def _init_server_db(db_path: str) -> None:
     migrate_to_composite_pk(db_path)
 
 
-def _check_token(headers: dict, expected: str) -> bool:
-    """Validate Bearer token from Authorization header."""
-    if not expected:
-        return True  # no auth configured
-    auth = headers.get("Authorization", "")
-    return hmac.compare_digest(auth, f"Bearer {expected}")
-
-
-class _Handler(BaseHTTPRequestHandler):
+class _Handler(AuthMixin, BaseHTTPRequestHandler):
     """Request handler — routes to endpoint functions."""
 
     db_path: str = ""
@@ -119,8 +111,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         # API endpoints — auth required
-        if not _check_token(dict(self.headers), self.token):
-            self._json_response(401, {"error": "Unauthorized"})
+        if not self.require_auth():
             return
 
         # Delegate to router
@@ -140,8 +131,7 @@ class _Handler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/")
 
         if path not in self._POST_NO_AUTH:
-            if not _check_token(dict(self.headers), self.token):
-                self._json_response(401, {"error": "Unauthorized"})
+            if not self.require_auth():
                 return
 
         # Delegate to router
