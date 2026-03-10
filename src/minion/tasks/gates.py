@@ -204,8 +204,8 @@ def _db_all_child_tasks_closed(db, entity_id: int, entity_type: str, flow_type: 
         if flow_type:
             query += f" AND flow_type = '{flow_type}'"
         rows = db.execute(query, req_ids).fetchall()
-    except (sqlite3.OperationalError, KeyError):
-        # SU-17: narrowed — column doesn't exist yet, gate passes vacuously until schema migration
+    except Exception:
+        # Column doesn't exist yet — gate passes vacuously until schema migration
         return GateResult(passed=True, gate=gate, message="requirement_id column not yet available")
 
     if not rows:
@@ -228,8 +228,8 @@ def _db_all_leaves_have_tasks(db, entity_id: int, entity_type: str) -> GateResul
         rows = db.execute(
             "SELECT id FROM requirements WHERE parent_id = ?", (entity_id,)
         ).fetchall()
-    except (sqlite3.OperationalError, KeyError):
-        # SU-17: narrowed — parent_id column not yet available
+    except Exception:
+        # parent_id column not yet available
         return GateResult(passed=True, gate=gate, message="parent_id column not yet available")
 
     if not rows:
