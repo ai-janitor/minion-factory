@@ -284,6 +284,13 @@ def deregister(agent_name: str) -> dict[str, object]:
         if os.path.exists(roster_file):
             os.remove(roster_file)
 
+        # Remove agent inbox directory — deregister must be complete, no orphan dirs left behind
+        import shutil
+        from minion.fs import INBOX_DIR
+        inbox_dir = os.path.join(INBOX_DIR, agent_name)
+        if os.path.isdir(inbox_dir):
+            shutil.rmtree(inbox_dir)
+
         result: dict[str, object] = {
             "status": "deregistered",
             "agent": agent_name,
