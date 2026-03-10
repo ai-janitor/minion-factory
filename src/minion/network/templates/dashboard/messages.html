@@ -1,0 +1,43 @@
+{# messages.html — SU-22: Recent messages view.
+   Purpose: Display recent messages across all agents.
+   Rationale: Provides visibility into agent communication flow.
+   Responsibility: Render message list from get_recent_messages() data.
+#}
+{% extends "dashboard/base.html" %}
+{% block title %}Messages — Minion Dashboard{% endblock %}
+{% block content %}
+<h1>Recent Messages ({{ messages|length }})</h1>
+<div class="card">
+<table>
+<thead>
+<tr><th>From</th><th>To</th><th>Type</th><th>Time</th><th>Read</th></tr>
+</thead>
+<tbody>
+{% for msg in messages %}
+<tr>
+  <td>{{ msg.from_agent or '--' }}</td>
+  <td>{{ msg.to_agent or '--' }}</td>
+  <td>
+    {% if msg.msg_type %}
+      <span class="badge badge-blue">{{ msg.msg_type }}</span>
+    {% else %}
+      <span class="badge badge-gray">--</span>
+    {% endif %}
+  </td>
+  <td style="color:#8b949e">{{ msg.timestamp[:16] if msg.timestamp else '--' }}</td>
+  <td>
+    {% if msg.read_flag %}
+      <span style="color:#3fb950">read</span>
+    {% else %}
+      <span class="badge badge-red">unread</span>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% if not messages %}
+<div class="card"><p style="color:#8b949e">No messages found.</p></div>
+{% endif %}
+{% endblock %}

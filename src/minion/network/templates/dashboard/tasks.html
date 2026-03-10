@@ -1,0 +1,34 @@
+{# tasks.html — SU-22: Task pipeline view grouped by status.
+   Purpose: Display tasks in a kanban-style layout grouped by DAG status.
+   Rationale: Gives leads a visual overview of task pipeline flow.
+   Responsibility: Render task pipeline from get_task_pipeline() data.
+#}
+{% extends "dashboard/base.html" %}
+{% block title %}Tasks — Minion Dashboard{% endblock %}
+{% block content %}
+<h1>Task Pipeline</h1>
+{% for status, tasks in pipeline.items() %}
+<div class="card">
+  <h2>{{ status }} ({{ tasks|length }})</h2>
+  <table>
+  <thead>
+  <tr><th>ID</th><th>Title</th><th>Assigned</th><th>Flow</th><th>Updated</th></tr>
+  </thead>
+  <tbody>
+  {% for task in tasks %}
+  <tr>
+    <td>#{{ task.id }}</td>
+    <td>{{ task.title[:60] }}</td>
+    <td>{{ task.assigned_to or '--' }}</td>
+    <td><span class="badge badge-gray">{{ task.flow_type or 'bugfix' }}</span></td>
+    <td style="color:#8b949e">{{ task.updated_at[:16] if task.updated_at else '--' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+  </table>
+</div>
+{% endfor %}
+{% if not pipeline %}
+<div class="card"><p style="color:#8b949e">No tasks found.</p></div>
+{% endif %}
+{% endblock %}

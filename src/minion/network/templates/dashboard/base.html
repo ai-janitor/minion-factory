@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+{# base.html — SU-22: Server-side dashboard layout template.
+   Purpose: Shared HTML skeleton for all dashboard pages. Defines head, nav, content block.
+   Rationale: Jinja2 template inheritance keeps layout DRY across agents/tasks/health/messages pages.
+   Responsibility: HTML structure, CSS, navigation bar, content block for child templates.
+#}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Minion Dashboard{% endblock %}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#c9d1d9;font-size:14px}
+nav{background:#161b22;border-bottom:1px solid #30363d;padding:8px 16px;display:flex;gap:16px;align-items:center}
+nav a{color:#58a6ff;text-decoration:none;font-size:14px;padding:4px 8px;border-radius:4px}
+nav a:hover{background:#21262d}
+nav a.active{background:#1f6feb;color:#fff}
+nav .brand{font-weight:700;font-size:16px;color:#c9d1d9;margin-right:16px}
+.container{padding:16px;max-width:1200px;margin:0 auto}
+h1{font-size:1.3em;color:#58a6ff;margin-bottom:12px}
+h2{font-size:1em;color:#8b949e;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:#8b949e;font-weight:600;padding:4px 8px;border-bottom:1px solid #30363d}
+td{padding:4px 8px;border-bottom:1px solid #21262d}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-green{background:#1a4d2e;color:#3fb950}
+.badge-yellow{background:#4d3a00;color:#d29922}
+.badge-red{background:#4d1a1a;color:#f85149}
+.badge-blue{background:#1a3d5c;color:#58a6ff}
+.badge-gray{background:#21262d;color:#8b949e}
+.stat{text-align:center;padding:8px}
+.stat .value{font-size:24px;font-weight:700;color:#58a6ff}
+.stat .label{font-size:11px;color:#8b949e;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px}
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">Minion</span>
+  <a href="/dashboard/agents" {% if page == 'agents' %}class="active"{% endif %}>Agents</a>
+  <a href="/dashboard/tasks" {% if page == 'tasks' %}class="active"{% endif %}>Tasks</a>
+  <a href="/dashboard/health" {% if page == 'health' %}class="active"{% endif %}>Health</a>
+  <a href="/dashboard/messages" {% if page == 'messages' %}class="active"{% endif %}>Messages</a>
+</nav>
+<div class="container">
+{% block content %}{% endblock %}
+</div>
+</body>
+</html>

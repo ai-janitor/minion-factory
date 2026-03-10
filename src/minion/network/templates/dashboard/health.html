@@ -1,0 +1,65 @@
+{# health.html — SU-22: System health and DB statistics.
+   Purpose: Display system-level stats: DB size, table counts, agent/task breakdown.
+   Rationale: Replaces the JS-rendered stats panel with server-side rendering.
+   Responsibility: Render stats from get_system_stats() data.
+#}
+{% extends "dashboard/base.html" %}
+{% block title %}Health — Minion Dashboard{% endblock %}
+{% block content %}
+<h1>System Health</h1>
+
+<div class="grid">
+  <div class="card stat">
+    <div class="value">{{ stats.agents.total|default(0) }}</div>
+    <div class="label">Agents</div>
+  </div>
+  <div class="card stat">
+    <div class="value">{{ stats.tasks.total|default(0) }}</div>
+    <div class="label">Tasks</div>
+  </div>
+  <div class="card stat">
+    <div class="value">{{ "%.1f"|format(stats.db_size_bytes / 1024) }} KB</div>
+    <div class="label">DB Size</div>
+  </div>
+  <div class="card stat">
+    <div class="value">{{ stats.journal_mode|default('unknown') }}</div>
+    <div class="label">Journal Mode</div>
+  </div>
+</div>
+
+<h2>Agent Breakdown</h2>
+<div class="card">
+<table>
+<thead><tr><th>Class</th><th>Count</th></tr></thead>
+<tbody>
+{% for cls, count in stats.agents.items() if cls != 'total' %}
+<tr><td>{{ cls }}</td><td>{{ count }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Task Breakdown</h2>
+<div class="card">
+<table>
+<thead><tr><th>Status</th><th>Count</th></tr></thead>
+<tbody>
+{% for status, count in stats.tasks.items() if status != 'total' %}
+<tr><td>{{ status }}</td><td>{{ count }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Table Row Counts</h2>
+<div class="card">
+<table>
+<thead><tr><th>Table</th><th>Rows</th></tr></thead>
+<tbody>
+{% for table, count in stats.tables.items() %}
+<tr><td>{{ table }}</td><td>{{ count }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
