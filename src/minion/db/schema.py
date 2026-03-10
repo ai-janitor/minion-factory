@@ -178,6 +178,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_type       TEXT DEFAULT 'bugfix',
     activity_count  INTEGER NOT NULL DEFAULT 0,
     result_file     TEXT DEFAULT NULL,
+    checklist_path  TEXT DEFAULT NULL,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );

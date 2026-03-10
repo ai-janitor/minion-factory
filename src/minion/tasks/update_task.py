@@ -13,6 +13,7 @@ def update_task(
     status: str = "",
     progress: str = "",
     files: str = "",
+    checklist: str = "",
 ) -> dict[str, object]:
     # Precondition assertions — backlog #63
     assert agent_name, "agent_name must not be empty"
@@ -50,6 +51,28 @@ def update_task(
                 return {"error": f"Invalid status '{status}'."}
 
         current_status = task_row["status"]
+
+        # --- Checklist gate: transitioning to in_progress requires --checklist ---
+        # Mechanical enforcement: agents MUST register a checklist file before
+        # the system lets them claim they're working. Without this, agents skip
+        # writing CHECKLIST.md and go straight to coding.
+        if status == "in_progress":
+            if not checklist:
+                return {
+                    "error": "BLOCKED: Transition to in_progress requires --checklist <path>. "
+                    "Write your checklist first, then register it."
+                }
+            import os as _os
+            checklist_path = checklist
+            if not _os.path.isabs(checklist_path):
+                project_root = _os.environ.get("MINION_PROJECT_DIR", _os.getcwd())
+                checklist_path = _os.path.join(project_root, checklist_path)
+            if not _os.path.isfile(checklist_path):
+                return {
+                    "error": f"BLOCKED: Checklist file not found: {checklist}. "
+                    "Create the file first, then register it."
+                }
+
         warnings: list[str] = []
 
         if status:
@@ -80,6 +103,9 @@ def update_task(
         if files:
             fields.append("files = ?")
             params.append(files)
+        if checklist:
+            fields.append("checklist_path = ?")
+            params.append(checklist)
 
         params.append(task_id)
         cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)

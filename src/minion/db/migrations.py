@@ -346,6 +346,20 @@ def _migrate_v14(conn: sqlite3.Connection) -> None:
     log.info("v14: added msg_type column and index to messages table")
 
 
+def _migrate_v15(conn: sqlite3.Connection) -> None:
+    """Add checklist_path to tasks — mechanical checklist enforcement gate.
+
+    When transitioning a task to in_progress, the CLI now requires a --checklist
+    argument pointing to an existing file. The path is stored here so the system
+    can verify the artifact was produced before work began.
+    """
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN checklist_path TEXT DEFAULT NULL")
+    except sqlite3.OperationalError:
+        pass  # column already exists (re-run safe)
+    log.info("v15: added checklist_path column to tasks table")
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -363,6 +377,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (12, "Add flow_hint column to backlog table", _migrate_v12),
     (13, "Add promoted_by column to backlog table", _migrate_v13),
     (14, "Add msg_type column to messages table", _migrate_v14),
+    (15, "Add checklist_path column to tasks table", _migrate_v15),
 ]
 
 
@@ -436,6 +451,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # pre-v3 databases where flow_type doesn't exist yet.
         ("task_type", "TEXT DEFAULT 'bugfix'"),
         ("requirement_path", "TEXT DEFAULT NULL"),
+        ("checklist_path", "TEXT DEFAULT NULL"),
     ]:
         if col not in task_cols:
             # Skip re-adding task_type if v3 already renamed it to flow_type

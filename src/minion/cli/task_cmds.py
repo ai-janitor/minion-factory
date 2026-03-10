@@ -60,11 +60,12 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--status", default="")
     @click.option("--progress", default="")
     @click.option("--files", default="")
+    @click.option("--checklist", default="", help="Path to checklist file (required for in_progress transition)")
     @click.pass_context
-    def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progress: str, files: str) -> None:
+    def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progress: str, files: str, checklist: str) -> None:
         """Update a task's status, progress, or files."""
         from minion.tasks import update_task as _update_task
-        _output(_update_task(agent, task_id, status, progress, files), ctx.obj["human"])
+        _output(_update_task(agent, task_id, status, progress, files, checklist), ctx.obj["human"])
 
     @task_group.command("list")
     @click.option("--status", "-s", default="")
