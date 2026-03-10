@@ -11,7 +11,7 @@ Organization: Standalone functions and/or a single class. See source."""
 # === TUI Data Flow Audit ===
 # TASKS section:
 #   Source: queries.fetch_tasks() → tasks table
-#   Filter: status NOT IN ('closed', 'abandoned', 'stale', 'obsolete')
+#   Filter: status NOT IN (TERMINAL_STATUSES) — sourced from tasks.dag.TERMINAL_STATUSES
 #   Fields: id, status, assigned_to (→assignee), SUBSTR(title,1,40) (→title_short),
 #           activity_count, blocked_by, result_file IS NOT NULL (→has_result)
 #   Order: status priority (in_progress > assigned > fixed > verified > open), then id ASC

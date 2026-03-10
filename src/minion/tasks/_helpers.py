@@ -10,7 +10,11 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
+from .dag import TERMINAL_STATUSES
 from .loader import load_flow
+
+# Build SQL literal from the single source of truth — safe (values are code-controlled, not user input).
+_TERMINAL_SQL = ", ".join(f"'{s}'" for s in sorted(TERMINAL_STATUSES))
 
 # Cache loaded flows
 _flow_cache: dict[str, Any] = {}
@@ -64,7 +68,7 @@ def agent_past_scaffolding(agent_name: str, conn: sqlite3.Connection | None = No
         close_conn = True
     try:
         rows = conn.execute(
-            "SELECT id, status, flow_type FROM tasks WHERE assigned_to = ? AND status NOT IN ('closed', 'abandoned', 'stale', 'obsolete')",
+            f"SELECT id, status, flow_type FROM tasks WHERE assigned_to = ? AND status NOT IN ({_TERMINAL_SQL})",
             (agent_name,),
         ).fetchall()
         blocking: list[int] = []
