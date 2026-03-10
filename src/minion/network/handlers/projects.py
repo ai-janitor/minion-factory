@@ -14,7 +14,6 @@ Implementation order: 4th (depends on project_db + discovery).
 
 from __future__ import annotations
 
-import os
 from urllib.parse import urlparse, parse_qs
 
 from minion.network.server import _DB_LOCK

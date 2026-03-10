@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import List, Optional
 
 from .base import BaseProvider
@@ -39,16 +38,7 @@ class GeminiProvider(BaseProvider):
             "- One response = one task. No chaining, no speculative exploration.",
         ])
 
-    def filter_log_line(self, line: str, error_log: Path) -> str:
-        stripped = line.rstrip("\n")
-        if not stripped or len(stripped) <= 500:
-            return line
-
-        summary = self._classify_gemini_error(stripped)
-        if summary:
-            self._append_error_log(error_log, stripped)
-            return f"[{self.agent_name}] {summary}. Full error: {error_log}\n"
-        return line
+    # filter_log_line inherited from BaseProvider — uses _classify_error hook
 
     @property
     def supports_resume(self) -> bool:
@@ -58,8 +48,12 @@ class GeminiProvider(BaseProvider):
     def resume_label(self) -> str:
         return "gemini --resume latest"
 
-    def _classify_gemini_error(self, line: str) -> Optional[str]:
-        """Extract error code and short message from Gemini's verbose error output."""
+    def _classify_error(self, line: str) -> Optional[str]:
+        """Extract error code and short message from Gemini's verbose error output.
+
+        Gemini-specific patterns: JSON error.code/status/message structure,
+        HTTP error codes in raw text. Falls back to base _extract_error_summary.
+        """
         # Try JSON parse first
         try:
             data = json.loads(line)
@@ -84,8 +78,6 @@ class GeminiProvider(BaseProvider):
             msg = msg_m.group(1) if msg_m else ""
             return f"{status} ({code}) — {msg}"
 
-        # Generic large output
-        summary = self._extract_error_summary(line)
-        return summary
+        return self._extract_error_summary(line)
 
     # _append_error_log inherited from BaseProvider
