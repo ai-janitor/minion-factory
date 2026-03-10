@@ -42,7 +42,7 @@ def _load_class_models() -> dict[str, set[str]]:
 
 # Hardcoded fallback — kept in sync with agent-classes.yaml
 # Used at module level by TOOL_CATALOG before lazy load fires
-VALID_CLASSES: set[str] = {"lead", "coder", "builder", "oracle", "recon", "planner", "auditor"}
+VALID_CLASSES: set[str] = {"lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"}
 VALID_CAPABILITIES: set[str] = set()
 CLASS_CAPABILITIES: dict[str, set[str]] = {}
 CLASS_MODEL_WHITELIST: dict[str, set[str]] = {}
@@ -254,7 +254,13 @@ def is_cross_project() -> bool:
     Compare MINION_PROJECT_DIR env var to cwd.
     If they differ -> cross-project operation.
     If MINION_PROJECT_DIR not set -> not cross-project (local operation).
+
+    SU-19: Coordinators are exempt — they are never "foreign" regardless of -C flag.
     """
+    # Coordinators are exempt from cross-project restrictions
+    agent_class = os.environ.get("MINION_CLASS", "")
+    if agent_class == "coordinator":
+        return False
     project_dir = os.environ.get("MINION_PROJECT_DIR", "")
     if not project_dir:
         return False

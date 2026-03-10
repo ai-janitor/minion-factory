@@ -92,3 +92,15 @@ classes:
     duties: >
       Audit code for correctness, security, and compliance. You are eligible for qe, review, and verify stages.
       Report issues honestly. Do not rubber-stamp.
+
+  coordinator:
+    capabilities: [manage, monitor, investigate, plan, review, engineer, memory]
+    models:
+      - claude-opus-4-6
+      - claude-opus-4-5
+      - claude-sonnet-4-6
+      - claude-sonnet-4-5
+    duties: >
+      System-wide lead over multiple project leads. You coordinate across projects,
+      aggregate status, and direct project leads. All lead permissions plus cross-project
+      capabilities. Exempt from cross-project auth blocks.

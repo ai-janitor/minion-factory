@@ -207,3 +207,50 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
     severity_order = {"critical": 0, "warning": 1, "info": 2}
     alerts.sort(key=lambda a: severity_order.get(a.get("severity", "info"), 2))
     handler._json_response(200, {"alerts": alerts})
+
+
+def handle_task_lineage(handler, db_path: str, task_id: str = "", **kwargs) -> None:
+    """GET /tasks/{task_id}/lineage — DAG transition history for a task.
+
+    Returns ordered list of transitions: from_status, to_status, agent, timestamp.
+    Queries transition_log table from all discovered project DBs.
+
+    Time complexity: O(P * T) where P = projects, T = transitions per task.
+    """
+    if not task_id:
+        handler._json_response(400, {"error": "task_id is required in URL: /tasks/{task_id}/lineage"})
+        return
+
+    try:
+        tid = int(task_id)
+    except (ValueError, TypeError):
+        handler._json_response(400, {"error": f"task_id must be an integer, got '{task_id}'"})
+        return
+
+    projects = discover_projects(db_path, _DB_LOCK)
+    transitions = []
+
+    for proj in projects:
+        conn = get_project_db(proj["path"])
+        if not conn:
+            continue
+        try:
+            rows = conn.execute(
+                "SELECT entity_id, from_status, to_status, triggered_by, created_at "
+                "FROM transition_log WHERE entity_id = ? AND entity_type = 'task' "
+                "ORDER BY created_at ASC",
+                (tid,),
+            ).fetchall()
+            for row in rows:
+                transitions.append({
+                    "project": proj["name"],
+                    "task_id": tid,
+                    "from_status": row["from_status"],
+                    "to_status": row["to_status"],
+                    "agent": row["triggered_by"],
+                    "timestamp": row["created_at"],
+                })
+        except Exception:
+            pass
+
+    handler._json_response(200, {"task_id": tid, "transitions": transitions})

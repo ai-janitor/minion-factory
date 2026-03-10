@@ -149,6 +149,9 @@ TRIGGER_WORDS: dict[str, str] = {
 }
 
 
+# Cross-project coordination — colon-separated list of project paths
+ENV_PROJECTS = "MINION_PROJECTS"
+
 ENV_COORDINATOR_DB_PATH = "MINION_COORDINATOR_DB_PATH"
 
 
@@ -201,3 +204,17 @@ def resolve_missions_dir() -> str | None:
 def resolve_flows_dir() -> str | None:
     """Resolve task flows directory override from env. None means use defaults."""
     return os.getenv(ENV_FLOWS_DIR) or os.getenv(ENV_TASKS_FLOWS_DIR)
+
+
+def get_project_paths() -> list[str]:
+    """Get list of known project paths from MINION_PROJECTS env var.
+
+    MINION_PROJECTS is a colon-separated list of absolute paths to project roots.
+    If not set, returns empty list — caller falls back to coordinator DB.
+
+    SU-19: Used by multi_project_poll for cross-project coordination.
+    """
+    raw = os.getenv(ENV_PROJECTS, "")
+    if not raw:
+        return []
+    return [p.strip() for p in raw.split(":") if p.strip()]
