@@ -110,14 +110,12 @@ def _relative_time(iso_ts: str | None) -> str:
     try:
         # Parse ISO timestamp (may or may not have timezone)
         ts_str = iso_ts.replace("Z", "+00:00")
-        if "+" not in ts_str and ts_str.count("-") <= 2:
-            # Naive timestamp — assume local time
-            dt = datetime.fromisoformat(ts_str)
-            now = datetime.now()
-        else:
-            dt = datetime.fromisoformat(ts_str)
-            now = datetime.now(timezone.utc)
-        delta = now - dt
+        dt = datetime.fromisoformat(ts_str)
+        # Normalize to naive local: if aware, convert to local and strip tzinfo
+        if dt.tzinfo is not None:
+            dt = dt.astimezone().replace(tzinfo=None)
+        # Both dt and now are naive local
+        delta = datetime.now() - dt
         secs = int(delta.total_seconds())
         if secs < 0:
             return "now"
@@ -148,7 +146,8 @@ def _find_checklist(agent_name: str, work_dir: str) -> str | None:
 def _staleness_seconds(iso_timestamp: str | None) -> float | None:
     """Return seconds since the given ISO timestamp, or None if unparseable.
 
-    Handles both naive (assumed UTC) and timezone-aware ISO strings.
+    Handles both naive (assumed local) and timezone-aware ISO strings.
+    All comparisons use naive local time via datetime.now().
     """
     if not iso_timestamp:
         return None
@@ -156,9 +155,11 @@ def _staleness_seconds(iso_timestamp: str | None) -> float | None:
         # Handle ISO format with or without timezone info
         ts = iso_timestamp.replace("Z", "+00:00")
         dt = datetime.fromisoformat(ts)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - dt
+        # Normalize to naive local: if aware, convert to local and strip tzinfo
+        if dt.tzinfo is not None:
+            dt = dt.astimezone().replace(tzinfo=None)
+        # Both dt and now are naive local
+        delta = datetime.now() - dt
         return delta.total_seconds()
     except (ValueError, TypeError):
         return None
