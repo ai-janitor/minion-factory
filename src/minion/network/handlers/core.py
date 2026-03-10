@@ -24,6 +24,62 @@ from minion.network.server import _get_server_db, _DB_LOCK
 from minion.network.project_db import get_project_db
 
 
+# ── Input validation ──────────────────────────────────────────────────────────
+# Purpose: Field-level schema for POST /register. Prevents arbitrary data entering DB.
+# Rationale: body.get() with no checks == unvalidated input == arbitrary data in SQLite.
+# Each entry: {type, max_len?, required?, enum?}
+_REGISTER_SCHEMA: dict = {
+    "name":                   {"type": str,   "max_len": 64,  "required": True},
+    "agent_class":            {"type": str,   "max_len": 32,  "enum": ["coder", "builder", "recon", "auditor", "lead"]},
+    "host":                   {"type": str,   "max_len": 255},
+    "model":                  {"type": str,   "max_len": 128},
+    "project_path":           {"type": str,   "max_len": 512},
+    "machine_id":             {"type": str,   "max_len": 128},
+    "crew_name":              {"type": str,   "max_len": 64},
+    "local_lead":             {"type": str,   "max_len": 64},
+    "os_platform":            {"type": str,   "max_len": 64},
+    "session_count":          {"type": int},
+    "compaction_count":       {"type": int},
+    "crash_rate":             {"type": (int, float)},
+    "total_input_tokens":     {"type": int},
+    "total_output_tokens":    {"type": int},
+    "autonomous_delegation":  {"type": bool},
+    # capabilities/machine_specs/runtimes: list/dict — type checked inline
+}
+
+# Message field limits for POST /send
+_MAX_MESSAGE_LEN = 100 * 1024   # 100 KB — unbounded writes risk OOM + disk exhaustion
+_MAX_AGENT_NAME_LEN = 64        # from/to agent names
+
+
+def _validate_fields(body: dict, schema: dict) -> list[str]:
+    """Validate body fields against schema. Returns list of error strings (empty = OK).
+
+    Pseudo-logic:
+    - For each schema field present in body: check type, max_len, enum
+    - Skip absent optional fields (required fields checked separately)
+    - Return all errors found, not just the first
+    """
+    errors: list[str] = []
+    for field, rules in schema.items():
+        value = body.get(field)
+        if value is None:
+            if rules.get("required"):
+                errors.append(f"'{field}' is required")
+            continue
+        expected_type = rules["type"]
+        if not isinstance(value, expected_type):
+            type_name = expected_type.__name__ if hasattr(expected_type, "__name__") else str(expected_type)
+            errors.append(f"'{field}' must be {type_name}, got {type(value).__name__}")
+            continue  # no point checking further constraints if wrong type
+        if "max_len" in rules and isinstance(value, str) and len(value) > rules["max_len"]:
+            errors.append(f"'{field}' exceeds max length {rules['max_len']} (got {len(value)})")
+        if "enum" in rules and value not in rules["enum"]:
+            errors.append(f"'{field}' must be one of {rules['enum']}, got '{value}'")
+    return errors
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def register(router) -> None:
     """Register core endpoints with the router dispatch table."""
     router.add_get("/health", handle_health)
@@ -226,7 +282,13 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
     """POST /register — upsert agent with all provided fields."""
     body = handler._parse_json_body()
     if not body:
-        handler._json_response(400, {"error": "Invalid JSON body"})
+        # _parse_json_body() already sent 400/415; return if None
+        return
+
+    # PSEUDO: validate all fields before touching DB — reject bad input with 400
+    errors = _validate_fields(body, _REGISTER_SCHEMA)
+    if errors:
+        handler._json_response(400, {"error": "Validation failed", "details": errors})
         return
 
     name = body.get("name", "").strip()
@@ -320,15 +382,35 @@ def handle_send(handler, db_path: str, **kwargs) -> None:
     """POST /send — deliver message to target agent."""
     body = handler._parse_json_body()
     if not body:
-        handler._json_response(400, {"error": "Invalid JSON body"})
+        # _parse_json_body() already sent 400/415 — do not double-respond
         return
 
-    from_agent = body.get("from", "").strip()
-    to_agent = body.get("to", "").strip()
-    content = body.get("message", "").strip()
+    from_agent = body.get("from", "")
+    to_agent = body.get("to", "")
+    content = body.get("message", "")
+
+    # PSEUDO: type-check string fields before stripping — reject non-strings
+    if not isinstance(from_agent, str) or not isinstance(to_agent, str) or not isinstance(content, str):
+        handler._json_response(400, {"error": "from, to, and message must be strings"})
+        return
+
+    from_agent = from_agent.strip()
+    to_agent = to_agent.strip()
+    content = content.strip()
 
     if not from_agent or not to_agent or not content:
         handler._json_response(400, {"error": "from, to, and message are required"})
+        return
+
+    # PSEUDO: enforce field length limits — unbounded writes risk OOM + disk exhaustion
+    if len(from_agent) > _MAX_AGENT_NAME_LEN:
+        handler._json_response(400, {"error": f"'from' exceeds max length {_MAX_AGENT_NAME_LEN}"})
+        return
+    if len(to_agent) > _MAX_AGENT_NAME_LEN:
+        handler._json_response(400, {"error": f"'to' exceeds max length {_MAX_AGENT_NAME_LEN}"})
+        return
+    if len(content) > _MAX_MESSAGE_LEN:
+        handler._json_response(400, {"error": f"'message' exceeds max length {_MAX_MESSAGE_LEN} bytes"})
         return
 
     now = datetime.now().isoformat()
