@@ -20,6 +20,9 @@ def create_task(
     task_type: str = "bugfix",
     requirement_id: int | None = None,
 ) -> dict[str, object]:
+    # SU-09: Precondition assertions
+    assert agent_name, "agent_name must not be empty"
+    assert title, "title must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

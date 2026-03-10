@@ -12,6 +12,7 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,8 +66,8 @@ def _rollup_task_to_requirement(
         row = db.execute(
             "SELECT requirement_id FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
-    except Exception:
-        return  # requirement_id column not yet available
+    except (KeyError, sqlite3.OperationalError):
+        return  # requirement_id or parent_id column not yet available
 
     if row is None or row["requirement_id"] is None:
         return

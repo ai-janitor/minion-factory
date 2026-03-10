@@ -48,6 +48,9 @@ def check_gate(
     gate: str,
     *,
     context_dir: Path | None = None,
+    # Time complexity: O(G) where G = number of glob patterns in the gate string,
+    # plus O(C) for DB condition checks where C = number of child tasks.
+    # Big-O: O(G + C) dominated by child-task queries for DB conditions.
     db=None,
     entity_id: int | None = None,
     entity_type: str = "task",

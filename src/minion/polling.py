@@ -323,7 +323,8 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
     """
     elapsed = 0
     seen_task_ids: set[int] = set()
-    # Heartbeat every ~30 min so idle agents don't get pruned by the 6-hour rule
+    # ASSUMPTION: Heartbeat every 30 min keeps agents alive vs the 6-hour prune threshold.
+    # If prune threshold changes, adjust this proportionally (e.g., 1/12 of prune window).
     _HEARTBEAT_INTERVAL = 1800  # seconds
     _last_heartbeat = 0
 

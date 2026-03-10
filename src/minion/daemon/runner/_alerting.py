@@ -7,6 +7,7 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import sys
 from typing import Any, TYPE_CHECKING
@@ -47,7 +48,7 @@ class AlertingMixin:
                 )
                 if r2.returncode != 0:
                     print(f"ALERT SEND FAILED: both commander and lead unreachable. stderr={r2.stderr[:200]}", file=sys.stderr, flush=True)
-        except Exception as exc:
+        except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired) as exc:
             print(f"ALERT SEND FAILED: {exc}", file=sys.stderr, flush=True)
         self._log(f"ALERT: {message}")
         print(f"\U0001f6a8 [{self.agent_name}] {message}", file=sys.stderr, flush=True)
@@ -61,7 +62,7 @@ class AlertingMixin:
         try:
             watcher.send_message(self.agent_name, lead, content)
             self._log(f"alerted lead '{lead}' about repeated failures")
-        except Exception as exc:
+        except (sqlite3.OperationalError, OSError) as exc:
             self._log(f"ALERT ERROR: failed to message lead '{lead}': {type(exc).__name__}: {exc}")
 
     # Defined in other mixins

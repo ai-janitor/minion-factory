@@ -59,6 +59,8 @@ SWARM_DIR_NAME = ".minion-swarm"
 
 # Maximum file size for unbounded reads — guard against memory exhaustion.
 # Applies to intel docs, task specs, backlog READMEs, message files.
+# ASSUMPTION: 10 MB is generous for any text artifact. Most are <100 KB.
+# Increase if agents start writing large spec documents or concatenated logs.
 MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
 
 

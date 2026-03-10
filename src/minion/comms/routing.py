@@ -26,7 +26,7 @@ def who_global() -> dict[str, object]:
             return {"agents": agents, "source": "coordinator"}
         finally:
             coord.close()
-    except Exception as exc:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as exc:
         return {"error": f"Coordinator DB not available: {exc}"}
 
 
@@ -60,7 +60,7 @@ def deregister_global(agent_name: str) -> dict[str, object]:
             }
         finally:
             coord.close()
-    except Exception as exc:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as exc:
         return {"error": f"Coordinator DB error: {exc}"}
 
 
@@ -77,7 +77,7 @@ def _agent_has_active_tasks(agent_name: str, project_path: str) -> bool:
         ).fetchone()
         conn.close()
         return row[0] > 0
-    except Exception:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
         return False
 
 
@@ -134,5 +134,5 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
             return result
         finally:
             coord.close()
-    except Exception as exc:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as exc:
         return {"error": f"Coordinator DB error: {exc}"}

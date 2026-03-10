@@ -8,6 +8,9 @@ from ._helpers import _get_flow, _log_transition
 
 
 def close_task(agent_name: str, task_id: int) -> dict[str, object]:
+    # SU-09: Precondition assertions
+    assert agent_name, "agent_name must not be empty"
+    assert isinstance(task_id, int) and task_id > 0, f"task_id must be a positive int, got {task_id}"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

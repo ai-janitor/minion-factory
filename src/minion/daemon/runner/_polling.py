@@ -66,7 +66,7 @@ class PollingMixin:
             self._log("FATAL: 'minion' binary not found in PATH — daemon cannot poll")
             self._stop_event.set()
             return None
-        except Exception as exc:
+        except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired) as exc:
             self._log(f"POLL ERROR: {type(exc).__name__}: {exc}")
             self._stop_event.wait(timeout=5.0)
             return None
@@ -82,7 +82,7 @@ class PollingMixin:
                 capture_output=True, text=True, timeout=10, env=env,
             )
             return proc.returncode == 0
-        except Exception as exc:
+        except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired) as exc:
             self._log(f"check-work failed: {exc}, assuming work exists")
             return True  # fail-open: don't stand down if check fails
 

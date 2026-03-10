@@ -113,6 +113,8 @@ def _gather_operational_state(agent_name: str, cursor: sqlite3.Cursor) -> dict[s
 
 
 def cold_start(agent_name: str) -> dict[str, object]:
+    # SU-09: Precondition assertion
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
@@ -204,6 +206,8 @@ def refresh(agent_name: str) -> dict[str, object]:
     Unlike cold_start: no fenix_down consumption, no battle plan content,
     no raid log, no briefing files. Just operational state.
     """
+    # SU-09: Precondition assertion
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()
@@ -234,6 +238,8 @@ def refresh(agent_name: str) -> dict[str, object]:
 
 
 def fenix_down(agent_name: str, files: str, manifest: str = "") -> dict[str, object]:
+    # SU-09: Precondition assertion
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

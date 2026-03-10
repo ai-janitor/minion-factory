@@ -40,6 +40,8 @@ def _kill_all_daemons(project_dir: str = "") -> None:
 
 
 def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
+    # SU-09: Precondition assertion
+    assert agent_name, "agent_name must not be empty"
     conn = get_db()
     cursor = conn.cursor()
     now = now_iso()

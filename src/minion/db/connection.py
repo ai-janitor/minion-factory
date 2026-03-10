@@ -50,6 +50,8 @@ def connect(db_path: str | os.PathLike, *, timeout: float = 5) -> sqlite3.Connec
     Use this anywhere callers have a db_path in hand — avoids repeating
     PRAGMA boilerplate across 10+ modules. Sets WAL, busy_timeout=5000, row_factory.
     """
+    # SU-09: Precondition assertions
+    assert db_path, "db_path must not be empty"
     # Purpose: single place for connection setup — WAL, busy_timeout, row_factory
     # Rationale: 27 direct sqlite3.connect() calls scattered across daemon, network,
     #            comms each re-implemented this setup; extract it here.

@@ -150,7 +150,7 @@ class HPMixin:
                 msg = f"UPDATE-HP ERROR: exit {result.returncode} stderr={result.stderr[:200]}"
                 self._log(msg)
                 print(f"WARNING: [{self.agent_name}] {msg}", file=sys.stderr, flush=True)
-        except Exception as exc:
+        except (subprocess.SubprocessError, OSError, subprocess.TimeoutExpired, ValueError) as exc:
             import sys
             msg = f"UPDATE-HP ERROR: {type(exc).__name__}: {exc}"
             self._log(msg)

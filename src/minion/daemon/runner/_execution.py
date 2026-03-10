@@ -125,7 +125,7 @@ class ExecutionMixin:
         except FileNotFoundError:
             self._log(f"command not found: {cmd[0]}")
             return AgentRunResult(exit_code=127, timed_out=False, compaction_detected=False, command_name=cmd[0])
-        except Exception as exc:
+        except (OSError, subprocess.SubprocessError) as exc:
             self._log(f"failed to launch {cmd[0]}: {exc}")
             return AgentRunResult(exit_code=127, timed_out=False, compaction_detected=False, command_name=cmd[0])
 

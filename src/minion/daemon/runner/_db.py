@@ -67,7 +67,7 @@ class DBMixin:
             result = callback(conn)
             conn.commit()
             return result
-        except Exception as exc:
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, sqlite3.DatabaseError, OSError) as exc:
             self._log(f"WARNING: {caller} failed: {exc}")
             return None
         finally:

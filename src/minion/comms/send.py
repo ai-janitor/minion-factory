@@ -39,6 +39,11 @@ def send(
     cc: str = "",
     msg_type: str | None = None,
 ) -> dict[str, object]:
+    """Send a message from one agent to another.
+
+    Time complexity: O(1) DB INSERT + O(CC) for CC recipients where CC = number of CC'd agents.
+    Big-O: O(CC) where CC is the number of CC recipients (usually 0-3).
+    """
     # Precondition assertions — backlog #63
     assert from_agent, "from_agent must not be empty"
     assert to_agent, "to_agent must not be empty"
