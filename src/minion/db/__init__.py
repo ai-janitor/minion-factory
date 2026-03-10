@@ -16,6 +16,7 @@ from minion.db.agents import (
 )
 from minion.db.connection import (
     _get_db_path,
+    connect,
     get_coordinator_db,
     get_db,
     get_runtime_dir,
@@ -52,6 +53,7 @@ from minion.db.schema import (
 )
 
 __all__ = [
+    "connect",
     "DOCS_DIR",
     "enrich_agent_row",
     "format_trigger_codebook",

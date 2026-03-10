@@ -10,7 +10,7 @@ import datetime
 import os
 import sqlite3
 
-from minion.db import get_coordinator_db
+from minion.db import connect, get_coordinator_db
 from minion.fs import atomic_write_file
 
 
@@ -53,10 +53,7 @@ def route_cross_repo(
     # Insert message metadata into target project's DB
     db_indexed = False
     try:
-        remote_conn = sqlite3.connect(remote_db_path, timeout=5)
-        remote_conn.row_factory = sqlite3.Row
-        remote_conn.execute("PRAGMA journal_mode=WAL")
-        remote_conn.execute("PRAGMA busy_timeout=5000")
+        remote_conn = connect(remote_db_path)
         # Ensure messages table exists (target may not have run full init)
         remote_conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (

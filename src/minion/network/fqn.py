@@ -20,8 +20,9 @@ Implementation order: 2nd (after db_schema, before handler updates).
 from __future__ import annotations
 
 import os
-import sqlite3
 import threading
+
+from minion.db.connection import connect
 
 
 def build_fqn(machine_id: str, project_path: str, name: str) -> str:
@@ -190,8 +191,7 @@ def resolve_agent(
 
 def _execute(db_path: str, sql: str, params: tuple) -> list[dict]:
     """Execute a query and return list of dicts."""
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.row_factory = sqlite3.Row
+    conn = connect(db_path)
     rows = conn.execute(sql, params).fetchall()
     result = [dict(r) for r in rows]
     conn.close()

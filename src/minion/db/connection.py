@@ -2,6 +2,10 @@
 
 Handles lazy path resolution from env vars and cwd, plus the get_db() and
 get_coordinator_db() connection factories with WAL mode and row factory.
+
+Convention: use connect(db_path) anywhere you have an explicit path.
+Use get_db() for the project-local DB. Use get_coordinator_db() for the global coordinator DB.
+All three set WAL mode, busy_timeout=5000, and row_factory=sqlite3.Row.
 """
 
 from __future__ import annotations
@@ -40,25 +44,33 @@ def get_runtime_dir() -> str:
 # ---------------------------------------------------------------------------
 
 
-def get_coordinator_db() -> sqlite3.Connection:
-    """Open a WAL-mode connection to the global coordinator DB (~/.minion/coordinator.db)."""
-    db_path = resolve_coordinator_db_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=5)
+def connect(db_path: str | os.PathLike, *, timeout: float = 5) -> sqlite3.Connection:
+    """Open a WAL-mode connection to any explicit db_path.
+
+    Use this anywhere callers have a db_path in hand — avoids repeating
+    PRAGMA boilerplate across 10+ modules. Sets WAL, busy_timeout=5000, row_factory.
+    """
+    # Purpose: single place for connection setup — WAL, busy_timeout, row_factory
+    # Rationale: 27 direct sqlite3.connect() calls scattered across daemon, network,
+    #            comms each re-implemented this setup; extract it here.
+    os.makedirs(os.path.dirname(os.path.abspath(str(db_path))), exist_ok=True)
+    conn = sqlite3.connect(str(db_path), timeout=timeout)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
+def get_coordinator_db() -> sqlite3.Connection:
+    """Open a WAL-mode connection to the global coordinator DB (~/.minion/coordinator.db)."""
+    db_path = resolve_coordinator_db_path()
+    return connect(db_path)
+
+
 def get_db() -> sqlite3.Connection:
-    """Open a WAL-mode connection with row factory."""
+    """Open a WAL-mode connection to the project-local DB (.work/minion.db)."""
     db_path = _get_db_path()
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn = connect(db_path)
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 

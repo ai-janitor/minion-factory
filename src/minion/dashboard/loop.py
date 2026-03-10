@@ -14,6 +14,7 @@ import signal
 import sqlite3
 import time
 
+from minion.db.connection import connect
 from minion.defaults import resolve_db_path
 from minion.dashboard.queries import fetch_activity, fetch_agents, fetch_tasks
 from minion.dashboard.render import clear_and_print, render_screen
@@ -33,9 +34,7 @@ def run() -> None:
 
     while not _shutdown:
         try:
-            conn = sqlite3.connect(db_path, timeout=2)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
+            conn = connect(db_path, timeout=2)
             conn.execute("PRAGMA query_only = ON")
             tasks    = fetch_tasks(conn)
             agents   = fetch_agents(conn)

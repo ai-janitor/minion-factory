@@ -16,8 +16,9 @@ Implementation order: 2nd (after db_schema, alongside project_db — no mutual d
 from __future__ import annotations
 
 import os
-import sqlite3
 import threading
+
+from minion.db.connection import connect
 
 
 def discover_projects(db_path: str, db_lock: threading.Lock | None = None) -> list[dict]:
@@ -38,8 +39,7 @@ def discover_projects(db_path: str, db_lock: threading.Lock | None = None) -> li
     # PSEUDO: for each row: name = basename(path), has_db = exists(.work/minion.db)
     # PSEUDO: return list of {name, path, has_db, agent_count}
     def _query():
-        conn = sqlite3.connect(db_path, timeout=5)
-        conn.row_factory = sqlite3.Row
+        conn = connect(db_path)
         rows = conn.execute(
             "SELECT project_path, COUNT(*) as agent_count "
             "FROM agents WHERE project_path IS NOT NULL "

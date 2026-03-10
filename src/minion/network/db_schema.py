@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from minion.db.connection import connect as _connect
+
 # --- Full schema for fresh installs ---
 
 SCHEMA_SQL = """
@@ -104,9 +106,7 @@ def init_db(db_path: str) -> None:
     # PSEUDO: conn.execute("PRAGMA journal_mode=WAL")
     # PSEUDO: conn.executescript(SCHEMA_SQL)
     # PSEUDO: conn.commit(); conn.close()
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn = _connect(db_path)
     conn.executescript(SCHEMA_SQL)
     conn.commit()
     conn.close()
@@ -145,8 +145,7 @@ def migrate_to_composite_pk(db_path: str) -> dict:
     # PSEUDO: INSERT INTO agents_new SELECT ... COALESCE(machine_id, 'unknown'), COALESCE(project_path, 'unknown') ...
     # PSEUDO: DROP TABLE agents; ALTER TABLE agents_new RENAME TO agents
     # PSEUDO: return {"status": "migrated", "rows": count}
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn = _connect(db_path)
 
     if _has_composite_pk(conn):
         conn.close()
@@ -227,7 +226,7 @@ def migrate_db(db_path: str) -> list[str]:
     #   try: conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_def}")
     #   except sqlite3.OperationalError: pass  # column already exists
     # PSEUDO: conn.commit(); conn.close(); return added
-    conn = sqlite3.connect(db_path, timeout=5)
+    conn = _connect(db_path)
     added = []
     for col_name, col_def in MIGRATION_COLUMNS:
         try:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from minion.db import get_db
+from minion.db import connect, get_db
 from .path_resolution_and_slug import _get_backlog_path, _now_iso
 
 
@@ -65,12 +65,7 @@ def _lookup_item(file_path: str, db_path: str | None) -> dict:
 
 def _open_db(db_path: str):
     """Open a connection to an explicit DB path (used in tests for isolation)."""
-    import sqlite3
-    conn = sqlite3.connect(db_path, timeout=5)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+    return connect(db_path)
 
 
 def _update_status(file_path: str, new_status: str, db_path: str | None) -> dict:

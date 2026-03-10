@@ -10,7 +10,7 @@ import datetime
 import os
 import sqlite3
 
-from minion.db import get_coordinator_db
+from minion.db import connect, get_coordinator_db
 
 
 def who_global() -> dict[str, object]:
@@ -67,8 +67,7 @@ def _agent_has_active_tasks(agent_name: str, project_path: str) -> bool:
     if not os.path.exists(local_db):
         return False
     try:
-        conn = sqlite3.connect(local_db, timeout=2)
-        conn.row_factory = sqlite3.Row
+        conn = connect(local_db, timeout=2)
         row = conn.execute(
             "SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status IN ('open', 'assigned', 'in_progress', 'fixed')",
             (agent_name,),
