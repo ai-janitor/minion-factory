@@ -40,6 +40,10 @@ def register(
     crew: str = "",
     scope: str = "project",
 ) -> dict[str, object]:
+    # Auto-detect model from environment if not explicitly provided (#235)
+    if not model:
+        model = os.environ.get("MINION_MODEL", "")
+
     # Precondition assertions — backlog #63
     assert agent_name, "agent_name must not be empty"
     assert agent_class, "agent_class must not be empty"
