@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from minion.state_machines import (
     AGENT_STATUS_TRANSITIONS,
     DAEMON_TRANSITIONS,

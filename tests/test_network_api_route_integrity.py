@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
 from minion.network.router import Router
 from minion.network.handlers import register_all
+
+pytestmark = pytest.mark.unit
 
 
 def _build_router() -> Router:

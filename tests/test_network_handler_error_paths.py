@@ -26,6 +26,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 # ── Shared Fake Handler ────────────────────────────────────────────────────────
 # Purpose: Minimal mock that satisfies the (handler, db_path, **kwargs) contract.

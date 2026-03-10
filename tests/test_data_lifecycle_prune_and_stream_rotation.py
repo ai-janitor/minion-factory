@@ -12,6 +12,8 @@ import tempfile
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def fresh_db(tmp_path, monkeypatch):

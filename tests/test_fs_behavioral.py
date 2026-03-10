@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # _slugify — text to filesystem-safe slug

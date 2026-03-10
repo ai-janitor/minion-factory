@@ -11,6 +11,8 @@ import os
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # get_agent_class — reads MINION_CLASS env var, defaults to 'lead'

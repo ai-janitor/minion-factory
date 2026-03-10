@@ -11,6 +11,8 @@ from typing import Optional
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Minimal agent_cfg stub
