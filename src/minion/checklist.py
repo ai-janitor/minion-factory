@@ -1,17 +1,19 @@
 """Checklist helper — template lookup and runtime checklist read/write.
 
 Purpose: Provide a single API for accessing checklist templates (shipped as package data)
-         and reading/writing agent checklists to ~/.minion_work/checklists/.
+         and reading/writing agent checklists to project-local .work/checklists/.
 Rationale: Templates were previously only in .work/templates/ (not shipped with install).
-           Runtime checklists were only in .work/checklists/ (project-local). This module
+           Runtime checklists live in .work/checklists/ (project-local). This module
            makes both accessible from any context via importlib-style path resolution.
-Responsibility: Template path resolution, checklist dir creation, checklist CRUD.
-Organization: Four public functions — get_template_path, get_checklist_dir, write_checklist, read_checklist.
+Responsibility: Template path resolution, template-to-class resolution, checklist dir creation, checklist CRUD.
+Organization: Public functions — get_template_path, resolve_template, get_checklist_dir, write_checklist, read_checklist.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+from minion.defaults import resolve_work_dir
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -20,11 +22,17 @@ from pathlib import Path
 # Template names that ship with the package
 TEMPLATE_NAMES = ("napoleon", "lead", "worker")
 
-# Global checklist directory — shared across all projects
-_CHECKLIST_DIR = Path("~/.minion_work/checklists").expanduser()
-
 # Templates live alongside this module in src/minion/templates/
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+
+# Map agent class → default template name
+_CLASS_TO_TEMPLATE: dict[str, str] = {
+    "lead": "lead",
+    "coder": "worker",
+    "recon": "worker",
+    "auditor": "worker",
+    "builder": "worker",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -61,20 +69,61 @@ def get_template_path(template_name: str) -> Path:
     return path
 
 
-# ---------------------------------------------------------------------------
-# Checklist directory
-# ---------------------------------------------------------------------------
+def resolve_template(agent_class: str, phase: str | None = None) -> Path:
+    """Resolve the best checklist template for an agent class and optional phase.
 
+    Resolution order:
+    1. <class>-<phase>.md template (e.g. coder-implementation-checklist.md) — if phase provided
+    2. Class default: lead → lead-checklist.md, coder/recon/auditor/builder → worker-checklist.md
+    3. Fall through to ValueError if nothing resolves
 
-def get_checklist_dir() -> Path:
-    """Return the global checklist directory, creating it if missing.
+    Args:
+        agent_class: The agent's class (lead, coder, recon, auditor, builder).
+        phase: Optional current task phase/status (e.g. 'implementation', 'review').
 
     Returns:
-        Path to ~/.minion_work/checklists/ (guaranteed to exist after call).
+        Path to the resolved template file.
+
+    Raises:
+        ValueError: If no template can be resolved for the given class.
     """
-    # Create the directory tree if it doesn't exist
-    _CHECKLIST_DIR.mkdir(parents=True, exist_ok=True)
-    return _CHECKLIST_DIR
+    # Step 1: Try phase-specific template if phase is provided
+    if phase:
+        phase_template = _TEMPLATES_DIR / f"{agent_class}-{phase}-checklist.md"
+        if phase_template.exists():
+            return phase_template
+
+    # Step 2: Use class-to-template default mapping
+    template_name = _CLASS_TO_TEMPLATE.get(agent_class)
+    if template_name:
+        path = _TEMPLATES_DIR / f"{template_name}-checklist.md"
+        if path.exists():
+            return path
+
+    raise ValueError(
+        f"No template found for class '{agent_class}'"
+        + (f" phase '{phase}'" if phase else "")
+        + f". Known classes: {', '.join(_CLASS_TO_TEMPLATE.keys())}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Checklist directory — project-local .work/checklists/
+# ---------------------------------------------------------------------------
+
+
+def get_checklist_dir(project_dir: str | Path | None = None) -> Path:
+    """Return the project-local checklist directory, creating it if missing.
+
+    Uses resolve_work_dir() to find the project root, then appends checklists/.
+
+    Returns:
+        Path to <project>/.work/checklists/ (guaranteed to exist after call).
+    """
+    work_dir = resolve_work_dir(project_dir)
+    checklist_dir = work_dir / "checklists"
+    checklist_dir.mkdir(parents=True, exist_ok=True)
+    return checklist_dir
 
 
 # ---------------------------------------------------------------------------
@@ -82,18 +131,19 @@ def get_checklist_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
-def write_checklist(agent_name: str, content: str) -> Path:
+def write_checklist(agent_name: str, content: str, project_dir: str | Path | None = None) -> Path:
     """Write a checklist file for an agent.
 
     Args:
         agent_name: The agent's registered name (e.g. 'b238-w1').
         content: The full markdown content of the checklist.
+        project_dir: Optional project directory override.
 
     Returns:
-        Path to the written file (~/.minion_work/checklists/<agent_name>.md).
+        Path to the written file (<project>/.work/checklists/<agent_name>.md).
     """
     # Ensure directory exists
-    checklist_dir = get_checklist_dir()
+    checklist_dir = get_checklist_dir(project_dir)
 
     # Write the checklist content
     path = checklist_dir / f"{agent_name}.md"
@@ -107,20 +157,21 @@ def write_checklist(agent_name: str, content: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def read_checklist(agent_name: str) -> str | None:
+def read_checklist(agent_name: str, project_dir: str | Path | None = None) -> str | None:
     """Read a checklist file for an agent.
 
-    Checks ~/.minion_work/checklists/<agent_name>.md first.
+    Checks <project>/.work/checklists/<agent_name>.md.
     Returns None if the file does not exist.
 
     Args:
         agent_name: The agent's registered name.
+        project_dir: Optional project directory override.
 
     Returns:
         The checklist content as a string, or None if not found.
     """
-    # Check global checklist location
-    path = _CHECKLIST_DIR / f"{agent_name}.md"
+    checklist_dir = get_checklist_dir(project_dir)
+    path = checklist_dir / f"{agent_name}.md"
     if path.exists():
         return path.read_text(encoding="utf-8")
 
