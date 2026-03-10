@@ -156,6 +156,11 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
                 (assigned_to, now, task_id),
             )
             _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
+        # Update agent status to busy so dashboard reflects the assignment
+        cursor.execute(
+            "UPDATE agents SET status = 'busy', last_seen = ? WHERE name = ?",
+            (now, assigned_to),
+        )
         conn.commit()
         update_pane_task(assigned_to, f"T{task_id}: {task_title}")
         return {"status": "assigned", "task_id": task_id, "assigned_to": assigned_to}
