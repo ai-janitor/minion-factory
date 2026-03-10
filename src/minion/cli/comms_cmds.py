@@ -101,3 +101,20 @@ def register_commands(cli: click.Group) -> None:
         """Return the last N messages across all agents."""
         from minion.comms import get_history as _get_history
         _output(_get_history(count), ctx.obj["human"])
+
+    @comms_group.command("sitrep-global")
+    @click.option("--from", "-f", "from_agent", required=True,
+                  help="Sending agent name")
+    @click.option("--message", "-m", default="",
+                  help="Custom sitrep message (auto-generates from monitoring if omitted)")
+    @click.pass_context
+    def sitrep_global_cmd(ctx: click.Context, from_agent: str, message: str) -> None:
+        """Send a cross-project sitrep to all known leads.
+
+        \b
+        SU-19: Cross-project coordination. Discovers all leads from the
+        coordinator DB and sends each a sitrep via send-global routing.
+        If no custom message is provided, auto-generates from monitoring.sitrep().
+        """
+        from minion.comms.send import sitrep_global as _sitrep_global
+        _output(_sitrep_global(from_agent, message), ctx.obj["human"])

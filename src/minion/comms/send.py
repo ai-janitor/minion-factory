@@ -320,3 +320,72 @@ def send_global(
         return {"error": f"Agent '{to_agent}' not found in coordinator DB or network, or target unreachable."}
     finally:
         conn.close()
+
+
+def sitrep_global(
+    from_agent: str,
+    message: str = "",
+) -> dict[str, object]:
+    """Send a cross-project sitrep to all project leads.
+
+    Purpose: SU-19 cross-project coordination — allows a coordinator agent to
+             broadcast a status report to all leads across all known projects.
+    Rationale: A coordinator needs to send sitreps up and laterally without
+               knowing every lead's name or project. This discovers all leads
+               from the coordinator DB and sends to each.
+
+    Pseudo-logic:
+      1. Query coordinator DB for all agents with class 'lead' or 'coordinator'
+      2. Deduplicate by name (agent may be in multiple projects)
+      3. For each lead: send_global(from_agent, lead_name, sitrep_message)
+      4. Return summary: {sent_to: [...], failed: [...]}
+    """
+    assert from_agent, "from_agent must not be empty"
+
+    # PSEUDO: build the sitrep message — use monitoring.sitrep() if no custom message
+    if not message:
+        try:
+            from minion.monitoring import sitrep as _sitrep
+            sitrep_data = _sitrep()
+            import json
+            message = f"SITREP from {from_agent}:\n{json.dumps(sitrep_data, indent=2, default=str)}"
+        except Exception:
+            message = f"SITREP from {from_agent}: (unable to gather status data)"
+
+    # PSEUDO: discover all leads from coordinator DB
+    leads: set[str] = set()
+    try:
+        coord = get_coordinator_db()
+        try:
+            rows = coord.execute(
+                "SELECT DISTINCT name FROM agents WHERE agent_class IN ('lead', 'coordinator')"
+            ).fetchall()
+            leads = {r[0] for r in rows if r[0] != from_agent}
+        finally:
+            coord.close()
+    except Exception:
+        pass
+
+    if not leads:
+        return {"error": "No leads found in coordinator DB to send sitrep to."}
+
+    # PSEUDO: send to each lead via send_global
+    sent_to: list[str] = []
+    failed: list[dict[str, str]] = []
+    for lead in sorted(leads):
+        try:
+            result = send_global(from_agent, lead, message)
+            if "error" in result:
+                failed.append({"agent": lead, "error": str(result["error"])})
+            else:
+                sent_to.append(lead)
+        except Exception as e:
+            failed.append({"agent": lead, "error": str(e)})
+
+    return {
+        "status": "sitrep_sent",
+        "from": from_agent,
+        "sent_to": sent_to,
+        "failed": failed,
+        "total_leads": len(leads),
+    }
