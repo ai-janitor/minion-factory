@@ -418,6 +418,54 @@ class TestUpdateItem:
         result = update_item("bugs/anything", db=db_path)
         assert "error" in result
 
+    def test_update_by_id(self, db_path):
+        """update_item should accept item_id as an alternative to file_path."""
+        from minion.backlog import add, update_item
+        r = add("bug", "ID Lookup Bug", db=db_path)
+        updated = update_item(item_id=r["id"], priority="high", db=db_path)
+        assert updated["priority"] == "high"
+        assert updated["file_path"] == r["file_path"]
+
+    def test_update_deferred_item_by_id(self, db_path):
+        """Deferred items must be updatable by ID — the original bug (#236)."""
+        from minion.backlog import add, update_item
+        import sqlite3
+        r = add("bug", "Deferred Bug", db=db_path)
+        # Manually set status to deferred (simulating 'backlog defer')
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE backlog SET status='deferred' WHERE id=?", (r["id"],))
+        conn.commit()
+        conn.close()
+        updated = update_item(item_id=r["id"], priority="critical", db=db_path)
+        assert "error" not in updated
+        assert updated["priority"] == "critical"
+        assert updated["status"] == "deferred"
+
+    def test_update_deferred_item_by_path(self, db_path):
+        """Deferred items must also be updatable by path."""
+        from minion.backlog import add, update_item
+        import sqlite3
+        r = add("bug", "Deferred Path Bug", db=db_path)
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE backlog SET status='deferred' WHERE id=?", (r["id"],))
+        conn.commit()
+        conn.close()
+        updated = update_item(r["file_path"], priority="low", db=db_path)
+        assert "error" not in updated
+        assert updated["priority"] == "low"
+        assert updated["status"] == "deferred"
+
+    def test_update_missing_id_returns_error(self, db_path):
+        from minion.backlog import update_item
+        result = update_item(item_id=99999, priority="low", db=db_path)
+        assert "error" in result
+
+    def test_no_identifier_returns_error(self, db_path):
+        """Neither file_path nor item_id provided — should error."""
+        from minion.backlog import update_item
+        result = update_item(priority="low", db=db_path)
+        assert "error" in result
+
 
 class TestReindex:
     def _make_item_folder(self, backlog_root, item_type_folder, slug, title, item_type):
@@ -729,6 +777,33 @@ class TestBacklogCLI:
         assert res.exit_code == 0, res.output
         data = _parse_json(res.output)
         assert data["priority"] == "critical"
+
+    def test_update_by_id(self, runner, project_dir):
+        """CLI: backlog update --id <N> should find items regardless of status."""
+        res = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "CLI ID Update")
+        data = _parse_json(res.output)
+        item_id = str(data["id"])
+        res = _run(runner, project_dir, "backlog", "update", "--id", item_id, "--priority", "high")
+        assert res.exit_code == 0, res.output
+        updated = _parse_json(res.output)
+        assert updated["priority"] == "high"
+
+    def test_update_deferred_item_by_id_cli(self, runner, project_dir, db_path):
+        """CLI: updating a deferred item by --id must succeed (bug #236)."""
+        import sqlite3
+        res = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "CLI Deferred Update")
+        data = _parse_json(res.output)
+        item_id = data["id"]
+        # Force status to deferred in DB
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE backlog SET status='deferred' WHERE id=?", (item_id,))
+        conn.commit()
+        conn.close()
+        res = _run(runner, project_dir, "backlog", "update", "--id", str(item_id), "--priority", "critical")
+        assert res.exit_code == 0, res.output
+        updated = _parse_json(res.output)
+        assert updated["priority"] == "critical"
+        assert updated["status"] == "deferred"
 
     def test_reindex_returns_registered_skipped(self, runner, project_dir):
         # Create items via add first so reindex sees them as already registered
