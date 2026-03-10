@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+
+from minion.db.connection import connect as _connect
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -62,9 +64,7 @@ class CommsWatcher:
 
     def _connect(self) -> sqlite3.Connection:
         try:
-            conn = sqlite3.connect(self.db_path, timeout=5.0)
-            conn.row_factory = sqlite3.Row
-            return conn
+            return _connect(self.db_path)
         except sqlite3.OperationalError as exc:
             import sys
             print(
