@@ -98,9 +98,15 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
     ctx.obj["human"] = human
     ctx.obj["compact"] = compact
     ctx.obj["project_dir"] = os.path.abspath(project_dir) if project_dir else None
+    # SU-16: Normalize -C to absolute path and add debug log for traceability.
     # Set DB path before init so all commands target the right project
     if project_dir:
-        db_path = os.path.join(os.path.abspath(project_dir), ".work", "minion.db")
+        import logging as _logging
+        abs_project_dir = os.path.abspath(project_dir)
+        _logging.getLogger("minion.cli").debug(
+            "-C resolved: %r -> %s", project_dir, abs_project_dir
+        )
+        db_path = os.path.join(abs_project_dir, ".work", "minion.db")
         os.environ["MINION_DB_PATH"] = db_path
         reset_db_path()
     init_db()

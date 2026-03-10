@@ -170,8 +170,8 @@ def _rollup_requirement_to_parent(
         row = db.execute(
             "SELECT parent_id FROM requirements WHERE id = ?", (req_id,)
         ).fetchone()
-    except Exception:
-        return  # parent_id column not yet available
+    except (KeyError, sqlite3.OperationalError):
+        return  # SU-17: narrowed — parent_id column not yet available
 
     if row is None or row["parent_id"] is None:
         return

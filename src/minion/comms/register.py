@@ -158,6 +158,9 @@ def register(
         result["tools"] = get_tools_for_class(agent_class)
 
         # Merge crew YAML context when --crew is provided
+        # SU-13: Lazy import to break comms->crew bidirectional coupling at module level.
+        # crew/__init__.py imports comms.register transitively via crew/recruit.py.
+        # This lazy import keeps runtime dependency one-directional (comms calls crew only when needed).
         zone = ""
         capabilities: list[str] = []
         if crew:

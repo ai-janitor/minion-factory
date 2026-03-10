@@ -4,6 +4,9 @@ Purpose: Cli Provider Protocol module.
 Rationale: Extracted into own module for single-responsibility provider configuration.
 Responsibility: Cli Provider Protocol. NOT responsible for unrelated concerns.
 Organization: Standalone functions and/or a single class. See source.
+
+SU-14: Shared error handling delegated to _shared_error_log and _shared_error_classifier.
+BaseProvider methods are thin wrappers for backward compatibility.
 """
 from __future__ import annotations
 
@@ -11,6 +14,9 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional
+
+from ._shared_error_classifier import extract_error_summary
+from ._shared_error_log import append_error_log
 
 
 class BaseProvider(ABC):
@@ -67,44 +73,22 @@ class BaseProvider(ABC):
     def resume_label(self) -> str:
         return ""
 
-    # shared helpers
+    # shared helpers — SU-14: delegate to standalone modules for reusability
 
     @staticmethod
     def _append_error_log(error_log: Path, content: str) -> None:
         """Append a timestamped error entry to the provider error log file.
 
-        Shared by all providers that override filter_log_line to capture verbose
-        errors. Extracted here to avoid duplication across codex.py and gemini.py.
+        SU-14: Delegates to _shared_error_log.append_error_log().
+        Kept as static method for backward compatibility with subclasses.
         """
-        from datetime import datetime
-        try:
-            error_log.parent.mkdir(parents=True, exist_ok=True)
-            with open(error_log, "a") as f:
-                f.write(f"\n--- {datetime.now().isoformat()} ---\n")
-                f.write(content)
-                f.write("\n")
-        except OSError as exc:
-            import sys
-            print(f"WARNING: failed to write error log {error_log}: {exc}", file=sys.stderr)
+        append_error_log(error_log, content)
 
     @staticmethod
     def _extract_error_summary(line: str, max_normal: int = 500) -> Optional[str]:
-        """If line exceeds max_normal chars, try to extract a short error summary."""
-        if len(line) <= max_normal:
-            return None
-        # Try JSON error extraction
-        try:
-            import json
-            data = json.loads(line)
-            if isinstance(data, dict):
-                code = data.get("error", {}).get("code") or data.get("code") or data.get("status")
-                msg = data.get("error", {}).get("message") or data.get("message") or ""
-                if code or msg:
-                    return f"{code or 'ERROR'}: {msg[:120]}"
-        except (json.JSONDecodeError, TypeError, AttributeError):
-            pass
-        # Try HTTP status code pattern
-        m = re.search(r'\b([45]\d{2})\b', line[:200])
-        if m:
-            return f"HTTP {m.group(1)} (response truncated, {len(line)} chars)"
-        return f"Large output ({len(line)} chars)"
+        """If line exceeds max_normal chars, try to extract a short error summary.
+
+        SU-14: Delegates to _shared_error_classifier.extract_error_summary().
+        Kept as static method for backward compatibility with subclasses.
+        """
+        return extract_error_summary(line, max_normal)
