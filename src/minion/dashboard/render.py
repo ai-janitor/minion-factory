@@ -345,7 +345,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
             f"{status_color}{display_status:<10}{_RESET}  "
             f"{seen_color}{last_seen:<8}{_RESET}  "
             f"{_visible_pad(bar, 20)}  "
-            f"{checklist_col}"
+            f"{_visible_pad(checklist_col, 14)}"
         )
 
     if overflow > 0:
