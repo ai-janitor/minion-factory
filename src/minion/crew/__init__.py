@@ -56,7 +56,7 @@ def merge_crew_context(crew: str, agent_name: str) -> dict[str, object]:
                 result["capabilities"] = list(agent_cfg.capabilities)
             if agent_cfg.system:
                 result["system_prompt_excerpt"] = agent_cfg.system[:200]
-    except Exception as exc:
+    except (ValueError, OSError, KeyError) as exc:
         result["crew_error"] = f"Failed to load crew '{crew}': {exc}"
 
     return result

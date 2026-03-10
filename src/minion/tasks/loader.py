@@ -268,7 +268,7 @@ def _load_all_flows(flows_dir: Path | None = None) -> None:
         try:
             flow = _load_flow_from_disk(name, flows_path)
             _FLOW_CACHE[name] = flow
-        except Exception as exc:
+        except (ValueError, FileNotFoundError, KeyError) as exc:
             log.warning("failed to load flow %r: %s", name, exc)
     _FLOWS_LOADED = True
 

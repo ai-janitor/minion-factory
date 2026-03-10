@@ -241,7 +241,7 @@ def get_agent_scope() -> str | None:
         finally:
             coord.close()
     except Exception:
-        return None
+        return None  # broad catch: coordinator DB access is best-effort
 
 
 # ---------------------------------------------------------------------------

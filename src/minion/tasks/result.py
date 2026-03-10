@@ -66,7 +66,7 @@ def create_result(
                 result["phase_warning"] = phase_result["error"]
             else:
                 result["phase_advanced"] = phase_result.get("new_status", True)
-        except Exception as exc:
+        except (ValueError, RuntimeError, KeyError) as exc:
             result["phase_warning"] = str(exc)
 
     return result

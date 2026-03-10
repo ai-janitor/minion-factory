@@ -50,7 +50,7 @@ def _parse_frontmatter(path: str) -> dict[str, object]:
     try:
         import yaml  # pyyaml — confirmed in pyproject.toml deps
         data = yaml.safe_load(m.group(1)) or {}
-    except Exception as exc:
+    except Exception as exc:  # broad catch: YAML parsing can fail in many ways (malformed, encoding, etc)
         log.warning("_parse_frontmatter: YAML parse error in %s: %s", path, exc)
         return result
 

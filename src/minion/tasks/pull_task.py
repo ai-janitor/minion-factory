@@ -140,7 +140,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             from minion.intel import show_war_plan
             wp = show_war_plan()
             result["war_plan"] = wp.get("content", "")
-        except Exception:
+        except (ImportError, OSError):
             result["war_plan"] = ""
 
         # Linked intel injection — read-only, never blocks the pull
@@ -148,7 +148,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             from minion.intel import intel_for_task
             intel_result = intel_for_task(task_id)
             result["linked_intel"] = intel_result.get("docs", [])
-        except Exception:
+        except (ImportError, KeyError):
             result["linked_intel"] = []
 
         # Suggested reading — topic-based intel from task title
@@ -158,7 +158,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             suggested = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
             if suggested:
                 result["suggested_reading"] = suggested
-        except Exception:
+        except (ImportError, KeyError):
             pass
 
         return result

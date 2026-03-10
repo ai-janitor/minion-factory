@@ -171,7 +171,7 @@ def _get_current_task(project_path: str | None, agent_name: str) -> dict | None:
         if row:
             return {"id": row["id"], "title": row["title"], "status": row["status"]}
     except Exception:
-        pass
+        pass  # broad catch: project DB read is best-effort for enrichment
     return None
 
 

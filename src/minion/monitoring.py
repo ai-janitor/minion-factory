@@ -322,7 +322,7 @@ def sitrep() -> dict[str, object]:
             wp = show_war_plan()
             content = wp.get("content", "")
             war_plan_summary = content[:500] if content else None
-        except Exception:
+        except (ImportError, OSError):
             pass
 
         # Intel doc count — number of registered intel docs
@@ -331,7 +331,7 @@ def sitrep() -> dict[str, object]:
             cursor.execute("SELECT COUNT(*) FROM intel_docs")
             intel_count = cursor.fetchone()[0]
         except Exception:
-            pass
+            pass  # broad catch: intel_docs table may not exist
 
         return {
             "agents": agents,
@@ -381,7 +381,7 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
                             ("system", lead, content_file, now),
                         )
                         alerts_fired.append(key)
-                    except Exception as exc:
+                    except Exception as exc:  # broad catch: alerting must never crash the caller
                         log.error("HP ALERT FAILED for %s (hp=%.0f%%): %s — alert was: %s", agent_name, hp_pct, exc, message)
 
         conn.execute(
@@ -389,7 +389,7 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
             (json.dumps(alerts_fired) if alerts_fired else None, agent_name),
         )
         conn.commit()
-    except Exception as exc:
+    except Exception as exc:  # broad catch: HP alert system must never crash the caller
         log.error("_fire_hp_alerts CRASHED for %s (hp=%.0f%%): %s", agent_name, hp_pct, exc)
     finally:
         conn.close()

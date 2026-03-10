@@ -14,6 +14,8 @@ Implementation order: 4th (depends on project_db + discovery).
 
 from __future__ import annotations
 
+import sqlite3
+import sqlite3
 from urllib.parse import urlparse, parse_qs
 
 from minion.defaults import MAX_DOC_SIZE
@@ -56,7 +58,7 @@ def handle_project_agents(handler, db_path: str, name: str = "", **kwargs) -> No
             LEFT JOIN tasks t ON t.assigned_to = a.name AND t.status = 'in_progress'
             ORDER BY a.last_seen DESC
         """).fetchall()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -122,7 +124,7 @@ def handle_project_tasks(handler, db_path: str, name: str = "", **kwargs) -> Non
 
     try:
         rows = conn.execute(query, args).fetchall()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -144,7 +146,7 @@ def handle_task_lineage(handler, db_path: str, name: str = "",
 
     try:
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,)).fetchone()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -159,7 +161,7 @@ def handle_task_lineage(handler, db_path: str, name: str = "",
             "FROM task_history WHERE task_id = ? ORDER BY timestamp ASC",
             (tid,),
         ).fetchall()
-    except Exception:
+    except sqlite3.DatabaseError:
         history = []
 
     handler._json_response(200, {
@@ -198,7 +200,7 @@ def handle_project_messages(handler, db_path: str, name: str = "", **kwargs) -> 
 
     try:
         rows = conn.execute(query, args).fetchall()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 
@@ -232,7 +234,7 @@ def handle_project_raid_log(handler, db_path: str, name: str = "", **kwargs) -> 
             "SELECT id, agent_name, entry_file, priority, created_at "
             "FROM raid_log ORDER BY created_at DESC"
         ).fetchall()
-    except Exception as e:
+    except sqlite3.DatabaseError as e:
         handler._json_response(500, {"error": f"DB query failed: {e}"})
         return
 

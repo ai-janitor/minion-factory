@@ -18,6 +18,7 @@ Pseudo-logic:
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 # Jinja2 template environment — initialized once on first use
@@ -56,8 +57,8 @@ def _get_first_project_db(network_db_path: str):
             if conn:
                 db_path = os.path.join(proj["path"], ".work", "minion.db")
                 return conn, db_path
-    except Exception:
-        pass
+    except (ImportError, OSError, Exception):
+        pass  # broad catch: discovery/DB may fail in many ways
     return None, None
 
 
@@ -110,7 +111,7 @@ def _render_agents(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_agent_summary
             agents = get_agent_summary(conn)
-        except Exception:
+        except (ImportError, sqlite3.DatabaseError):
             pass
 
     return template.render(page="agents", agents=agents)
@@ -127,7 +128,7 @@ def _render_tasks(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_task_pipeline
             pipeline = get_task_pipeline(conn)
-        except Exception:
+        except (ImportError, sqlite3.DatabaseError):
             pass
 
     return template.render(page="tasks", pipeline=pipeline)
@@ -144,7 +145,7 @@ def _render_health(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_system_stats
             stats = get_system_stats(conn, db_path or "")
-        except Exception:
+        except (ImportError, sqlite3.DatabaseError):
             pass
 
     return template.render(page="health", stats=stats)
@@ -161,7 +162,7 @@ def _render_messages(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_recent_messages
             messages = get_recent_messages(conn)
-        except Exception:
+        except (ImportError, sqlite3.DatabaseError):
             pass
 
     return template.render(page="messages", messages=messages)

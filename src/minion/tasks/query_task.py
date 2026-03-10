@@ -37,7 +37,7 @@ def _inline_file(path: str | None) -> str | None:
             return None
         with open(resolved) as f:
             return f.read()
-    except Exception:
+    except OSError:
         return None
 
 
@@ -56,7 +56,7 @@ def _inline_requirement(req_path: str | None) -> str | None:
             return None
         with open(readme) as f:
             return f.read()
-    except Exception:
+    except OSError:
         return None
 
 
@@ -155,12 +155,12 @@ def get_task(task_id: int) -> dict[str, object]:
                 if c.get("files_read"):
                     try:
                         c["files_read"] = _json_mod.loads(c["files_read"])
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
                 comments.append(c)
             result["comments"] = comments
         except Exception:
-            result["comments"] = []
+            result["comments"] = []  # broad catch: task_comments table may not exist
         return result
     finally:
         conn.close()

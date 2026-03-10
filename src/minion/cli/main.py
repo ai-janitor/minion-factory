@@ -135,7 +135,7 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
             finally:
                 conn.close()
         except Exception:
-            pass  # Best-effort — never let heartbeat failures break commands
+            pass  # broad catch: best-effort heartbeat — must never break CLI commands — never let heartbeat failures break commands
 
     ctx.call_on_close(_heartbeat_on_close)
 

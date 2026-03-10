@@ -11,6 +11,7 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import os
+import sqlite3
 
 from minion.comms.delivery import route_cross_repo
 from minion.db import (
@@ -119,7 +120,7 @@ def send(
                         }
                 finally:
                     coord.close()
-            except Exception:
+            except (sqlite3.DatabaseError, OSError):
                 pass  # Coordinator unavailable — allow local send
 
         # Write message body to filesystem
@@ -282,8 +283,8 @@ def send_global(
                         f"Recipient '{to_agent}' does not have poll running. "
                         f"Make sure they have poll in the foreground if operating from a terminal."
                     )
-            except Exception:
-                pass
+            except ImportError:
+                pass  # polling module unavailable
             return cross_result
 
         # Tier 3: API GLOBAL — try network server
@@ -314,8 +315,8 @@ def send_global(
                     "queued_file": queued,
                     "reason": net_result.get("error", "network send failed"),
                 }
-        except Exception:
-            pass
+        except (ImportError, OSError):
+            pass  # network tier unavailable
 
         return {"error": f"Agent '{to_agent}' not found in coordinator DB or network, or target unreachable."}
     finally:
@@ -349,7 +350,7 @@ def sitrep_global(
             sitrep_data = _sitrep()
             import json
             message = f"SITREP from {from_agent}:\n{json.dumps(sitrep_data, indent=2, default=str)}"
-        except Exception:
+        except (ImportError, ValueError):
             message = f"SITREP from {from_agent}: (unable to gather status data)"
 
     # PSEUDO: discover all leads from coordinator DB
@@ -363,8 +364,8 @@ def sitrep_global(
             leads = {r[0] for r in rows if r[0] != from_agent}
         finally:
             coord.close()
-    except Exception:
-        pass
+    except (sqlite3.DatabaseError, OSError):
+        pass  # coordinator DB unavailable
 
     if not leads:
         return {"error": "No leads found in coordinator DB to send sitrep to."}
@@ -379,7 +380,7 @@ def sitrep_global(
                 failed.append({"agent": lead, "error": str(result["error"])})
             else:
                 sent_to.append(lead)
-        except Exception as e:
+        except (OSError, sqlite3.DatabaseError, ValueError) as e:
             failed.append({"agent": lead, "error": str(e)})
 
     return {

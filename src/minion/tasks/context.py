@@ -127,7 +127,7 @@ def assemble_context_chain(
                 for r in rows
             ]
         except Exception:
-            pass  # transition_log not yet created (task 011)
+            pass  # broad catch: transition_log not yet created (task 011)
 
     # Parent chain — requirement's transition history
     if requirement_id is not None:
@@ -142,7 +142,7 @@ def assemble_context_chain(
                 for r in rows
             ]
         except Exception:
-            pass
+            pass  # broad catch: transition_log may not exist
 
         # Sibling context — other tasks under same requirement
         try:
@@ -158,6 +158,6 @@ def assemble_context_chain(
                 for r in rows
             ]
         except Exception:
-            pass
+            pass  # broad catch: join query may fail on missing tables
 
     return result

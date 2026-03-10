@@ -257,8 +257,8 @@ def status() -> dict:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=3, context=ctx) as resp:
             health_ok = resp.status == 200
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        pass  # health probe failed — process may be alive but not responding
 
     return {
         "status": "running" if health_ok else "pid_alive",

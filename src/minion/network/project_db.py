@@ -74,7 +74,7 @@ def get_project_db(project_path: str) -> sqlite3.Connection | None:
                 try:
                     entry.conn.close()
                 except Exception:
-                    pass
+                    pass  # broad catch: conn.close() teardown
                 del _cache[project_path]
             else:
                 entry.last_accessed = time.monotonic()
@@ -86,7 +86,7 @@ def get_project_db(project_path: str) -> sqlite3.Connection | None:
             try:
                 _cache[oldest_key].conn.close()
             except Exception:
-                pass
+                pass  # broad catch: conn.close() teardown
             del _cache[oldest_key]
 
         # Open new read-only connection
@@ -105,7 +105,7 @@ def close_all() -> None:
             try:
                 entry.conn.close()
             except Exception:
-                pass
+                pass  # broad catch: conn.close() teardown
         _cache.clear()
 
 
@@ -124,6 +124,6 @@ def evict_expired() -> int:
             try:
                 _cache[k].conn.close()
             except Exception:
-                pass
+                pass  # broad catch: conn.close() teardown
             del _cache[k]
         return len(expired)

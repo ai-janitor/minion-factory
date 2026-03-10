@@ -132,7 +132,7 @@ def register(
                 coord.commit()
             finally:
                 coord.close()
-        except Exception as exc:
+        except (OSError, ValueError) as exc:
             log.warning("coordinator DB registration failed: %s", exc)
 
         # Tier 3: Register on API GLOBAL network server (if configured)
@@ -141,7 +141,7 @@ def register(
             net = get_client()
             if net.configured:
                 net.register(agent_name, agent_class)
-        except Exception:
+        except (ImportError, OSError):
             pass  # network tier is optional
 
         result: dict[str, object] = {
@@ -206,8 +206,8 @@ def register(
                 doc_paths.extend(d["doc_path"] for d in zone_docs.get("docs", []))
             if doc_paths:
                 result["suggested_reading"] = list(dict.fromkeys(doc_paths))  # dedupe
-        except Exception:
-            pass
+        except (ImportError, KeyError):
+            pass  # intel module may not be available
 
         if transport == "terminal":
             result["playbook"] = {
@@ -276,7 +276,7 @@ def deregister(agent_name: str) -> dict[str, object]:
             finally:
                 coord.close()
         except Exception:
-            pass  # coordinator DB may not exist yet
+            pass  # broad catch: coordinator DB cleanup is best-effort
 
         # Remove agent roster file
         from minion.db import get_runtime_dir

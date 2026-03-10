@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 import shutil
+
+import yaml
 from typing import Any
 
 from minion.db import _get_db_path, get_db, now_iso
@@ -68,7 +70,7 @@ def _scan_crew_characters(needed_classes: set[str]) -> list[dict[str, str]]:
                         "crew": crew_name,
                         "snippet": snippet,
                     })
-            except Exception:
+            except (yaml.YAMLError, OSError, KeyError):
                 continue
     return characters
 
@@ -222,7 +224,7 @@ def promote(
             flow_obj = load_flow(flow)
             stages = [s.name for s in flow_obj.stages]
             dag_guide = " → ".join(stages)
-        except Exception:
+        except (ImportError, FileNotFoundError, ValueError, AttributeError):
             dag_guide = f"(flow '{flow}' — run `minion flow show {flow}` for stages)"
 
         # Load class duties from _agent-classes.yaml
@@ -230,7 +232,7 @@ def promote(
         try:
             from minion.tasks.agent_classes import get_class_duties
             duties_text = get_class_duties(agent_class)
-        except Exception:
+        except (ImportError, FileNotFoundError, KeyError):
             duties_text = ""
 
         # Extract required crew classes from DAG flow
@@ -241,7 +243,7 @@ def promote(
             class_stages = flow_obj.all_required_classes()
             for cls, stages in sorted(class_stages.items()):
                 required_crew.append({"class": cls, "stages": stages})
-        except Exception:
+        except (ImportError, FileNotFoundError, ValueError):
             pass
 
         # Scan crew YAMLs for available characters matching required classes
@@ -250,7 +252,7 @@ def promote(
             needed_classes = {r["class"] for r in required_crew}
             if needed_classes:
                 available_characters = _scan_crew_characters(needed_classes)
-        except Exception:
+        except (ImportError, OSError):
             pass
 
         # --- SU-07: Ensure requirement_id propagates for lineage tracking ---
