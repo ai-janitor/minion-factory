@@ -26,6 +26,7 @@ from minion.dashboard.render import clear_and_print, render_screen
 def run() -> None:
     """Poll loop: fetch DB → render → sleep 2s → repeat until signal."""
     db_path = resolve_db_path()
+    work_dir = str(db_path.parent) if hasattr(db_path, 'parent') else os.path.dirname(str(db_path))
     _shutdown = False
 
     def _handle_signal(sig: int, frame: object) -> None:
@@ -47,7 +48,7 @@ def run() -> None:
                 width, height = os.get_terminal_size()
             except OSError:
                 width, height = 120, 40
-            screen = render_screen(tasks, agents, activity, width, height)
+            screen = render_screen(tasks, agents, activity, width, height, work_dir=work_dir)
             clear_and_print(screen)
         except sqlite3.OperationalError:
             # DB not yet created or locked — show waiting state

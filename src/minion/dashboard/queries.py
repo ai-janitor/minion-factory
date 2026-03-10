@@ -65,25 +65,33 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Recent task status transitions for the activity feed."""
+    """Recent task status transitions — one per task, most recent only."""
     cursor = conn.execute("""
         SELECT
-            tl.entity_id   AS task_id,
-            SUBSTR(t.title, 1, 25)  AS title,
-            tl.from_status,
-            tl.to_status,
-            tl.triggered_by AS agent,
-            tl.created_at   AS timestamp
-        FROM transition_log tl
-        JOIN tasks t ON t.id = tl.entity_id
-        WHERE tl.entity_type = 'task'
-          AND tl.created_at = (
-              SELECT MAX(tl2.created_at)
-              FROM transition_log tl2
-              WHERE tl2.entity_id = tl.entity_id
-                AND tl2.entity_type = 'task'
-          )
-        ORDER BY tl.created_at DESC
+            task_id,
+            title,
+            from_status,
+            to_status,
+            agent,
+            timestamp
+        FROM (
+            SELECT
+                tl.entity_id   AS task_id,
+                SUBSTR(t.title, 1, 25)  AS title,
+                tl.from_status,
+                tl.to_status,
+                tl.triggered_by AS agent,
+                tl.created_at   AS timestamp,
+                ROW_NUMBER() OVER (
+                    PARTITION BY tl.entity_id
+                    ORDER BY tl.created_at DESC
+                ) AS rn
+            FROM transition_log tl
+            JOIN tasks t ON t.id = tl.entity_id
+            WHERE tl.entity_type = 'task'
+        )
+        WHERE rn = 1
+        ORDER BY timestamp DESC
         LIMIT 8
     """)
     return cursor.fetchall()

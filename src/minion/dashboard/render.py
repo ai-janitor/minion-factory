@@ -10,7 +10,10 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import os
 import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
 
 # ANSI escape codes
 _RESET  = "\033[0m"
@@ -35,8 +38,8 @@ _STATUS_COLORS: dict[str, str] = {
 }
 
 
-def hp_bar(used: int, limit: int) -> str:
-    """Render a colored HP bar.
+def token_bar(used: int, limit: int) -> str:
+    """Render a colored token usage bar.
 
     limit <= 100 is the sentinel set before monitoring fires — show unknown.
     """
@@ -46,7 +49,9 @@ def hp_bar(used: int, limit: int) -> str:
     filled = round(pct * BAR_WIDTH)
     color = _RED if pct > 0.75 else _YELLOW if pct > 0.50 else _GREEN
     bar = f"{color}{'█' * filled}{'░' * (BAR_WIDTH - filled)}{_RESET}"
-    return f"{bar} {pct * 100:.0f}%"
+    used_k = f"{used // 1000}k" if used >= 1000 else str(used)
+    limit_k = f"{limit // 1000}k" if limit >= 1000 else str(limit)
+    return f"{bar} {used_k}/{limit_k}"
 
 
 def _truncate(text: str, width: int) -> str:
@@ -92,25 +97,85 @@ def _render_tasks(tasks: list[sqlite3.Row], width: int) -> list[str]:
     return lines
 
 
-def _render_agents(agents: list[sqlite3.Row], max_rows: int) -> list[str]:
-    """Render agent HP bars, capped to fit available height."""
+def _osc8_link(path: str, display: str) -> str:
+    """Render an OSC 8 terminal hyperlink (clickable in iTerm2, Kitty, WezTerm, etc.)."""
+    url = f"file://{path}"
+    return f"\033]8;;{url}\033\\{display}\033]8;;\033\\"
+
+
+def _relative_time(iso_ts: str | None) -> str:
+    """Convert ISO timestamp to human-readable relative time (e.g. '2m ago', '1h ago')."""
+    if not iso_ts:
+        return "never"
+    try:
+        # Parse ISO timestamp (may or may not have timezone)
+        ts_str = iso_ts.replace("Z", "+00:00")
+        if "+" not in ts_str and ts_str.count("-") <= 2:
+            # Naive timestamp — assume local time
+            dt = datetime.fromisoformat(ts_str)
+            now = datetime.now()
+        else:
+            dt = datetime.fromisoformat(ts_str)
+            now = datetime.now(timezone.utc)
+        delta = now - dt
+        secs = int(delta.total_seconds())
+        if secs < 0:
+            return "now"
+        if secs < 60:
+            return f"{secs}s ago"
+        if secs < 3600:
+            return f"{secs // 60}m ago"
+        if secs < 86400:
+            return f"{secs // 3600}h ago"
+        return f"{secs // 86400}d ago"
+    except (ValueError, TypeError):
+        return "?"
+
+
+def _find_checklist(agent_name: str, work_dir: str) -> str | None:
+    """Find checklist file for an agent. Convention-based lookup."""
+    # Lead checklists: .work/checklists/lead-<name>.md
+    lead_path = os.path.join(work_dir, "checklists", f"lead-{agent_name}.md")
+    if os.path.exists(lead_path):
+        return lead_path
+    # Worker/generic checklists: .work/checklists/<name>.md
+    worker_path = os.path.join(work_dir, "checklists", f"{agent_name}.md")
+    if os.path.exists(worker_path):
+        return worker_path
+    return None
+
+
+def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "") -> list[str]:
+    """Render agent token bars with checklist links, capped to fit available height."""
     lines: list[str] = [
-        f"{_BOLD}{'AGENT':<14}  {'CLASS':<8}  {'STATUS':<10}  HP{_RESET}",
-        "─" * 60,
+        f"{_BOLD}{'AGENT':<14}  {'CLASS':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  📋{_RESET}",
+        "─" * 80,
     ]
 
     visible = agents[:max_rows]
     overflow = len(agents) - len(visible)
 
     for row in visible:
-        bar = hp_bar(row["tokens_used"], row["tokens_limit"])
+        bar = token_bar(row["tokens_used"], row["tokens_limit"])
         agent_status = row["status"] or "unknown"
         status_color = _GREEN if agent_status == "ready" else _YELLOW if agent_status == "busy" else _DIM
+
+        # Checklist link
+        checklist_path = _find_checklist(row["name"], work_dir) if work_dir else None
+        if checklist_path:
+            checklist_col = _osc8_link(checklist_path, f"{_CYAN}checklist{_RESET}")
+        else:
+            checklist_col = f"{_DIM}—{_RESET}"
+
+        last_seen = _relative_time(row["last_seen"])
+        seen_color = _RED if "h ago" in last_seen or "d ago" in last_seen or last_seen == "never" else _DIM
         lines.append(
             f"{row['name']:<14}  "
             f"{row['agent_class']:<8}  "
             f"{status_color}{agent_status:<10}{_RESET}  "
-            f"{bar}"
+            f"{seen_color}{last_seen:<8}{_RESET}  "
+            f"{bar}  "
+            f"{checklist_col}"
         )
 
     if overflow > 0:
@@ -144,6 +209,7 @@ def render_screen(
     activity: list[sqlite3.Row],
     width: int,
     height: int,
+    work_dir: str = "",
 ) -> str:
     """Compose the full screen string from data sections.
 
@@ -162,11 +228,11 @@ def render_screen(
     lines.extend(task_lines)
     lines.append("")
 
-    # Agent HP section — sized to fit remaining height
+    # Agent section — sized to fit remaining height
     task_section_h = len(task_lines) + 3  # header + blank + section label + blank
     agent_max = max(2, height - task_section_h - 14)  # reserve rows for activity + headers
     lines.append(f"{_BOLD}AGENTS{_RESET}")
-    agent_lines = _render_agents(agents, agent_max)
+    agent_lines = _render_agents(agents, agent_max, work_dir=work_dir)
     lines.extend(agent_lines)
     lines.append("")
 
