@@ -467,6 +467,74 @@ class TestUpdateItem:
         assert "error" in result
 
 
+class TestResolveDbPathCrossProjectGuard:
+    """Tests for resolve_db_path() refusing to cross git repo boundaries (#237)."""
+
+    def test_walk_up_within_same_repo_finds_db(self, tmp_path):
+        """Walk-up from a subdirectory within the same git repo should find .work/minion.db."""
+        from minion.defaults import resolve_db_path
+        # Set up: project root with .git and .work/minion.db
+        (tmp_path / ".git").mkdir()
+        work = tmp_path / ".work"
+        work.mkdir()
+        db_file = work / "minion.db"
+        db_file.write_text("")  # just needs to exist
+        subdir = tmp_path / "src" / "minion" / "cli"
+        subdir.mkdir(parents=True)
+        # Monkey-patch cwd to the subdirectory
+        original_cwd = os.getcwd()
+        os.chdir(subdir)
+        try:
+            # Clear env vars that would short-circuit
+            env_backup = {k: os.environ.pop(k) for k in ["MINION_DB_PATH", "MINION_PROJECT"] if k in os.environ}
+            try:
+                result = resolve_db_path()
+                assert result == str(db_file)
+            finally:
+                os.environ.update(env_backup)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_walk_up_blocked_by_different_git_root(self, tmp_path):
+        """Walk-up must NOT cross into a parent directory that has a different .git root."""
+        from minion.defaults import resolve_db_path
+        # Parent project: has .git and .work/minion.db
+        parent_project = tmp_path / "parent-project"
+        parent_project.mkdir()
+        (parent_project / ".git").mkdir()
+        parent_work = parent_project / ".work"
+        parent_work.mkdir()
+        (parent_work / "minion.db").write_text("")
+        # Child project: nested inside parent, has its own .git but NO .work/
+        child_project = parent_project / "child-project"
+        child_project.mkdir()
+        (child_project / ".git").mkdir()
+        # cwd = child project — should NOT find parent's DB
+        original_cwd = os.getcwd()
+        os.chdir(child_project)
+        try:
+            env_backup = {k: os.environ.pop(k) for k in ["MINION_DB_PATH", "MINION_PROJECT"] if k in os.environ}
+            try:
+                result = resolve_db_path()
+                # Should fall back to cwd/.work/minion.db, NOT parent's DB
+                expected_fallback = os.path.join(str(child_project), ".work", "minion.db")
+                assert result == expected_fallback
+                assert str(parent_work) not in result
+            finally:
+                os.environ.update(env_backup)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_update_item_includes_project_field(self, db_path):
+        """update_item output should include a 'project' field showing the resolved DB path."""
+        from minion.backlog import add, update_item
+        r = add("bug", "Project Field Bug", db=db_path)
+        updated = update_item(r["file_path"], priority="high", db=db_path)
+        assert "project" in updated
+        # The project field should be the grandparent of the DB file
+        assert updated["project"] == str(Path(db_path).parent.parent)
+
+
 class TestReindex:
     def _make_item_folder(self, backlog_root, item_type_folder, slug, title, item_type):
         """Create a backlog item folder with a properly formatted README."""

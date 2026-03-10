@@ -69,12 +69,33 @@ MAX_DOC_SIZE = 10 * 1024 * 1024  # 10 MB
 # ---------------------------------------------------------------------------
 
 
+def _find_git_root(path: Path) -> Path | None:
+    """Walk up from *path* to find the nearest directory containing .git.
+
+    Returns the git root Path, or None if no .git is found before filesystem root.
+    Handles both regular repos (.git is a directory) and worktrees (.git is a file).
+    """
+    current = path.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
 def resolve_db_path() -> str:
     """Resolve DB path: ENV_DB_PATH > walk-up .work/minion.db > cwd fallback.
 
     Walk-up logic: starting from cwd, walk up parent directories looking for
     .work/minion.db. This lets agents launched from subdirectories (or parent
     dirs with -C pointing nearby) find the project DB without explicit -C.
+
+    GUARD: The walk-up will NOT cross git repo boundaries. If a candidate
+    .work/minion.db is found in a directory whose git root differs from cwd's
+    git root, the candidate is skipped. This prevents silently operating on
+    a parent project's DB when running from a child repo or worktree.
     """
     explicit = os.getenv(ENV_DB_PATH)
     if explicit:
@@ -84,10 +105,19 @@ def resolve_db_path() -> str:
     if project:
         return os.path.expanduser(f"{WORK_ROOT}/{project}/minion.db")
     # Walk up from cwd looking for .work/minion.db
-    current = Path.cwd().resolve()
+    cwd = Path.cwd().resolve()
+    cwd_git_root = _find_git_root(cwd)
+    current = cwd
     while True:
         candidate = current / WORK_DIR_NAME / "minion.db"
         if candidate.exists():
+            # Guard: check if this candidate is in the same git repo as cwd.
+            # The project root is the parent of .work/ (i.e. `current`).
+            candidate_git_root = _find_git_root(current)
+            if cwd_git_root is not None and candidate_git_root != cwd_git_root:
+                # Crossed a git repo boundary — do NOT use this DB.
+                # Stop walking; anything higher is even further away.
+                break
             return str(candidate)
         parent = current.parent
         if parent == current:
