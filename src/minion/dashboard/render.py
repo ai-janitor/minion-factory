@@ -190,15 +190,29 @@ def _relative_time(iso_ts: str | None) -> str:
 
 
 def _find_checklist(agent_name: str, work_dir: str) -> str | None:
-    """Find checklist file for an agent. Convention-based lookup."""
-    # Lead checklists: .work/checklists/lead-<name>.md
-    lead_path = os.path.join(work_dir, "checklists", f"lead-{agent_name}.md")
-    if os.path.exists(lead_path):
-        return lead_path
-    # Worker/generic checklists: .work/checklists/<name>.md
-    worker_path = os.path.join(work_dir, "checklists", f"{agent_name}.md")
-    if os.path.exists(worker_path):
-        return worker_path
+    """Find checklist file for an agent. Convention-based lookup.
+
+    Search order:
+    1. ~/.minion_work/checklists/lead-<name>.md  (global, lead)
+    2. ~/.minion_work/checklists/<name>.md        (global, worker/generic)
+    3. <work_dir>/checklists/lead-<name>.md       (project-local, lead)
+    4. <work_dir>/checklists/<name>.md            (project-local, worker/generic)
+    """
+    # Build list of directories to search — global first, then project-local
+    global_checklist_dir = os.path.expanduser("~/.minion_work/checklists")
+    local_checklist_dir = os.path.join(work_dir, "checklists") if work_dir else ""
+
+    search_dirs = [d for d in (global_checklist_dir, local_checklist_dir) if d]
+
+    for checklist_dir in search_dirs:
+        # Lead checklists: lead-<name>.md
+        lead_path = os.path.join(checklist_dir, f"lead-{agent_name}.md")
+        if os.path.exists(lead_path):
+            return lead_path
+        # Worker/generic checklists: <name>.md
+        worker_path = os.path.join(checklist_dir, f"{agent_name}.md")
+        if os.path.exists(worker_path):
+            return worker_path
     return None
 
 

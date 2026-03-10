@@ -164,6 +164,7 @@ from minion.cli.network_cmds import register_commands as _reg_network  # noqa: E
 from minion.cli.db_cmds import register_commands as _reg_db  # noqa: E402
 from minion.cli.top_level import register_commands as _reg_top  # noqa: E402
 from minion.cli.aliases import register_aliases  # noqa: E402
+from minion.cli.checklist_cmds import register_commands as _reg_checklist  # noqa: E402
 from minion.cli.completion_cmds import completions as _completions  # noqa: E402
 
 _reg_agent(cli)
@@ -184,6 +185,7 @@ _reg_global(cli)
 _reg_api(cli)
 _reg_network(cli)
 _reg_db(cli)
+_reg_checklist(cli)
 _reg_top(cli)
 cli.add_command(_completions)
 register_aliases(cli)
