@@ -75,6 +75,127 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return cursor.fetchall()
 
 
+def get_agent_summary(conn: sqlite3.Connection) -> list[dict]:
+    """Query all agents with health data for web dashboard.
+
+    SU-22: Returns enriched agent list with HP percentage, current task, unread count.
+    """
+    agents = []
+    for row in conn.execute(
+        "SELECT name, agent_class, status, hp_turn_input, hp_tokens_limit, "
+        "last_seen, registered_at FROM agents ORDER BY agent_class, name"
+    ).fetchall():
+        agent = dict(row)
+        # Compute HP percentage
+        raw = agent.get("hp_turn_input")
+        limit = agent.get("hp_tokens_limit")
+        if raw is not None and limit and limit > 0:
+            agent["hp_pct"] = max(0, round(100 - (raw / limit * 100)))
+        else:
+            agent["hp_pct"] = None
+
+        # Current task
+        task_row = conn.execute(
+            "SELECT id, title, status FROM tasks WHERE assigned_to = ? "
+            "AND status NOT IN ('closed', 'abandoned', 'stale', 'obsolete') LIMIT 1",
+            (agent["name"],),
+        ).fetchone()
+        agent["current_task"] = dict(task_row) if task_row else None
+
+        # Unread message count
+        unread = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
+            (agent["name"],),
+        ).fetchone()
+        agent["unread_count"] = unread[0] if unread else 0
+
+        agents.append(agent)
+    return agents
+
+
+def get_task_pipeline(conn: sqlite3.Connection) -> dict[str, list[dict]]:
+    """Query tasks grouped by status for kanban-style display.
+
+    SU-22: Returns {status: [task_dicts]} for web dashboard pipeline view.
+    """
+    pipeline: dict[str, list[dict]] = {}
+    for row in conn.execute(
+        "SELECT id, title, status, assigned_to, flow_type, updated_at "
+        "FROM tasks ORDER BY updated_at DESC"
+    ).fetchall():
+        task = dict(row)
+        status = task["status"]
+        if status not in pipeline:
+            pipeline[status] = []
+        pipeline[status].append(task)
+    return pipeline
+
+
+def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
+    """Query DB and system stats for web dashboard health view.
+
+    SU-22: Returns DB size, row counts per table, WAL mode, agent/task counts.
+    """
+    import os
+    stats: dict = {"tables": {}, "agents": {}, "tasks": {}}
+
+    # DB file size
+    if db_path and os.path.exists(db_path):
+        stats["db_size_bytes"] = os.path.getsize(db_path)
+    else:
+        stats["db_size_bytes"] = 0
+
+    # WAL mode
+    try:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()
+        stats["journal_mode"] = mode[0] if mode else "unknown"
+    except Exception:
+        stats["journal_mode"] = "unknown"
+
+    # Row counts per table
+    try:
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        for (table_name,) in tables:
+            try:
+                count = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
+                stats["tables"][table_name] = count
+            except Exception:
+                stats["tables"][table_name] = -1
+    except Exception:
+        pass
+
+    # Agent breakdown
+    try:
+        stats["agents"]["total"] = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
+        for row in conn.execute("SELECT agent_class, COUNT(*) as cnt FROM agents GROUP BY agent_class").fetchall():
+            stats["agents"][row["agent_class"] or "unknown"] = row["cnt"]
+    except Exception:
+        pass
+
+    # Task breakdown
+    try:
+        stats["tasks"]["total"] = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
+            stats["tasks"][row["status"]] = row["cnt"]
+    except Exception:
+        pass
+
+    return stats
+
+
+def get_recent_messages(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """Query recent messages for web dashboard message view.
+
+    SU-22: Returns last N messages with all fields, newest first.
+    """
+    rows = conn.execute(
+        "SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Recent task status transitions — one per task, most recent only."""
     cursor = conn.execute("""
