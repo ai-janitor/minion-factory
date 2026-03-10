@@ -8,6 +8,8 @@ Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 
+import sys
+
 import click
 
 from minion.cli.main import _agent_option, _output
@@ -44,7 +46,7 @@ def register_commands(cli: click.Group) -> None:
             flow = load_flow(type_name)
         except FileNotFoundError as e:
             _output({"error": str(e)})
-            return
+            sys.exit(1)
         stages = []
         for name, stage in flow.stages.items():
             stages.append({
@@ -71,7 +73,7 @@ def register_commands(cli: click.Group) -> None:
             flow = load_flow(type_name)
         except FileNotFoundError as e:
             _output({"error": str(e)})
-            return
+            sys.exit(1)
         result = flow.next_status(current, passed=not failed)
         _output({"type": type_name, "current": current, "next": result}, ctx.obj["human"], ctx.obj["compact"])
 

@@ -8,6 +8,8 @@ Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 
+import sys
+
 import click
 
 from minion.cli.main import _output
@@ -52,6 +54,7 @@ def register_commands(cli: click.Group) -> None:
                 ctx.obj["human"],
                 ctx.obj["compact"],
             )
+            sys.exit(1)
         else:
             if ctx.obj["human"]:
                 click.echo(content)
@@ -86,6 +89,7 @@ def register_commands(cli: click.Group) -> None:
                 ctx.obj["human"],
                 ctx.obj["compact"],
             )
+            sys.exit(1)
 
     @checklist_group.command("generate")
     @click.option("-a", "--agent", required=True, help="Agent name")
@@ -134,20 +138,19 @@ def register_commands(cli: click.Group) -> None:
                         ctx.obj["compact"],
                     )
                     conn.close()
-                    return
+                    sys.exit(1)
 
                 phase = row["status"]
                 assigned_to = row["assigned_to"]
 
-                # Look up assigned agent's class
+                # Look up the TARGET agent's class (--agent), not the task assignee
                 agent_class = None
-                if assigned_to:
-                    agent_row = conn.execute(
-                        "SELECT agent_class FROM agents WHERE name = ?",
-                        (assigned_to,),
-                    ).fetchone()
-                    if agent_row:
-                        agent_class = agent_row["agent_class"]
+                agent_row = conn.execute(
+                    "SELECT agent_class FROM agents WHERE name = ?",
+                    (agent,),
+                ).fetchone()
+                if agent_row:
+                    agent_class = agent_row["agent_class"]
 
                 conn.close()
 
@@ -164,7 +167,7 @@ def register_commands(cli: click.Group) -> None:
                     ctx.obj["human"],
                     ctx.obj["compact"],
                 )
-                return
+                sys.exit(1)
 
         # Step 2: If no template resolved yet, use --type flag
         if template_path is None and template_type is not None:
@@ -176,7 +179,7 @@ def register_commands(cli: click.Group) -> None:
                     ctx.obj["human"],
                     ctx.obj["compact"],
                 )
-                return
+                sys.exit(1)
 
         # Step 3: Error if nothing resolved
         if template_path is None:
@@ -188,7 +191,7 @@ def register_commands(cli: click.Group) -> None:
                 ctx.obj["human"],
                 ctx.obj["compact"],
             )
-            return
+            sys.exit(1)
 
         # Read template and substitute placeholders
         content = template_path.read_text(encoding="utf-8")
@@ -196,8 +199,21 @@ def register_commands(cli: click.Group) -> None:
         if resolved_task_id is not None:
             content = content.replace("<task-id>", str(resolved_task_id))
 
-        # Write to project-local .work/checklists/<agent>.md
-        output_path = write_checklist(agent, content)
+        # Count checkbox items and substitute N in the tally header [0/N-0NA]
+        import re
+        checkbox_count = len(re.findall(r"^- \[ \]", content, re.MULTILINE))
+        content = re.sub(r"\[0/N-0NA\]", f"[0/{checkbox_count}-0NA]", content)
+
+        # Determine effective template type for filename convention
+        effective_type = template_type
+        if effective_type is None and template_path is not None:
+            # Derive from resolved template filename: lead-checklist.md → "lead"
+            stem = template_path.stem.replace("-checklist", "")
+            if stem in ("napoleon", "lead", "worker"):
+                effective_type = stem
+
+        # Write to project-local .work/checklists/ (lead- prefix for leads)
+        output_path = write_checklist(agent, content, template_type=effective_type)
 
         _output(
             {"status": "ok", "agent": agent, "path": str(output_path), "message": f"Checklist written to {output_path}"},

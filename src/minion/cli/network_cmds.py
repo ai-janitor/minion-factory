@@ -8,6 +8,8 @@ Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 
+import sys
+
 import click
 
 from minion.cli.main import _output
@@ -49,7 +51,7 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set. Network tier disabled."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         health = net.health()
         agents = net.who()
         _output({"health": health, "agents": agents.get("agents", [])}, ctx.obj["human"], ctx.obj["compact"])
@@ -62,7 +64,7 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         _output(net.who(), ctx.obj["human"], ctx.obj["compact"])
 
     @network_group.command("outbox")
@@ -80,7 +82,7 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         _output(net.list_projects(), ctx.obj["human"], ctx.obj["compact"])
 
     @network_group.command("overview")
@@ -91,7 +93,7 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         _output(net.overview(), ctx.obj["human"], ctx.obj["compact"])
 
     @network_group.command("alerts")
@@ -102,7 +104,7 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         _output(net.alerts(), ctx.obj["human"], ctx.obj["compact"])
 
     @network_group.command("project-agents")
@@ -114,5 +116,5 @@ def register_commands(cli: click.Group) -> None:
         net = get_client()
         if not net.configured:
             _output({"error": "MINION_NETWORK_URL not set."}, ctx.obj["human"], ctx.obj["compact"])
-            return
+            sys.exit(1)
         _output(net.project_agents(project), ctx.obj["human"], ctx.obj["compact"])

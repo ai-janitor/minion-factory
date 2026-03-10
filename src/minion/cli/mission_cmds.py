@@ -8,6 +8,8 @@ Organization: Click command group with subcommands."""
 
 from __future__ import annotations
 
+import sys
+
 import click
 
 from minion.cli.main import _output
@@ -49,7 +51,7 @@ def register_commands(cli: click.Group) -> None:
             mission = load_mission(mission_type)
         except FileNotFoundError as e:
             _output({"error": str(e)})
-            return
+            sys.exit(1)
         slots = resolve_slots(set(mission.requires))
         crews = [c.strip() for c in crew.split(",") if c.strip()] or None
         party = suggest_party(slots, crews=crews, project_dir=project_dir)
@@ -76,5 +78,5 @@ def register_commands(cli: click.Group) -> None:
             result = resolve_and_spawn(mission_type, party_str, crew, project_dir, runtime)
         except FileNotFoundError as e:
             _output({"error": str(e)})
-            return
+            sys.exit(1)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
