@@ -252,78 +252,9 @@ Claude provider passes system prompts via `--append-system-prompt` (system-level
 
 **Prompting pattern:** Use positive instructions ("ONLY scan src/") not negation ("NEVER scan .venv/"). LLMs ignore negative instructions even at system prompt level.
 
-## sys-lead Operational Playbook
+## sys-lead Operations
 
-When operating as sys-lead with Claude Code subagents as minions:
-
-### Chain of Command
-
-```
-sys-lead (you, terminal)
-  └── project-lead (subagent)
-        ├── worker-1 (subagent, worktree)
-        ├── worker-2 (subagent, worktree)
-        └── worker-N (subagent, worktree)
-```
-
-sys-lead does NOT write code, run tests, or merge branches. sys-lead:
-1. Promotes backlog items and defines task batches
-2. Spawns ONE project lead (subagent)
-3. Manages the lead — checks progress, course-corrects, unblocks
-4. Reviews the lead's final report
-
-The project lead does NOT write code either. The lead:
-1. Registers itself and all workers as minions (`minion agent register`)
-2. Spawns worker subagents (Agent tool, `isolation: "worktree"`) for each task batch
-3. Gives each worker full context: CLAUDE.md path, specific files, acceptance criteria
-4. Reviews and merges completed worktree branches into main
-5. Runs tests after each merge
-6. Spawns corrective subagents for failures — does NOT fix code directly
-7. Deregisters workers on completion
-8. Reports to sys-lead via `minion comms send`
-
-Workers write code, run tests, commit. That's it.
-
-### Spawning Workers — Required Context
-
-Every worker subagent MUST receive in its prompt:
-- `Read /path/to/project/CLAUDE.md` as first instruction
-- Explicit list of files to modify
-- What the fix is and why
-- Acceptance criteria (what tests to run, what to verify)
-- `Do NOT use minion CLI` (workers in worktrees can't access .work/minion.db)
-
-### Worktree Gotchas
-
-- **Subagents inherit the spawner's git branch.** If sys-lead's session was last in a worktree, new agents land there too. Always pass explicit `cd /path/to/project && git checkout main` as the FIRST command in any lead's prompt.
-- **Workers in worktrees can't run minion CLI** — .work/minion.db is in the main worktree. Registration and task tracking must be done by the lead (who runs on main).
-- **Merge one branch at a time, test after each.** If something breaks, you know which branch caused it.
-- **After all merges, reinstall:** `uv tool install --force -e /path/to/project`
-
-### Backlog Pipeline — Don't Bypass It
-
-Work flows through the pipeline: `backlog → promote → task define → assign → DAG stages → close`
-
-Do NOT write manual task specs. Use `minion backlog promote --id <N>` then `minion task define`. The backlog items already have descriptions — use them.
-
-### Batch Strategy
-
-Group related backlog items into task batches (3-8 items per worker). Group by:
-- Affected files (minimize merge conflicts between workers)
-- Domain (all CLI fixes together, all provider fixes together)
-- Dependency (if fix B depends on fix A, same worker)
-
-### Failure Recovery
-
-If a worker's branch fails tests after merge:
-1. `git reset --hard HEAD~1` to revert
-2. Spawn a corrective subagent with the error output and the original branch
-3. Do NOT attempt to fix it manually from the lead
-
-If a worker is stuck (no commits after 5 min):
-1. Check its output file: `tail -50 /path/to/output`
-2. If blocked on permissions or missing context, stop it and respawn with fixes
-3. If making progress, let it cook
+See `/sys-lead` slash command (`~/.claude/commands/sys-lead.md`) for the full operational playbook — chain of command, checklist-first protocol, worker context, merge protocol, anti-patterns.
 
 ## Running Tests
 
