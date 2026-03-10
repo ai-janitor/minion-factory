@@ -223,7 +223,7 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
                 COALESCE(t.assigned_to, '')          AS task_assignee
             FROM backlog b
             LEFT JOIN tasks t ON b.promoted_to = CAST(t.id AS TEXT)
-            WHERE b.status NOT IN ('closed', 'abandoned')
+            WHERE b.status NOT IN ('closed', 'abandoned', 'killed')
             ORDER BY
                 CASE b.priority
                     WHEN 'critical' THEN 0
