@@ -17,6 +17,8 @@ import pytest
 
 from minion.db import init_db, reset_db_path
 
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # Helpers

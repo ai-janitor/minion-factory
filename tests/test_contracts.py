@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 # repo root → docs/contracts/
 CONTRACTS_DIR = Path(__file__).resolve().parent.parent / "docs" / "contracts"
 DOCS_DIR = CONTRACTS_DIR.parent  # docs/ — what load_contract expects

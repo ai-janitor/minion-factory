@@ -4,6 +4,9 @@ Purpose: Verify every module imports cleanly with no errors.
 Rationale: Test coverage for the corresponding module.
 Responsibility: Verify every module imports cleanly with no errors. NOT responsible for unrelated concerns.
 Organization: One TestClass per concern, or standalone test functions."""
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 def test_import_minion():

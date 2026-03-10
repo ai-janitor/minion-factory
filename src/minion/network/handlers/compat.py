@@ -54,7 +54,8 @@ def _auto_project_name(db_path: str) -> str | None:
     if not projects:
         return None
     # If MINION_COMPAT_PROJECT is set, use that; otherwise first project
-    preferred = os.environ.get("MINION_COMPAT_PROJECT", "")
+    from minion.defaults import resolve_compat_project
+    preferred = resolve_compat_project()
     if preferred:
         for p in projects:
             if p["name"] == preferred:

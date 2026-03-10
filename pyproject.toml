@@ -29,6 +29,11 @@ packages = ["src/minion"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--junitxml=.work/test-reports/junit.xml -q"
+markers = [
+    "unit: Pure logic tests — no DB, no filesystem, no network. Fast.",
+    "integration: Tests that touch DB, filesystem, or CLI runner. Medium speed.",
+    "smoke: End-to-end flows that exercise multiple subsystems. Slowest.",
+]
 
 [tool.basedpyright]
 pythonVersion = "3.10"

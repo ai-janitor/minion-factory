@@ -18,6 +18,8 @@ from click.testing import CliRunner
 
 from minion.cli import cli
 
+pytestmark = pytest.mark.integration
+
 
 # ---------------------------------------------------------------------------
 # Helpers

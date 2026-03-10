@@ -13,6 +13,8 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+pytestmark = pytest.mark.integration
+
 from minion.cli import cli
 from minion.db import init_db, reset_db_path, register_agent_db
 

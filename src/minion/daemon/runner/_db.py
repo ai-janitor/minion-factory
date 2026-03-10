@@ -1,5 +1,8 @@
 """DB operations — invocation log, child PID tracking, session ID, compaction log.
 
+All DB connections use _daemon_connect() for consistent WAL mode, row_factory,
+and busy_timeout settings matching the canonical get_db() pattern.
+
 Purpose: DB operations — invocation log, child PID tracking, session ID, compaction log.
 Rationale: Extracted into own module for single-responsibility daemon transport.
 Responsibility: DB operations — invocation log, child PID tracking, session ID, compaction log. NOT responsible for unrelated concerns.
@@ -14,6 +17,20 @@ from ._constants import utc_now_iso, _get_rss_bytes, AgentRunResult
 
 if TYPE_CHECKING:
     from ..config import SwarmConfig, AgentConfig
+
+
+def _daemon_connect(db_path: str, timeout: float = 5.0) -> sqlite3.Connection:
+    """Open a WAL-mode connection consistent with db.connection.get_db().
+
+    ASSUMPTION: All daemon DB connections should use WAL mode for concurrent
+    read/write safety, row_factory for dict-like access, and busy_timeout
+    to handle lock contention from multiple agents.
+    """
+    conn = sqlite3.connect(db_path, timeout=timeout)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
 
 
 class DBMixin:
@@ -35,23 +52,16 @@ class DBMixin:
                     caller: str = "db_execute"):
         """Open a SQLite connection, run callback(conn), commit, close.
 
-        Centralizes the connect → PRAGMA → execute → commit → close pattern
+        Centralizes the connect -> PRAGMA -> execute -> commit -> close pattern
         that was repeated 10+ times across this mixin. The callback receives
         the open connection and can execute any SQL. Returns whatever the
         callback returns.
 
         On error: logs a warning with the caller name and returns None.
         """
-        # PSEUDO: connect to comms_db with timeout
-        # PSEUDO: set busy_timeout pragma
-        # PSEUDO: optionally set row_factory
-        # PSEUDO: run callback(conn) → capture return value
-        # PSEUDO: commit + close
-        # PSEUDO: on exception → log warning, return None
         conn = None
         try:
-            conn = sqlite3.connect(str(self.config.comms_db), timeout=timeout)
-            conn.execute(f"PRAGMA busy_timeout={timeout * 1000}")
+            conn = _daemon_connect(str(self.config.comms_db), timeout=timeout)
             if row_factory:
                 conn.row_factory = row_factory
             result = callback(conn)

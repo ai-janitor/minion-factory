@@ -25,7 +25,8 @@ class Mission:
 
 def _find_missions_dir() -> Path:
     """Search order: env var → ~/.minion/missions/ → bundled missions/."""
-    env = os.getenv("MINION_MISSIONS_DIR")
+    from minion.defaults import resolve_missions_dir
+    env = resolve_missions_dir()
     if env:
         return Path(env)
     user_dir = Path.home() / ".minion" / "missions"

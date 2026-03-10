@@ -20,6 +20,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+pytestmark = pytest.mark.integration
+
 from minion.cli import cli
 
 

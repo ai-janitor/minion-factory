@@ -21,6 +21,21 @@ ENV_DOCS_DIR = "MINION_DOCS_DIR"
 ENV_PROJECT = "MINION_PROJECT"
 ENV_CLASS = "MINION_CLASS"
 
+# Network tier env vars — API GLOBAL coordinator
+ENV_NETWORK_URL = "MINION_NETWORK_URL"
+ENV_CLUSTER_TOKEN = "MINION_CLUSTER_TOKEN"
+ENV_NETWORK_INSECURE = "MINION_NETWORK_INSECURE"
+
+# Compat layer env var — auto-project for React frontend bridge
+ENV_COMPAT_PROJECT = "MINION_COMPAT_PROJECT"
+
+# Missions directory override
+ENV_MISSIONS_DIR = "MINION_MISSIONS_DIR"
+
+# Task flows directory override
+ENV_FLOWS_DIR = "MINION_FLOWS_DIR"
+ENV_TASKS_FLOWS_DIR = "MINION_TASKS_FLOWS_DIR"
+
 # ---------------------------------------------------------------------------
 # Default paths
 # ---------------------------------------------------------------------------
@@ -149,3 +164,38 @@ def resolve_path(raw_value: str, base: Path) -> Path:
     if not path.is_absolute():
         path = (base / path).resolve()
     return path
+
+
+# ---------------------------------------------------------------------------
+# Network tier resolvers
+# ---------------------------------------------------------------------------
+
+
+def resolve_network_url() -> str:
+    """Resolve network URL from env. Empty string means tier disabled."""
+    return os.getenv(ENV_NETWORK_URL, "")
+
+
+def resolve_cluster_token() -> str:
+    """Resolve cluster auth token from env. Empty string means no auth."""
+    return os.getenv(ENV_CLUSTER_TOKEN, "")
+
+
+def resolve_network_insecure() -> bool:
+    """Resolve whether to skip TLS verification. Default: False (verify)."""
+    return os.getenv(ENV_NETWORK_INSECURE, "") == "1"
+
+
+def resolve_compat_project() -> str:
+    """Resolve preferred project name for /api/* compat routes."""
+    return os.getenv(ENV_COMPAT_PROJECT, "")
+
+
+def resolve_missions_dir() -> str | None:
+    """Resolve missions directory override from env. None means use defaults."""
+    return os.getenv(ENV_MISSIONS_DIR)
+
+
+def resolve_flows_dir() -> str | None:
+    """Resolve task flows directory override from env. None means use defaults."""
+    return os.getenv(ENV_FLOWS_DIR) or os.getenv(ENV_TASKS_FLOWS_DIR)

@@ -200,7 +200,8 @@ def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
     migrate_db(db_path)
 
     if not token:
-        token = os.environ.get("MINION_CLUSTER_TOKEN", "")
+        from minion.defaults import resolve_cluster_token
+        token = resolve_cluster_token()
 
     # Build router and register all handler endpoints
     from minion.network.router import Router
@@ -215,7 +216,8 @@ def serve(port: int = 8377, db_path: str = "", token: str = "") -> None:
     server = HTTPServer(("0.0.0.0", port), _Handler)
 
     # TLS setup — default on, opt-out with MINION_NETWORK_INSECURE=1
-    insecure = os.environ.get("MINION_NETWORK_INSECURE", "") == "1"
+    from minion.defaults import resolve_network_insecure
+    insecure = resolve_network_insecure()
     protocol = "http"
     if not insecure:
         import ssl

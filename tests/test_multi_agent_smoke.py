@@ -14,12 +14,13 @@ Organization: One TestClass per concern, or standalone test functions."""
 
 from __future__ import annotations
 
+import pytest
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from minion.db import init_db, register_agent_db, reset_db_path
+
+pytestmark = pytest.mark.smoke
 
 
 # ---------------------------------------------------------------------------
