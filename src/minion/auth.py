@@ -99,7 +99,7 @@ RAID_LOG_PRIORITIES = {"low", "normal", "high", "critical"}
 
 TASK_STATUSES = {
     "open", "assigned", "in_progress", "fixed", "verified",
-    "closed", "abandoned", "stale", "obsolete",
+    "closed", "abandoned", "completed", "stale", "obsolete",
 }
 # VALID_TRANSITIONS removed — all transition logic lives in DAG YAML flows
 

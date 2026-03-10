@@ -11,6 +11,11 @@ from __future__ import annotations
 
 import sqlite3
 
+from minion.tasks.dag import TERMINAL_STATUSES
+
+# Build SQL literal from the single source of truth — safe (values are code-controlled, not user input).
+_TERMINAL_SQL = ", ".join(f"'{s}'" for s in sorted(TERMINAL_STATUSES))
+
 
 def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Active tasks ordered by status priority then ID.
@@ -29,7 +34,7 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             t.activity_count,
             t.result_file IS NOT NULL       AS has_result
         FROM tasks t
-        WHERE t.status NOT IN ('closed', 'abandoned', 'stale', 'obsolete')
+        WHERE t.status NOT IN (""" + _TERMINAL_SQL + """)
         ORDER BY
             CASE t.status
                 WHEN 'in_progress' THEN 0
@@ -98,7 +103,7 @@ def get_agent_summary(conn: sqlite3.Connection) -> list[dict]:
         # Current task
         task_row = conn.execute(
             "SELECT id, title, status FROM tasks WHERE assigned_to = ? "
-            "AND status NOT IN ('closed', 'abandoned', 'stale', 'obsolete') LIMIT 1",
+            f"AND status NOT IN ({_TERMINAL_SQL}) LIMIT 1",
             (agent["name"],),
         ).fetchone()
         agent["current_task"] = dict(task_row) if task_row else None
