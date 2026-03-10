@@ -12,8 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
-TERMINAL_STATUSES = {"closed", "abandoned", "obsolete", "completed"}
+from .dag import TERMINAL_STATUSES  # single source of truth — defined in dag.py
 
 
 @dataclass

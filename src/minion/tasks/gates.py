@@ -12,6 +12,8 @@ import glob as globmod
 from dataclasses import dataclass
 from pathlib import Path
 
+from .dag import TERMINAL_STATUSES  # single source of truth — defined in dag.py
+
 
 @dataclass
 class GateResult:
@@ -203,8 +205,7 @@ def _db_all_child_tasks_closed(db, entity_id: int, entity_type: str, flow_type: 
     if not rows:
         return GateResult(passed=False, gate=gate, message=f"no child tasks found for entity {entity_id}")
 
-    terminal = {"closed", "abandoned", "obsolete"}
-    open_tasks = [(r[0], r[1]) for r in rows if r[1] not in terminal]
+    open_tasks = [(r[0], r[1]) for r in rows if r[1] not in TERMINAL_STATUSES]
     if open_tasks:
         return GateResult(
             passed=False, gate=gate,
