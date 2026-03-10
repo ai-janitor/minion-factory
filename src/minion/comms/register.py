@@ -50,34 +50,35 @@ def register(
     cursor = conn.cursor()
     now = now_iso()
     try:
-        cursor.execute(
-            """INSERT INTO agents
-                (name, agent_class, model, registered_at, last_seen, description, status, transport, scope_mode)
-            VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                last_seen        = excluded.last_seen,
-                agent_class      = excluded.agent_class,
-                model            = COALESCE(NULLIF(excluded.model, ''), agents.model),
-                description      = COALESCE(NULLIF(excluded.description, ''), agents.description),
-                transport        = excluded.transport,
-                scope_mode       = excluded.scope_mode,
-                status           = 'waiting for work',
-                hp_alerts_fired  = NULL
-            """,
-            (agent_name, agent_class, model or None, now, now, description or None, transport, scope),
-        )
-
-        # Auto-mark old broadcasts as read
+        # Auto-mark old broadcasts as read cutoff computed before transaction
         cutoff = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
-        cursor.execute(
-            """INSERT OR IGNORE INTO broadcast_reads (agent_name, message_id)
-               SELECT ?, id FROM messages WHERE to_agent = 'all' AND timestamp < ?""",
-            (agent_name, cutoff),
-        )
+        with conn:
+            cursor.execute(
+                """INSERT INTO agents
+                    (name, agent_class, model, registered_at, last_seen, description, status, transport, scope_mode)
+                VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    last_seen        = excluded.last_seen,
+                    agent_class      = excluded.agent_class,
+                    model            = COALESCE(NULLIF(excluded.model, ''), agents.model),
+                    description      = COALESCE(NULLIF(excluded.description, ''), agents.description),
+                    transport        = excluded.transport,
+                    scope_mode       = excluded.scope_mode,
+                    status           = 'waiting for work',
+                    hp_alerts_fired  = NULL
+                """,
+                (agent_name, agent_class, model or None, now, now, description or None, transport, scope),
+            )
 
-        # Clear retire flag for re-spawned agents
-        cursor.execute("DELETE FROM agent_retire WHERE agent_name = ?", (agent_name,))
-        conn.commit()
+            # Auto-mark old broadcasts as read
+            cursor.execute(
+                """INSERT OR IGNORE INTO broadcast_reads (agent_name, message_id)
+                   SELECT ?, id FROM messages WHERE to_agent = 'all' AND timestamp < ?""",
+                (agent_name, cutoff),
+            )
+
+            # Clear retire flag for re-spawned agents
+            cursor.execute("DELETE FROM agent_retire WHERE agent_name = ?", (agent_name,))
 
         # Register in global coordinator DB for cross-repo routing
         try:
@@ -252,12 +253,11 @@ def deregister(agent_name: str) -> dict[str, object]:
         if not cursor.fetchone():
             return {"error": f"Agent '{agent_name}' not found."}
 
-        # Release file claims
+        # Release file claims — read waiters before transaction
         cursor.execute("SELECT file_path FROM file_claims WHERE agent_name = ?", (agent_name,))
         claimed_files = [row["file_path"] for row in cursor.fetchall()]
         waitlist_notes: list[str] = []
         for fp in claimed_files:
-            cursor.execute("DELETE FROM file_claims WHERE file_path = ?", (fp,))
             cursor.execute(
                 "SELECT agent_name FROM file_waitlist WHERE file_path = ? ORDER BY added_at ASC LIMIT 1",
                 (fp,),
@@ -265,9 +265,11 @@ def deregister(agent_name: str) -> dict[str, object]:
             waiter = cursor.fetchone()
             if waiter:
                 waitlist_notes.append(f"{fp} -> {waiter['agent_name']} waiting")
-        cursor.execute("DELETE FROM file_waitlist WHERE agent_name = ?", (agent_name,))
-        cursor.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
-        conn.commit()
+        with conn:
+            for fp in claimed_files:
+                cursor.execute("DELETE FROM file_claims WHERE file_path = ?", (fp,))
+            cursor.execute("DELETE FROM file_waitlist WHERE agent_name = ?", (agent_name,))
+            cursor.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
 
         # Remove from global coordinator DB
         try:
@@ -316,12 +318,12 @@ def rename(old_name: str, new_name: str) -> dict[str, object]:
         if cursor.fetchone():
             return {"error": f"Agent '{new_name}' already exists."}
 
-        cursor.execute("UPDATE agents SET name = ? WHERE name = ?", (new_name, old_name))
-        cursor.execute("UPDATE messages SET from_agent = ? WHERE from_agent = ?", (new_name, old_name))
-        cursor.execute("UPDATE messages SET to_agent = ? WHERE to_agent = ?", (new_name, old_name))
-        cursor.execute("UPDATE messages SET cc_original_to = ? WHERE cc_original_to = ?", (new_name, old_name))
-        cursor.execute("UPDATE broadcast_reads SET agent_name = ? WHERE agent_name = ?", (new_name, old_name))
-        conn.commit()
+        with conn:
+            cursor.execute("UPDATE agents SET name = ? WHERE name = ?", (new_name, old_name))
+            cursor.execute("UPDATE messages SET from_agent = ? WHERE from_agent = ?", (new_name, old_name))
+            cursor.execute("UPDATE messages SET to_agent = ? WHERE to_agent = ?", (new_name, old_name))
+            cursor.execute("UPDATE messages SET cc_original_to = ? WHERE cc_original_to = ?", (new_name, old_name))
+            cursor.execute("UPDATE broadcast_reads SET agent_name = ? WHERE agent_name = ?", (new_name, old_name))
         return {"status": "renamed", "old": old_name, "new": new_name}
     finally:
         conn.close()

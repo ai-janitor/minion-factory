@@ -53,9 +53,9 @@ def done_task(agent_name: str, task_id: int, summary: str = "") -> dict[str, obj
             params.append(result_file)
         params.append(task_id)
 
-        cursor.execute(f"UPDATE tasks SET {updates} WHERE id = ?", params)
-        _log_transition(cursor, task_id, old_status, "closed", agent_name, now)
-        conn.commit()
+        with conn:
+            cursor.execute(f"UPDATE tasks SET {updates} WHERE id = ?", params)
+            _log_transition(cursor, task_id, old_status, "closed", agent_name, now)
 
         result: dict[str, object] = {
             "status": "closed",

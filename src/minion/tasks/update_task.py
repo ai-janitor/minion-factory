@@ -78,16 +78,16 @@ def update_task(
             params.append(files)
 
         params.append(task_id)
-        cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
+        with conn:
+            cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
 
-        if status:
-            _log_transition(cursor, task_id, current_status, status, agent_name, now)
+            if status:
+                _log_transition(cursor, task_id, current_status, status, agent_name, now)
+
+            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
 
         cursor.execute("SELECT activity_count FROM tasks WHERE id = ?", (task_id,))
         new_count = cursor.fetchone()["activity_count"]
-
-        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
-        conn.commit()
 
         result: dict[str, object] = {
             "status": "updated",
@@ -192,12 +192,10 @@ def complete_phase(agent_name: str, task_id: int, passed: bool = True, reason: s
             fields.append("assigned_to = NULL")
 
         params.append(task_id)
-        cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
-
-        _log_transition(cursor, task_id, current, new_status, agent_name, now)
-
-        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
-        conn.commit()
+        with conn:
+            cursor.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
+            _log_transition(cursor, task_id, current, new_status, agent_name, now)
+            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
 
         # Clear pane task label when agent is done with this phase
         if eligible is not None or (flow and flow.is_terminal(new_status)):

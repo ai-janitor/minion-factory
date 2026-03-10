@@ -34,18 +34,18 @@ def create_battle_plan(
     cursor = conn.cursor()
     now = now_iso()
     try:
-        if supersede and status == "active":
+        with conn:
+            if supersede and status == "active":
+                cursor.execute(
+                    "UPDATE battle_plan SET status = 'superseded', updated_at = ? WHERE status = 'active'",
+                    (now,),
+                )
             cursor.execute(
-                "UPDATE battle_plan SET status = 'superseded', updated_at = ? WHERE status = 'active'",
-                (now,),
+                """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (set_by, plan_file, status, now, now),
             )
-        cursor.execute(
-            """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (set_by, plan_file, status, now, now),
-        )
-        plan_id = cursor.lastrowid
-        conn.commit()
+            plan_id = cursor.lastrowid
         return {"status": status, "plan_id": plan_id, "set_by": set_by, "plan_file": plan_file}
     finally:
         conn.close()
@@ -78,26 +78,25 @@ def set_battle_plan(agent_name: str, plan: str) -> dict[str, object]:
             if row["agent_class"] != "lead":
                 return {"error": f"BLOCKED: Only lead-class agents can set the battle plan. '{agent_name}' is '{row['agent_class']}'."}
 
-        # Supersede previous active plans
-        cursor.execute(
-            "UPDATE battle_plan SET status = 'superseded', updated_at = ? WHERE status = 'active'",
-            (now,),
-        )
-
-        # Write plan to filesystem — fail before DB insert if write fails
+        # Write plan to filesystem first — fail before touching DB if write fails
         plan_file = battle_plan_file_path(agent_name)
         try:
             atomic_write_file(plan_file, plan)
         except Exception as exc:
             return {"error": f"BLOCKED: Failed to write battle plan file: {exc}"}
 
-        cursor.execute(
-            """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
-               VALUES (?, ?, 'active', ?, ?)""",
-            (agent_name, plan_file, now, now),
-        )
-        plan_id = cursor.lastrowid
-        conn.commit()
+        # Atomically supersede old plan and insert new one
+        with conn:
+            cursor.execute(
+                "UPDATE battle_plan SET status = 'superseded', updated_at = ? WHERE status = 'active'",
+                (now,),
+            )
+            cursor.execute(
+                """INSERT INTO battle_plan (set_by, plan_file, status, created_at, updated_at)
+                   VALUES (?, ?, 'active', ?, ?)""",
+                (agent_name, plan_file, now, now),
+            )
+            plan_id = cursor.lastrowid
 
         return {"status": "active", "plan_id": plan_id, "set_by": agent_name, "plan_file": plan_file}
     finally:
@@ -178,15 +177,14 @@ def log_raid(agent_name: str, entry: str, priority: str = "normal") -> dict[str,
         except Exception as exc:
             return {"error": f"BLOCKED: Failed to write raid log file: {exc}"}
 
-        cursor.execute(
-            """INSERT INTO raid_log (agent_name, entry_file, priority, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (agent_name, entry_file, priority, now),
-        )
-        log_id = cursor.lastrowid
-
-        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
-        conn.commit()
+        with conn:
+            cursor.execute(
+                """INSERT INTO raid_log (agent_name, entry_file, priority, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (agent_name, entry_file, priority, now),
+            )
+            log_id = cursor.lastrowid
+            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
 
         return {"status": "logged", "log_id": log_id, "agent": agent_name, "priority": priority}
     finally:

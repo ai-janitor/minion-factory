@@ -68,19 +68,19 @@ def create_task(
             if req_row:
                 req_path = req_row["file_path"]
 
-        cursor.execute(
-            """INSERT INTO tasks
-               (title, task_file, project, zone, status, blocked_by,
-                class_required, flow_type, created_by, activity_count,
-                requirement_id, requirement_path, created_at, updated_at)
-               VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
-            (title, task_file, project or None, zone or None, blocked_by_str,
-             class_required or None, task_type, agent_name,
-             requirement_id, req_path, now, now),
-        )
-        task_id = cursor.lastrowid
-        _log_transition(cursor, task_id, None, "open", agent_name, now)
-        conn.commit()
+        with conn:
+            cursor.execute(
+                """INSERT INTO tasks
+                   (title, task_file, project, zone, status, blocked_by,
+                    class_required, flow_type, created_by, activity_count,
+                    requirement_id, requirement_path, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 0, ?, ?, ?, ?)""",
+                (title, task_file, project or None, zone or None, blocked_by_str,
+                 class_required or None, task_type, agent_name,
+                 requirement_id, req_path, now, now),
+            )
+            task_id = cursor.lastrowid
+            _log_transition(cursor, task_id, None, "open", agent_name, now)
 
         result: dict[str, object] = {"status": "created", "task_id": task_id, "title": title, "task_type": task_type}
         if blocked_by_str:
@@ -145,18 +145,18 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
             if workers is not None:
                 review_stage = True
 
-        if review_stage:
-            cursor.execute(
-                "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
-                (assigned_to, now, task_id),
-            )
-        else:
-            cursor.execute(
-                "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
-                (assigned_to, now, task_id),
-            )
-            _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
-        conn.commit()
+        with conn:
+            if review_stage:
+                cursor.execute(
+                    "UPDATE tasks SET assigned_to = ?, updated_at = ? WHERE id = ?",
+                    (assigned_to, now, task_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ? WHERE id = ?",
+                    (assigned_to, now, task_id),
+                )
+                _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
         update_pane_task(assigned_to, f"T{task_id}: {task_title}")
         return {"status": "assigned", "task_id": task_id, "assigned_to": assigned_to}
     finally:

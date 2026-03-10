@@ -24,12 +24,12 @@ def submit_result(agent_name: str, task_id: int, result_file: str) -> dict[str, 
         if not os.path.exists(result_file):
             return {"error": f"BLOCKED: Result file does not exist: {result_file}"}
 
-        cursor.execute(
-            "UPDATE tasks SET result_file = ?, updated_at = ? WHERE id = ?",
-            (result_file, now, task_id),
-        )
-        cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
-        conn.commit()
+        with conn:
+            cursor.execute(
+                "UPDATE tasks SET result_file = ?, updated_at = ? WHERE id = ?",
+                (result_file, now, task_id),
+            )
+            cursor.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent_name))
 
         return {"status": "submitted", "task_id": task_id, "result_file": result_file}
     finally:
