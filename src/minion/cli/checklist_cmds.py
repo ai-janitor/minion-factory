@@ -111,6 +111,7 @@ def register_commands(cli: click.Group) -> None:
         3. Error if nothing resolves.
         """
         import sqlite3
+        from minion.db.connection import connect as _connect
 
         from minion.checklist import get_checklist_dir, resolve_template, get_template_path, write_checklist
         from minion.defaults import resolve_db_path
@@ -122,8 +123,7 @@ def register_commands(cli: click.Group) -> None:
         if task_id is not None:
             try:
                 db_path = resolve_db_path()
-                conn = sqlite3.connect(db_path)
-                conn.row_factory = sqlite3.Row
+                conn = _connect(db_path)
 
                 # Get task status (phase) and assigned agent
                 row = conn.execute(

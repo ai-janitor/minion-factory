@@ -1,7 +1,7 @@
 """DB operations — invocation log, child PID tracking, session ID, compaction log.
 
-All DB connections use _daemon_connect() for consistent WAL mode, row_factory,
-and busy_timeout settings matching the canonical get_db() pattern.
+All DB connections use the canonical db.connection.connect() for consistent
+WAL mode, row_factory, and busy_timeout settings.
 
 Purpose: DB operations — invocation log, child PID tracking, session ID, compaction log.
 Rationale: Extracted into own module for single-responsibility daemon transport.
@@ -13,24 +13,11 @@ import os
 import sqlite3
 from typing import Any, TYPE_CHECKING
 
+from minion.db.connection import connect as _daemon_connect
 from ._constants import utc_now_iso, _get_rss_bytes, AgentRunResult
 
 if TYPE_CHECKING:
     from ..config import SwarmConfig, AgentConfig
-
-
-def _daemon_connect(db_path: str, timeout: float = 5.0) -> sqlite3.Connection:
-    """Open a WAL-mode connection consistent with db.connection.get_db().
-
-    ASSUMPTION: All daemon DB connections should use WAL mode for concurrent
-    read/write safety, row_factory for dict-like access, and busy_timeout
-    to handle lock contention from multiple agents.
-    """
-    conn = sqlite3.connect(db_path, timeout=timeout)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
 
 
 class DBMixin:

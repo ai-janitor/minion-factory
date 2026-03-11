@@ -89,10 +89,11 @@ def get_project_db(project_path: str) -> sqlite3.Connection | None:
                 pass  # broad catch: conn.close() teardown
             del _cache[oldest_key]
 
-        # Open new read-only connection
+        # Open new read-only connection (URI mode for ?mode=ro — can't use
+        # db.connection.connect() which doesn't support URI mode)
         conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, timeout=5)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=3000")
+        conn.execute("PRAGMA busy_timeout=5000")
         _cache[project_path] = _CacheEntry(conn, project_path)
         return conn
 
