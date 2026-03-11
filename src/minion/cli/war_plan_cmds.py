@@ -31,7 +31,7 @@ def register_commands(cli: click.Group) -> None:
 
     @war_plan_group.command("set")
     @_agent_option(required=True, help="Lead agent setting the war plan")
-    @click.option("--text", required=True, help="War plan content to write")
+    @click.option("--text", "-t", required=True, help="War plan content to write")
     @click.pass_context
     def war_plan_set(ctx: click.Context, agent: str, text: str) -> None:
         """Overwrite the war plan (lead-only)."""
@@ -40,7 +40,7 @@ def register_commands(cli: click.Group) -> None:
 
     @war_plan_group.command("append")
     @_agent_option(required=True, help="Lead agent appending to the war plan")
-    @click.option("--text", required=True, help="Text to append")
+    @click.option("--text", "-t", required=True, help="Text to append")
     @click.pass_context
     def war_plan_append(ctx: click.Context, agent: str, text: str) -> None:
         """Append text to the war plan (lead-only)."""

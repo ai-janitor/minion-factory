@@ -28,7 +28,7 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @db_group.command("prune")
-    @click.option("--days", default=30, type=int, help="Delete records older than N days (default: 30)")
+    @click.option("--days", "-d", default=30, type=int, help="Delete records older than N days (default: 30)")
     @click.pass_context
     def db_prune(ctx: click.Context, days: int) -> None:
         """Delete old records from messages, transition_log, invocation_log, compaction_log.

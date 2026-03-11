@@ -75,7 +75,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_end_session(agent), ctx.obj["human"])
 
     @cli.command()
-    @click.option("--class", "agent_class", default="", help="Class to list tools for (default: MINION_CLASS env)")
+    @click.option("--class", "-c", "agent_class", default="", help="Class to list tools for (default: MINION_CLASS env)")
     @click.pass_context
     def tools(ctx: click.Context, agent_class: str) -> None:
         """List available tools for your class."""
@@ -93,7 +93,7 @@ def register_commands(cli: click.Group) -> None:
 
     @cli.command()
     @_agent_option(required=True)
-    @click.option("--debrief-file", required=True)
+    @click.option("--debrief-file", "-f", required=True)
     @click.pass_context
     def debrief(ctx: click.Context, agent: str, debrief_file: str) -> None:
         """File a session debrief. Lead only."""
@@ -213,7 +213,7 @@ def register_commands(cli: click.Group) -> None:
         _output(result, ctx.obj["human"])
 
     @cli.command("completions")
-    @click.option("--shell", type=click.Choice(["bash", "zsh", "fish"]), default=None,
+    @click.option("--shell", "-s", type=click.Choice(["bash", "zsh", "fish"]), default=None,
                   help="Shell type (auto-detected if omitted)")
     def completions_cmd(shell: str | None) -> None:
         """Print shell completion setup instructions.

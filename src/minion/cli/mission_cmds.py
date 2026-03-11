@@ -41,8 +41,8 @@ def register_commands(cli: click.Group) -> None:
 
     @mission_group.command("suggest")
     @click.argument("mission_type")
-    @click.option("--crew", default="", help="Comma-separated crew names to filter characters")
-    @click.option("--project-dir", default=".", help="Project directory for crew scanning")
+    @click.option("--crew", "-c", default="", help="Comma-separated crew names to filter characters")
+    @click.option("--project-dir", "-d", default=".", help="Project directory for crew scanning")
     @click.pass_context
     def mission_suggest(ctx: click.Context, mission_type: str, crew: str, project_dir: str) -> None:
         """Show required capabilities, resolved slots, and eligible characters."""
@@ -65,10 +65,10 @@ def register_commands(cli: click.Group) -> None:
 
     @mission_group.command("spawn")
     @click.argument("mission_type")
-    @click.option("--party", "party_str", default="", help="Comma-separated character names to spawn")
-    @click.option("--crew", default="", help="Comma-separated crew names to filter characters")
-    @click.option("--project-dir", default=".", help="Project directory")
-    @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
+    @click.option("--party", "-p", "party_str", default="", help="Comma-separated character names to spawn")
+    @click.option("--crew", "-c", default="", help="Comma-separated crew names to filter characters")
+    @click.option("--project-dir", "-d", default=".", help="Project directory")
+    @click.option("--runtime", "-r", type=click.Choice(["python", "ts"]), default="python",
                   help="Daemon runtime: python or ts.")
     @click.pass_context
     def mission_spawn(ctx: click.Context, mission_type: str, party_str: str, crew: str, project_dir: str, runtime: str) -> None:

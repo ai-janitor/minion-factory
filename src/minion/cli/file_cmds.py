@@ -24,7 +24,7 @@ def register_commands(cli: click.Group) -> None:
 
     @file_group.command("claim")
     @_agent_option(required=True)
-    @click.option("--file", "file_path", required=True)
+    @click.option("--file", "-f", "file_path", required=True)
     @click.pass_context
     def claim_file(ctx: click.Context, agent: str, file_path: str) -> None:
         """Claim a file for exclusive editing."""
@@ -35,8 +35,8 @@ def register_commands(cli: click.Group) -> None:
 
     @file_group.command("release")
     @_agent_option(required=True)
-    @click.option("--file", "file_path", required=True)
-    @click.option("--force", is_flag=True)
+    @click.option("--file", "-f", "file_path", required=True)
+    @click.option("--force", "-F", is_flag=True)
     @click.pass_context
     def release_file(ctx: click.Context, agent: str, file_path: str, force: bool) -> None:
         """Release a file claim."""

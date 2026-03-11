@@ -25,9 +25,9 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @network_group.command("serve")
-    @click.option("--port", default=8377, type=int, help="TCP port (default: 8377)")
-    @click.option("--db-path", default="", help="SQLite DB path (default: ~/.minion/network.db)")
-    @click.option("--token", default="", help="Cluster auth token (or set MINION_CLUSTER_TOKEN)")
+    @click.option("--port", "-p", default=8377, type=int, help="TCP port (default: 8377)")
+    @click.option("--db-path", "-d", default="", help="SQLite DB path (default: ~/.minion/network.db)")
+    @click.option("--token", "-t", default="", help="Cluster auth token (or set MINION_CLUSTER_TOKEN)")
     @click.option("--no-auth", is_flag=True, default=False, help="Allow starting without auth token (DEVELOPMENT ONLY)")
     @click.pass_context
     def network_serve(ctx: click.Context, port: int, db_path: str, token: str, no_auth: bool) -> None:
@@ -108,7 +108,7 @@ def register_commands(cli: click.Group) -> None:
         _output(net.alerts(), ctx.obj["human"], ctx.obj["compact"])
 
     @network_group.command("project-agents")
-    @click.option("--project", required=True, help="Project name")
+    @click.option("--project", "-p", required=True, help="Project name")
     @click.pass_context
     def network_project_agents(ctx: click.Context, project: str) -> None:
         """List agents in a specific project via the network server."""

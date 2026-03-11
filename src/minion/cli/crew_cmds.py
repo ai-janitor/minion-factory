@@ -32,9 +32,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_list_crews(), ctx.obj["human"])
 
     @crew_group.command("spawn")
-    @click.option("--crew", required=True)
-    @click.option("--project-dir", default=".")
-    @click.option("--agents", default="")
+    @click.option("--crew", "-c", required=True)
+    @click.option("--project-dir", "-d", default=".")
+    @click.option("--agents", "-A", default="")
     @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
                   help="Daemon runtime: python (minion-swarm) or ts (SDK daemon).")
     @click.pass_context
@@ -48,7 +48,7 @@ def register_commands(cli: click.Group) -> None:
 
     @crew_group.command("stand-down")
     @_agent_option(required=True)
-    @click.option("--crew", default="")
+    @click.option("--crew", "-c", default="")
     @click.pass_context
     def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
         """Shut down all agents in a crew. Lead only."""
@@ -69,16 +69,16 @@ def register_commands(cli: click.Group) -> None:
 
     @crew_group.command("recruit")
     @click.option("--name", "-n", required=True, help="Agent name")
-    @click.option("--class", "agent_class", default=None, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
-    @click.option("--crew", required=True, help="Running crew to join (tmux session crew-<name>)")
-    @click.option("--from-crew", default="", help="Source crew YAML to pull character config from")
-    @click.option("--capabilities", default="", help="Comma-separated capabilities (code,review,...)")
-    @click.option("--system", default="", help="System prompt override")
-    @click.option("--provider", default=None, type=click.Choice(["claude", "codex", "opencode", "gemini"]))
-    @click.option("--model", default="", help="Model override")
-    @click.option("--transport", default=None, type=click.Choice(["terminal", "daemon", "daemon-ts"]))
-    @click.option("--permission-mode", default="", help="Permission mode for the agent")
-    @click.option("--zone", default="", help="Zone assignment")
+    @click.option("--class", "-c", "agent_class", default=None, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
+    @click.option("--crew", "-w", required=True, help="Running crew to join (tmux session crew-<name>)")
+    @click.option("--from-crew", "-f", default="", help="Source crew YAML to pull character config from")
+    @click.option("--capabilities", "-C", default="", help="Comma-separated capabilities (code,review,...)")
+    @click.option("--system", "-S", default="", help="System prompt override")
+    @click.option("--provider", "-P", default=None, type=click.Choice(["claude", "codex", "opencode", "gemini"]))
+    @click.option("--model", "-M", default="", help="Model override")
+    @click.option("--transport", "-T", default=None, type=click.Choice(["terminal", "daemon", "daemon-ts"]))
+    @click.option("--permission-mode", "-p", default="", help="Permission mode for the agent")
+    @click.option("--zone", "-z", default="", help="Zone assignment")
     @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
                   help="Daemon runtime: python or ts.")
     @click.pass_context
@@ -116,9 +116,9 @@ def register_commands(cli: click.Group) -> None:
         ), ctx.obj["human"], ctx.obj["compact"])
 
     @crew_group.command("hand-off-zone")
-    @click.option("--from", "from_agent", required=True)
-    @click.option("--to", "to_agents", required=True, help="Comma-separated agent names")
-    @click.option("--zone", required=True)
+    @click.option("--from", "-f", "from_agent", required=True)
+    @click.option("--to", "-t", "to_agents", required=True, help="Comma-separated agent names")
+    @click.option("--zone", "-z", required=True)
     @click.pass_context
     def hand_off_zone(ctx: click.Context, from_agent: str, to_agents: str, zone: str) -> None:
         """Transfer file zone ownership from one agent to another."""

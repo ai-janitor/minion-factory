@@ -45,10 +45,10 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @api_group.command("start")
-    @click.option("--port", default=8377, type=int, help="TCP port (default: 8377)")
+    @click.option("--port", "-P", default=8377, type=int, help="TCP port (default: 8377)")
     @click.option("-p", "--password-file", default=None, type=click.Path(exists=True),
                   help="Read token from file (first line). For automation/scripts.")
-    @click.option("--insecure", is_flag=True, help="Allow starting without auth token (dev only)")
+    @click.option("--insecure", "-I", is_flag=True, help="Allow starting without auth token (dev only)")
     @click.pass_context
     def api_start(ctx: click.Context, port: int, password_file: str | None, insecure: bool) -> None:
         """Start the API server as a background daemon.
@@ -138,7 +138,7 @@ def register_commands(cli: click.Group) -> None:
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("restart")
-    @click.option("--port", default=None, type=int, help="Override port on restart")
+    @click.option("--port", "-P", default=None, type=int, help="Override port on restart")
     @click.pass_context
     def api_restart(ctx: click.Context, port: int | None) -> None:
         """Restart the API server daemon (stop + start).
@@ -184,10 +184,10 @@ def register_commands(cli: click.Group) -> None:
 
     @api_group.command("set-remote")
     @click.argument("url")
-    @click.option("--name", default="default", help="Profile name (default: 'default')")
+    @click.option("--name", "-n", default="default", help="Profile name (default: 'default')")
     @click.option("-p", "--password-file", default=None, type=click.Path(exists=True),
                   help="Read token from file (first line)")
-    @click.option("--insecure", is_flag=True, help="Skip TLS verification + no auth")
+    @click.option("--insecure", "-I", is_flag=True, help="Skip TLS verification + no auth")
     @click.pass_context
     def api_set_remote(ctx: click.Context, url: str, name: str,
                        password_file: str | None, insecure: bool) -> None:
@@ -236,7 +236,7 @@ def register_commands(cli: click.Group) -> None:
         return client
 
     @api_group.command("remote-status")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_status(ctx: click.Context, remote: str | None) -> None:
         """Health check on remote API server."""
@@ -244,7 +244,7 @@ def register_commands(cli: click.Group) -> None:
         _output(client.health(), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-agents")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_agents(ctx: click.Context, remote: str | None) -> None:
         """List agents on remote machine."""
@@ -252,10 +252,10 @@ def register_commands(cli: click.Group) -> None:
         _output(client.who(), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-send")
-    @click.option("--from", "from_agent", required=True, help="Sender agent name")
-    @click.option("--to", "to_agent", required=True, help="Recipient agent name")
+    @click.option("--from", "-f", "from_agent", required=True, help="Sender agent name")
+    @click.option("--to", "-t", "to_agent", required=True, help="Recipient agent name")
     @click.option("--message", "-m", required=True, help="Message text")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_send(ctx: click.Context, from_agent: str, to_agent: str,
                         message: str, remote: str | None) -> None:
@@ -264,8 +264,8 @@ def register_commands(cli: click.Group) -> None:
         _output(client.send(from_agent, to_agent, message), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-inbox")
-    @click.option("--agent", required=True, help="Agent name")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--agent", "-a", required=True, help="Agent name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_inbox(ctx: click.Context, agent: str, remote: str | None) -> None:
         """Check inbox on remote machine."""
@@ -273,7 +273,7 @@ def register_commands(cli: click.Group) -> None:
         _output(client.check_inbox(agent), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-projects")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_projects(ctx: click.Context, remote: str | None) -> None:
         """List projects on remote machine."""
@@ -281,7 +281,7 @@ def register_commands(cli: click.Group) -> None:
         _output(client.list_projects(), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-overview")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_overview(ctx: click.Context, remote: str | None) -> None:
         """Cross-project overview from remote machine."""
@@ -289,7 +289,7 @@ def register_commands(cli: click.Group) -> None:
         _output(client.overview(), ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-alerts")
-    @click.option("--remote", default=None, help="Remote profile name")
+    @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_alerts(ctx: click.Context, remote: str | None) -> None:
         """Alerts from remote machine."""

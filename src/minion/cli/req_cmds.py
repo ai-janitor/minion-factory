@@ -23,8 +23,8 @@ def register_commands(cli: click.Group) -> None:
         pass
 
     @req_group.command("register")
-    @click.option("--path", required=True, help="Path relative to .work/requirements/")
-    @click.option("--by", "created_by", default="human", help="Who is registering (agent name or 'human')")
+    @click.option("--path", "-p", required=True, help="Path relative to .work/requirements/")
+    @click.option("--by", "-b", "created_by", default="human", help="Who is registering (agent name or 'human')")
     @click.pass_context
     def req_register(ctx: click.Context, path: str, created_by: str) -> None:
         """Register a requirement folder in the index."""
@@ -32,7 +32,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_register(path, created_by), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("reindex")
-    @click.option("--work-dir", default="", help="Path to .work/ directory (default: cwd/.work or -C project-dir/.work)")
+    @click.option("--work-dir", "-w", default="", help="Path to .work/ directory (default: cwd/.work or -C project-dir/.work)")
     @click.pass_context
     def req_reindex(ctx: click.Context, work_dir: str) -> None:
         """Rebuild the requirements index by scanning the filesystem."""
@@ -46,8 +46,8 @@ def register_commands(cli: click.Group) -> None:
         _output(_reindex(wd), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("list")
-    @click.option("--stage", default=None, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
-    @click.option("--origin", default="", help="Filter by origin (feature, bug, ...)")
+    @click.option("--stage", "-s", default=None, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
+    @click.option("--origin", "-o", default="", help="Filter by origin (feature, bug, ...)")
     @click.pass_context
     def req_list(ctx: click.Context, stage: str, origin: str) -> None:
         """List all requirements with optional filters."""
@@ -73,9 +73,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_status(path), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("update")
-    @click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
-    @click.option("--stage", required=True, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
-    @click.option("--skip", "skip_stages", is_flag=True, default=False, help="Walk through all intermediate stages to reach target (lead only).")
+    @click.option("--path", "-p", required=True, help="Requirement path relative to .work/requirements/")
+    @click.option("--stage", "-s", required=True, type=click.Choice(["seed", "itemizing", "itemized", "investigating", "findings_ready", "decomposing", "tasked", "in_progress", "completed"]))
+    @click.option("--skip", "-S", "skip_stages", is_flag=True, default=False, help="Walk through all intermediate stages to reach target (lead only).")
     @_agent_option(default="", help="Caller agent name; must be 'lead' to use --skip.")
     @click.pass_context
     def req_update(ctx: click.Context, path: str, stage: str, skip_stages: bool, agent: str) -> None:
@@ -85,8 +85,8 @@ def register_commands(cli: click.Group) -> None:
         _output(_update(path, stage, skip=skip_stages, agent=agent), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("link")
-    @click.option("--task", "task_id", required=True, type=int, help="Task ID to link")
-    @click.option("--path", required=True, help="Requirement path relative to .work/requirements/")
+    @click.option("--task", "-t", "task_id", required=True, type=int, help="Task ID to link")
+    @click.option("--path", "-p", required=True, help="Requirement path relative to .work/requirements/")
     @click.pass_context
     def req_link(ctx: click.Context, task_id: int, path: str) -> None:
         """Link a task to its source requirement (accepts ID or path)."""
@@ -109,10 +109,10 @@ def register_commands(cli: click.Group) -> None:
         _output(_orphans(), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("create")
-    @click.option("--path", required=True, help="Path relative to .work/requirements/")
-    @click.option("--title", required=True, help="Requirement title")
-    @click.option("--description", default="", help="Requirement description")
-    @click.option("--by", "created_by", default="human")
+    @click.option("--path", "-p", required=True, help="Path relative to .work/requirements/")
+    @click.option("--title", "-t", required=True, help="Requirement title")
+    @click.option("--description", "-d", default="", help="Requirement description")
+    @click.option("--by", "-b", "created_by", default="human")
     @click.pass_context
     def req_create(ctx: click.Context, path: str, title: str, description: str, created_by: str) -> None:
         """Create a requirement folder with README and register it."""
@@ -120,10 +120,10 @@ def register_commands(cli: click.Group) -> None:
         _output(_create(path, title, description, created_by), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("decompose")
-    @click.option("--path", required=True, help="Parent requirement path")
-    @click.option("--spec", default=None, help="YAML spec file for children. Use '-' to read from stdin.")
-    @click.option("--inline", default=None, help="Inline YAML string (alternative to --spec file).")
-    @click.option("--by", "agent_name", default="lead")
+    @click.option("--path", "-p", required=True, help="Parent requirement path")
+    @click.option("--spec", "-s", default=None, help="YAML spec file for children. Use '-' to read from stdin.")
+    @click.option("--inline", "-i", default=None, help="Inline YAML string (alternative to --spec file).")
+    @click.option("--by", "-b", "agent_name", default="lead")
     @click.pass_context
     def req_decompose(ctx: click.Context, path: str, spec: str | None, inline: str | None, agent_name: str) -> None:
         """Decompose a requirement into children from a spec file or inline YAML.
@@ -172,9 +172,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_decompose(path, spec_data, agent_name), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("itemize")
-    @click.option("--path", required=True, help="Requirement path")
-    @click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file with items")
-    @click.option("--by", "created_by", default="lead")
+    @click.option("--path", "-p", required=True, help="Requirement path")
+    @click.option("--spec", "-s", required=True, type=click.Path(exists=True), help="YAML spec file with items")
+    @click.option("--by", "-b", "created_by", default="lead")
     @click.pass_context
     def req_itemize(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
         """Write itemized-requirements.md from a spec file (accepts ID or path)."""
@@ -186,9 +186,9 @@ def register_commands(cli: click.Group) -> None:
         _output(_itemize(path, spec_data, created_by), ctx.obj["human"], ctx.obj["compact"])
 
     @req_group.command("findings")
-    @click.option("--path", required=True, help="Requirement path")
-    @click.option("--spec", required=True, type=click.Path(exists=True), help="YAML spec file with findings")
-    @click.option("--by", "created_by", default="lead")
+    @click.option("--path", "-p", required=True, help="Requirement path")
+    @click.option("--spec", "-s", required=True, type=click.Path(exists=True), help="YAML spec file with findings")
+    @click.option("--by", "-b", "created_by", default="lead")
     @click.pass_context
     def req_findings(ctx: click.Context, path: str, spec: str, created_by: str) -> None:
         """Write findings.md from a spec file (accepts ID or path)."""
@@ -201,7 +201,7 @@ def register_commands(cli: click.Group) -> None:
 
     @req_group.command("report")
     @click.argument("path")
-    @click.option("--raw", is_flag=True, default=False, help="Output raw JSON instead of formatted markdown.")
+    @click.option("--raw", "-r", is_flag=True, default=False, help="Output raw JSON instead of formatted markdown.")
     @click.pass_context
     def req_report(ctx: click.Context, path: str, raw: bool) -> None:
         """Roll up the full requirement lineage (accepts ID or path)."""

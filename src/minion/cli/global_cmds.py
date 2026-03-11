@@ -62,7 +62,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_deregister_global(name), ctx.obj["human"])
 
     @global_group.command("prune")
-    @click.option("--stale", required=True, type=str, help="Stale threshold, e.g. '30m' or '2h'")
+    @click.option("--stale", "-s", required=True, type=str, help="Stale threshold, e.g. '30m' or '2h'")
     @click.pass_context
     def global_prune(ctx: click.Context, stale: str) -> None:
         """Remove agents that haven't been active in N minutes/hours. Lead-only.

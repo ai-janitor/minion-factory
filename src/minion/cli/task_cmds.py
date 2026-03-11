@@ -27,13 +27,13 @@ def register_commands(cli: click.Group) -> None:
     @task_group.command("create")
     @_agent_option(required=True)
     @click.option("--title", "-t", required=True)
-    @click.option("--task-file", required=True)
-    @click.option("--project", default="")
-    @click.option("--zone", default="")
-    @click.option("--blocked-by", default="")
-    @click.option("--class-required", default="", help="Agent class required (e.g. coder, builder, recon)")
-    @click.option("--type", "task_type", default="bugfix", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
-    @click.option("--requirement", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
+    @click.option("--task-file", "-f", required=True)
+    @click.option("--project", "-p", default="")
+    @click.option("--zone", "-z", default="")
+    @click.option("--blocked-by", "-b", default="")
+    @click.option("--class-required", "-c", default="", help="Agent class required (e.g. coder, builder, recon)")
+    @click.option("--type", "-T", "task_type", default="bugfix", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
+    @click.option("--requirement", "-r", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
     @click.pass_context
     def create_task(ctx: click.Context, agent: str, title: str, task_file: str, project: str, zone: str, blocked_by: str, class_required: str, task_type: str, requirement_id: int | None) -> None:
         """Create a new task. Lead only."""
@@ -44,8 +44,8 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("assign")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--assigned-to", required=True)
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--assigned-to", "-A", required=True)
     @click.pass_context
     def assign_task(ctx: click.Context, agent: str, task_id: int, assigned_to: str) -> None:
         """Assign a task to an agent. Lead only."""
@@ -56,11 +56,11 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("update")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--status", default="")
-    @click.option("--progress", default="")
-    @click.option("--files", default="")
-    @click.option("--checklist", default="", help="Path to checklist file (required for in_progress transition)")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--status", "-s", default="")
+    @click.option("--progress", "-P", default="")
+    @click.option("--files", "-f", default="")
+    @click.option("--checklist", "-c", default="", help="Path to checklist file (required for in_progress transition)")
     @click.pass_context
     def update_task(ctx: click.Context, agent: str, task_id: int, status: str, progress: str, files: str, checklist: str) -> None:
         """Update a task's status, progress, or files."""
@@ -71,8 +71,8 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--status", "-s", default="")
     @click.option("--project", "-p", default="")
     @click.option("--zone", "-z", default="")
-    @click.option("--assigned-to", default="")
-    @click.option("--class-required", default="", help="Filter by required agent class")
+    @click.option("--assigned-to", "-A", default="")
+    @click.option("--class-required", "-c", default="", help="Filter by required agent class")
     @click.option("--count", "-n", default=50, type=int)
     @click.pass_context
     def list_tasks(ctx: click.Context, status: str, project: str, zone: str, assigned_to: str, class_required: str, count: int) -> None:
@@ -81,7 +81,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_tasks(status, project, zone, assigned_to, class_required, count), ctx.obj["human"])
 
     @task_group.command("show")
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def show_task(ctx: click.Context, task_id: int) -> None:
         """Show full detail for a single task."""
@@ -89,7 +89,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_task(task_id), ctx.obj["human"])
 
     @task_group.command("get", hidden=True)
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def get_task(ctx: click.Context, task_id: int) -> None:
         """Show full detail for a single task (hidden alias for 'task show')."""
@@ -97,7 +97,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_task(task_id), ctx.obj["human"])
 
     @task_group.command("spec")
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def task_spec_cmd(ctx: click.Context, task_id: int) -> None:
         """Read the spec file contents for a task by ID."""
@@ -109,7 +109,7 @@ def register_commands(cli: click.Group) -> None:
             _output(result, ctx.obj["human"])
 
     @task_group.command("lineage")
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def task_lineage(ctx: click.Context, task_id: int) -> None:
         """Show task lineage — DAG history and who worked each stage."""
@@ -118,8 +118,8 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("submit-result", hidden=True)
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--result-file", required=True)
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--result-file", "-r", required=True)
     @click.pass_context
     def submit_result(ctx: click.Context, agent: str, task_id: int, result_file: str) -> None:
         """Submit a result file for a task (hidden — use 'task result' instead)."""
@@ -128,7 +128,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("close")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
         """Close a task. Lead only."""
@@ -139,8 +139,8 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("done")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--summary", default="", help="Optional summary of externally completed work")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--summary", "-s", default="", help="Optional summary of externally completed work")
     @click.pass_context
     def done_task_cmd(ctx: click.Context, agent: str, task_id: int, summary: str) -> None:
         """Fast-close a task completed outside the DAG. Lead only."""
@@ -151,8 +151,8 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("reopen")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--to-status", default="assigned", help="Target status (default: assigned)")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--to-status", "-s", default="assigned", help="Target status (default: assigned)")
     @click.pass_context
     def reopen_task_cmd(ctx: click.Context, agent: str, task_id: int, to_status: str) -> None:
         """Reopen a terminal task back to an earlier phase. Lead only."""
@@ -161,7 +161,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("pull")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
         """Claim a specific task by ID."""
@@ -170,9 +170,9 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("complete-phase")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--failed", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
-    @click.option("--reason", default=None, help="Required when blocking — why you're stuck")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--failed", "-F", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
+    @click.option("--reason", "-r", default=None, help="Required when blocking — why you're stuck")
     @click.pass_context
     def complete_phase_cmd(ctx: click.Context, agent: str, task_id: int, failed: bool, reason: str | None) -> None:
         """Complete your phase — DAG routes to next stage."""
@@ -191,9 +191,9 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("comment")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.option("--message", "-m", required=True)
-    @click.option("--files", default="", help="Comma-separated file paths read for context")
+    @click.option("--files", "-f", default="", help="Comma-separated file paths read for context")
     @click.pass_context
     def task_comment_cmd(ctx: click.Context, agent: str, task_id: int, message: str, files: str) -> None:
         """Add a comment to a task with optional file context."""
@@ -202,7 +202,7 @@ def register_commands(cli: click.Group) -> None:
         _output(add_comment(agent, task_id, message, files_read=files_list), ctx.obj["human"])
 
     @task_group.command("comments")
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.pass_context
     def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
         """List all comments for a task."""
@@ -211,15 +211,15 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("define")
     @_agent_option(required=True)
-    @click.option("--title", required=True)
-    @click.option("--description", required=True)
-    @click.option("--task-type", default="feature", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
-    @click.option("--project", default="")
-    @click.option("--zone", default="")
-    @click.option("--blocked-by", default="", help="Comma-separated task IDs")
-    @click.option("--class-required", default="")
-    @click.option("--intel", default="", help="Comma-separated intel slugs to link")
-    @click.option("--requirement", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
+    @click.option("--title", "-t", required=True)
+    @click.option("--description", "-d", required=True)
+    @click.option("--task-type", "-T", default="feature", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
+    @click.option("--project", "-p", default="")
+    @click.option("--zone", "-z", default="")
+    @click.option("--blocked-by", "-b", default="", help="Comma-separated task IDs")
+    @click.option("--class-required", "-c", default="")
+    @click.option("--intel", "-i", default="", help="Comma-separated intel slugs to link")
+    @click.option("--requirement", "-r", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
     @click.pass_context
     def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
                         task_type: str, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None) -> None:
@@ -229,10 +229,10 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("result")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--summary", required=True)
-    @click.option("--files-changed", default="", help="Comma-separated list of changed files")
-    @click.option("--notes", default="")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--summary", "-s", required=True)
+    @click.option("--files-changed", "-f", default="", help="Comma-separated list of changed files")
+    @click.option("--notes", "-n", default="")
     @click.pass_context
     def task_result_cmd(ctx: click.Context, agent: str, task_id: int, summary: str,
                         files_changed: str, notes: str) -> None:
@@ -242,9 +242,9 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("review")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--verdict", required=True, type=click.Choice(["pass", "fail"]))
-    @click.option("--notes", default="")
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--verdict", "-v", required=True, type=click.Choice(["pass", "fail"]))
+    @click.option("--notes", "-n", default="")
     @click.pass_context
     def task_review_cmd(ctx: click.Context, agent: str, task_id: int, verdict: str, notes: str) -> None:
         """Write a review verdict and advance the task phase."""
@@ -253,10 +253,10 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("test")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
+    @click.option("--task-id", "-t", required=True, type=int)
     @click.option("--passed/--failed", required=True, help="Test outcome")
-    @click.option("--output", "test_output", default="", help="Test output text")
-    @click.option("--notes", default="")
+    @click.option("--output", "-o", "test_output", default="", help="Test output text")
+    @click.option("--notes", "-n", default="")
     @click.pass_context
     def task_test_cmd(ctx: click.Context, agent: str, task_id: int, passed: bool,
                       test_output: str, notes: str) -> None:
@@ -266,8 +266,8 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("block")
     @_agent_option(required=True)
-    @click.option("--task-id", required=True, type=int)
-    @click.option("--reason", required=True)
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--reason", "-r", required=True)
     @click.pass_context
     def task_block_cmd(ctx: click.Context, agent: str, task_id: int, reason: str) -> None:
         """Block a task with a reason and transition to blocked status."""

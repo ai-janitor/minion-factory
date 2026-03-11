@@ -28,11 +28,11 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("add")
     @click.option("--type", "-t", "item_type", required=True, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
-    @click.option("--title", required=True, help="Short descriptive title")
-    @click.option("--source", default="human", help="Who captured this (default: human)")
-    @click.option("--description", default="", help="Longer description of the item")
-    @click.option("--priority", default="unset", type=click.Choice(["unset", "low", "medium", "high", "critical"]))
-    @click.option("--flow-hint", default="", help="DAG flow type hint (e.g. implementation, feature, chore, build)")
+    @click.option("--title", "-T", required=True, help="Short descriptive title")
+    @click.option("--source", "-s", default="human", help="Who captured this (default: human)")
+    @click.option("--description", "-d", default="", help="Longer description of the item")
+    @click.option("--priority", "-p", default="unset", type=click.Choice(["unset", "low", "medium", "high", "critical"]))
+    @click.option("--flow-hint", "-f", default="", help="DAG flow type hint (e.g. implementation, feature, chore, build)")
     @click.pass_context
     def backlog_add(ctx: click.Context, item_type: str, title: str, source: str, description: str, priority: str, flow_hint: str) -> None:
         """Add a new item to the backlog."""
@@ -50,9 +50,9 @@ def register_commands(cli: click.Group) -> None:
             )
 
     @backlog_group.command("list")
-    @click.option("--type", "item_type", default=None, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
-    @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
-    @click.option("--status", default="open", type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
+    @click.option("--type", "-t", "item_type", default=None, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
+    @click.option("--priority", "-p", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
+    @click.option("--status", "-s", default="open", type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
     @click.pass_context
     def backlog_list(ctx: click.Context, item_type: str | None, priority: str | None, status: str | None) -> None:
         """List backlog items with optional filters."""
@@ -74,7 +74,7 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("show")
     @click.argument("path", required=False, default=None)
-    @click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID")
+    @click.option("--id", "-i", "item_id", type=int, default=None, help="Look up by backlog ID")
     @click.pass_context
     def backlog_show(ctx: click.Context, path: str | None, item_id: int | None) -> None:
         """Show a single backlog item by file path or --id."""
@@ -94,10 +94,10 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("update")
     @click.argument("path", required=False, default=None)
-    @click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID (alternative to path)")
-    @click.option("--priority", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
-    @click.option("--status", default=None, type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
-    @click.option("--flow-hint", default=None, help="DAG flow type hint (e.g. implementation, feature, chore, build)")
+    @click.option("--id", "-i", "item_id", type=int, default=None, help="Look up by backlog ID (alternative to path)")
+    @click.option("--priority", "-p", default=None, type=click.Choice(["unset", "low", "medium", "high", "critical"]))
+    @click.option("--status", "-s", default=None, type=click.Choice(["open", "promoted", "killed", "deferred", "closed"]))
+    @click.option("--flow-hint", "-f", default=None, help="DAG flow type hint (e.g. implementation, feature, chore, build)")
     @click.pass_context
     def backlog_update(ctx: click.Context, path: str | None, item_id: int | None, priority: str | None, status: str | None, flow_hint: str | None) -> None:
         """Update priority and/or status of a backlog item by path or --id."""
@@ -113,10 +113,10 @@ def register_commands(cli: click.Group) -> None:
     @backlog_group.command("promote")
     @click.argument("path", required=False, default=None)
     @click.option("--agent", "-a", required=True, help="Agent performing the promotion (must be lead class)")
-    @click.option("--id", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
-    @click.option("--origin", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
-    @click.option("--slug", default=None, help="Override the auto-derived requirement slug")
-    @click.option("--flow", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
+    @click.option("--id", "-i", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
+    @click.option("--origin", "-o", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
+    @click.option("--slug", "-s", default=None, help="Override the auto-derived requirement slug")
+    @click.option("--flow", "-f", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
                   help="Lifecycle flow: 'requirement' (full 9-stage, default) or 'requirement-lite' (4-stage shortcut)")
     @click.pass_context
     def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
@@ -138,7 +138,7 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("kill")
     @click.argument("path")
-    @click.option("--reason", required=True, help="Why this item is being killed")
+    @click.option("--reason", "-r", required=True, help="Why this item is being killed")
     @click.pass_context
     def backlog_kill(ctx: click.Context, path: str, reason: str) -> None:
         """Mark a backlog item as killed."""
@@ -151,7 +151,7 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("defer")
     @click.argument("path")
-    @click.option("--until", required=True, help="Date or milestone to defer until")
+    @click.option("--until", "-u", required=True, help="Date or milestone to defer until")
     @click.pass_context
     def backlog_defer(ctx: click.Context, path: str, until: str) -> None:
         """Defer a backlog item until a later date or milestone."""
@@ -164,7 +164,7 @@ def register_commands(cli: click.Group) -> None:
 
     @backlog_group.command("lineage")
     @click.argument("path", required=False, default=None)
-    @click.option("--id", "item_id", type=int, default=None, help="Look up by backlog ID")
+    @click.option("--id", "-i", "item_id", type=int, default=None, help="Look up by backlog ID")
     @click.pass_context
     def backlog_lineage(ctx: click.Context, path: str | None, item_id: int | None) -> None:
         """Full audit trail from backlog item to task closure."""

@@ -25,11 +25,11 @@ def register_commands(cli: click.Group) -> None:
     @agent_group.command("register")
     @click.option("--name", "-n", required=True)
     @click.option("--class", "-c", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
-    @click.option("--model", default="")
-    @click.option("--description", default="")
-    @click.option("--transport", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
-    @click.option("--crew", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
-    @click.option("--scope", default="project", type=click.Choice(["project", "sys", "cross-repo"]), help="Permission scope — narrows what commands are allowed")
+    @click.option("--model", "-M", default="")
+    @click.option("--description", "-d", default="")
+    @click.option("--transport", "-T", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
+    @click.option("--crew", "-w", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
+    @click.option("--scope", "-S", default="project", type=click.Choice(["project", "sys", "cross-repo"]), help="Permission scope — narrows what commands are allowed")
     @click.pass_context
     def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str, scope: str) -> None:
         """Register an agent into the local session AND the global coordinator DB.
@@ -54,10 +54,10 @@ def register_commands(cli: click.Group) -> None:
     @agent_group.command("set-context")
     @_agent_option(required=True)
     @click.option("--context", "-x", required=True)
-    @click.option("--tokens-used", default=0, type=int)
-    @click.option("--tokens-limit", default=0, type=int)
-    @click.option("--hp", default=None, type=int, help="Self-reported HP 0-100 (skips daemon token counting)")
-    @click.option("--files-modified", default="", help="Comma-separated files modified this turn; warns if unclaimed")
+    @click.option("--tokens-used", "-u", default=0, type=int)
+    @click.option("--tokens-limit", "-l", default=0, type=int)
+    @click.option("--hp", "-H", default=None, type=int, help="Self-reported HP 0-100 (skips daemon token counting)")
+    @click.option("--files-modified", "-F", default="", help="Comma-separated files modified this turn; warns if unclaimed")
     @click.pass_context
     def set_context(ctx: click.Context, agent: str, context: str, tokens_used: int, tokens_limit: int, hp: int | None, files_modified: str) -> None:
         """Update context summary and health (tokens used, token limit)."""
@@ -65,7 +65,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_set_context(agent, context, tokens_used, tokens_limit, hp, files_modified), ctx.obj["human"])
 
     @agent_group.command("who")
-    @click.option("--global", "use_global", is_flag=True, default=False,
+    @click.option("--global", "-g", "use_global", is_flag=True, default=False,
                   help="Query the global coordinator DB (~/.minion/coordinator.db) to show agents across ALL projects, not just the current repo")
     @click.pass_context
     def who(ctx: click.Context, use_global: bool) -> None:
@@ -79,9 +79,9 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("update-hp")
     @_agent_option(required=True)
-    @click.option("--input-tokens", required=True, type=int)
-    @click.option("--output-tokens", required=True, type=int)
-    @click.option("--limit", required=True, type=int)
+    @click.option("--input-tokens", "-i", required=True, type=int)
+    @click.option("--output-tokens", "-o", required=True, type=int)
+    @click.option("--limit", "-l", required=True, type=int)
     @click.option("--turn-input", default=None, type=int, help="Per-turn input tokens (current context pressure)")
     @click.option("--turn-output", default=None, type=int, help="Per-turn output tokens (current context pressure)")
     @click.pass_context
@@ -112,8 +112,8 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("fenix-down")
     @_agent_option(required=True)
-    @click.option("--files", required=True)
-    @click.option("--manifest", default="")
+    @click.option("--files", "-f", required=True)
+    @click.option("--manifest", "-m", default="")
     @click.pass_context
     def fenix_down(ctx: click.Context, agent: str, files: str, manifest: str) -> None:
         """Save session state to disk before context window runs out."""
@@ -122,7 +122,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("retire")
     @_agent_option(required=True, help="Agent to retire")
-    @click.option("--requesting-agent", required=True, help="Lead requesting retirement")
+    @click.option("--requesting-agent", "-r", required=True, help="Lead requesting retirement")
     @click.pass_context
     def retire_agent_cmd(ctx: click.Context, agent: str, requesting_agent: str) -> None:
         """Signal a single daemon agent to exit gracefully. Lead only."""
@@ -141,7 +141,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("check-freshness")
     @_agent_option(required=True)
-    @click.option("--files", required=True)
+    @click.option("--files", "-f", required=True)
     @click.pass_context
     def check_freshness(ctx: click.Context, agent: str, files: str) -> None:
         """Check file freshness relative to agent's last set-context. Lead only."""
@@ -159,8 +159,8 @@ def register_commands(cli: click.Group) -> None:
         _output(_deregister(name), ctx.obj["human"])
 
     @agent_group.command("rename")
-    @click.option("--old", required=True)
-    @click.option("--new", required=True)
+    @click.option("--old", "-o", required=True)
+    @click.option("--new", "-N", required=True)
     @click.pass_context
     def rename(ctx: click.Context, old: str, new: str) -> None:
         """Rename an agent. Lead only."""
@@ -171,7 +171,7 @@ def register_commands(cli: click.Group) -> None:
 
     @agent_group.command("interrupt")
     @_agent_option(required=True, help="Agent to interrupt")
-    @click.option("--requesting-agent", required=True, help="Lead requesting interrupt")
+    @click.option("--requesting-agent", "-r", required=True, help="Lead requesting interrupt")
     @click.pass_context
     def interrupt(ctx: click.Context, agent: str, requesting_agent: str) -> None:
         """Interrupt an agent's current invocation. Lead only."""
@@ -183,7 +183,7 @@ def register_commands(cli: click.Group) -> None:
     @agent_group.command("resume")
     @_agent_option(required=True, help="Agent to resume")
     @click.option("--message", "-m", required=True, help="Message to send on resume")
-    @click.option("--from", "from_agent", required=True, help="Sending agent (lead)")
+    @click.option("--from", "-F", "from_agent", required=True, help="Sending agent (lead)")
     @click.pass_context
     def resume(ctx: click.Context, agent: str, message: str, from_agent: str) -> None:
         """Send a resume message to an interrupted agent. Lead only."""

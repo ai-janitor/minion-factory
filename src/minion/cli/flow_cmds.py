@@ -64,7 +64,7 @@ def register_commands(cli: click.Group) -> None:
     @flow_group.command("next-status")
     @click.argument("type_name")
     @click.argument("current")
-    @click.option("--failed", is_flag=True, help="Query fail path instead of happy path")
+    @click.option("--failed", "-F", is_flag=True, help="Query fail path instead of happy path")
     @click.pass_context
     def next_status(ctx: click.Context, type_name: str, current: str, failed: bool) -> None:
         """Query routing: what status comes next?"""

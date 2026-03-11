@@ -32,7 +32,7 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--from", "-f", "from_agent", required=True)
     @click.option("--to", "-t", "to_agent", required=True)
     @click.option("--message", "-m", required=True)
-    @click.option("--cc", default="")
+    @click.option("--cc", "-c", default="")
     @click.option("--type", "msg_type", default=None,
                   type=click.Choice(["order", "sitrep", "query", "response", "alert", "system"], case_sensitive=False),
                   help="Message type for filtering (optional)")
@@ -87,7 +87,7 @@ def register_commands(cli: click.Group) -> None:
 
     @comms_group.command("purge-inbox")
     @_agent_option(required=True)
-    @click.option("--older-than-hours", default=2, type=int)
+    @click.option("--older-than-hours", "-H", default=2, type=int)
     @click.pass_context
     def purge_inbox(ctx: click.Context, agent: str, older_than_hours: int) -> None:
         """Delete old messages from inbox."""
@@ -95,7 +95,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_purge_inbox(agent, older_than_hours), ctx.obj["human"])
 
     @comms_group.command("list-history")
-    @click.option("--count", default=20, type=int)
+    @click.option("--count", "-n", default=20, type=int)
     @click.pass_context
     def list_history(ctx: click.Context, count: int) -> None:
         """Return the last N messages across all agents."""

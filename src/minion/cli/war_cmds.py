@@ -24,7 +24,7 @@ def register_commands(cli: click.Group) -> None:
 
     @war_group.command("set-plan")
     @_agent_option(required=True)
-    @click.option("--plan", required=True)
+    @click.option("--plan", "-p", required=True)
     @click.pass_context
     def set_battle_plan(ctx: click.Context, agent: str, plan: str) -> None:
         """Set the session's current objective. Lead only."""
@@ -34,7 +34,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_set_battle_plan(agent, plan), ctx.obj["human"])
 
     @war_group.command("show-plan")
-    @click.option("--status", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.option("--status", "-s", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
     def show_battle_plan(ctx: click.Context, status: str) -> None:
         """Show the session objective by status."""
@@ -42,7 +42,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_battle_plan(status), ctx.obj["human"])
 
     @war_group.command("get-plan", hidden=True)
-    @click.option("--status", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.option("--status", "-s", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
     def get_battle_plan(ctx: click.Context, status: str) -> None:
         """Show the session objective by status (hidden alias for 'war show-plan')."""
@@ -51,8 +51,8 @@ def register_commands(cli: click.Group) -> None:
 
     @war_group.command("update")
     @_agent_option(required=True)
-    @click.option("--plan-id", required=True, type=int)
-    @click.option("--status", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.option("--plan-id", "-i", required=True, type=int)
+    @click.option("--status", "-s", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
     def update_battle_plan(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
         """Update an objective's status. Lead only."""
@@ -63,8 +63,8 @@ def register_commands(cli: click.Group) -> None:
 
     @war_group.command("update-status", hidden=True)
     @_agent_option(required=True)
-    @click.option("--plan-id", required=True, type=int)
-    @click.option("--status", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.option("--plan-id", "-i", required=True, type=int)
+    @click.option("--status", "-s", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
     def update_battle_plan_status(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
         """Update an objective's status (hidden alias for 'war update'). Lead only."""
