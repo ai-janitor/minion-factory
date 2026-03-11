@@ -62,8 +62,125 @@ _REMEDIATION_HINTS: list[tuple[re.Pattern[str], str]] = [
      "A moon_crash halt is in effect. Wait for the lead to lift it: `minion trigger clear --trigger moon_crash`."),
 
     # Blocked by other tasks
-    (re.compile(r"blocked_by|blocked by task"),
+    (re.compile(r"blocked_by|blocked by task|unresolved blockers"),
      "This task has unresolved blockers. Check dependencies with `minion task show --id <id>`."),
+
+    # Unread messages blocking send
+    (re.compile(r"unread message\(s\).*check-inbox"),
+     "You must read your inbox before sending. Run: `minion comms check-inbox --agent <your-name>`."),
+
+    # Context staleness blocking send
+    (re.compile(r"context.*stale|stale.*context|staleness"),
+     "Your context is stale. Update it: `minion set-context --agent <your-name> --context '<what you are doing>'`."),
+
+    # Agent not registered in project (send errors)
+    (re.compile(r"not registered in this project"),
+     "Register in the current project first: `minion agent register --name <name> --class <role>`. "
+     "Verify your cwd is the correct project root."),
+
+    # Agent belongs to different project
+    (re.compile(r"belongs to .*, not this repo"),
+     "The target agent is in a different project. Use cross-repo messaging: "
+     "`minion comms send global --from <you> --to <target> --message '<msg>'`."),
+
+    # NETWORK_URL not set
+    (re.compile(r"MINION_NETWORK_URL not set"),
+     "Set the network URL: `export MINION_NETWORK_URL=http://<host>:<port>`. "
+     "Or start the network server: `minion api serve`."),
+
+    # Invalid class on registration
+    (re.compile(r"Unknown class '([^']+)'"),
+     "Valid agent classes: coder, lead, recon, auditor, builder. "
+     "Example: `minion agent register --name <name> --class coder`."),
+
+    # Model not allowed for class
+    (re.compile(r"Model '([^']+)' not allowed for class"),
+     "Check allowed models for your class. Re-register with a permitted model: "
+     "`minion agent register --name <name> --class <role> --model <allowed-model>`."),
+
+    # Race condition on task claim
+    (re.compile(r"Race lost.*claimed by another"),
+     "Another agent grabbed this task first. Run `minion task list --status open` to find available tasks."),
+
+    # Only lead can do X
+    (re.compile(r"Only lead-class agents can|Only lead can"),
+     "This operation requires lead privileges. Ask your lead to perform it, "
+     "or re-register as lead if you have authority: `minion agent register --name <name> --class lead`."),
+
+    # Checklist required for in_progress transition
+    (re.compile(r"requires --checklist"),
+     "Generate a checklist first: `minion checklist generate --agent <name> --task-id <id> --type <role>`, "
+     "then pass it: `minion task update --agent <name> --id <id> --status in_progress --checklist <path>`."),
+
+    # Scaffolding incomplete
+    (re.compile(r"Scaffolding incomplete.*Missing files"),
+     "Create the missing scaffold files before advancing. The DAG requires all planned files to exist "
+     "before implementation begins. Stub them with comment headers first."),
+
+    # Invalid status transition
+    (re.compile(r"Invalid status '([^']+)'.*Valid:"),
+     "The status you specified is not valid for this flow. Check valid statuses with `minion task show --id <id>`."),
+
+    # No transition from current status
+    (re.compile(r"No transition from '([^']+)'"),
+     "The task cannot advance from its current stage. Check the DAG flow with `minion task lineage --id <id>` "
+     "or `minion flow list` to see stage transitions."),
+
+    # Battle plan not found
+    (re.compile(r"Battle plan #?\d+ not found"),
+     "Run `minion show-battle-plan` to see existing battle plans."),
+
+    # Invalid priority (raid log / backlog)
+    (re.compile(r"Invalid priority '([^']+)'.*Valid:"),
+     "Use one of the valid priority levels listed in the error message."),
+
+    # Backlog item not found
+    (re.compile(r"Backlog item .* not found"),
+     "Run `minion backlog list` to see available backlog items."),
+
+    # Requirement not found / not registered
+    (re.compile(r"Requirement '([^']+)' not (found|registered)"),
+     "Run `minion req list` to see registered requirements. "
+     "Create one with: `minion req create --path <path> --title '<title>'`."),
+
+    # Crew not found
+    (re.compile(r"Crew '([^']+)' not found"),
+     "Run `minion list-crews` to see available crew YAML files."),
+
+    # tmux required
+    (re.compile(r"tmux required"),
+     "Install tmux to spawn daemon workers. On macOS: `brew install tmux`. On Linux: `apt install tmux`."),
+
+    # PyYAML required
+    (re.compile(r"PyYAML required"),
+     "Install PyYAML: `pip install pyyaml` or `uv pip install pyyaml`."),
+
+    # Spec file not found / no task_file
+    (re.compile(r"has no task_file set|spec file not found"),
+     "Create a task spec: `minion task define --title '<title>' --flow <type>` or attach one with "
+     "`minion task update --id <id> --task-file <path>`."),
+
+    # No result file for close
+    (re.compile(r"has no result file.*submit-result"),
+     "Submit a result before closing: `minion task result --agent <name> --id <id> --file <path>`."),
+
+    # Coordinator DB errors
+    (re.compile(r"Coordinator DB"),
+     "The coordinator database may be unavailable. Ensure the minion daemon is running, or check "
+     "file permissions on ~/.minion_work/coordinator.db."),
+
+    # Remote not configured
+    (re.compile(r"Remote '([^']+)' not (found|configured)|No remote configured"),
+     "Configure a remote: `minion api set-remote --name <name> --url <url>`."),
+
+    # Intel doc not registered
+    (re.compile(r"Intel doc '([^']+)' not registered"),
+     "Register the intel doc first: `minion intel add --slug <slug> --path <file>`. "
+     "List registered docs: `minion intel list`."),
+
+    # File not found (generic)
+    (re.compile(r"File not found:|not found:.*\."),
+     "Verify the file path exists. Use absolute paths or paths relative to the project root."),
 ]
 
 
