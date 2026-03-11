@@ -179,7 +179,7 @@ def load_config(config_path: str | Path) -> SwarmConfig:
         cfg_path.parent,
     )
 
-    # docs_dir: env (ENV_DOCS_DIR) > YAML > default — consistent with daemon/config.py
+    # docs_dir: YAML > env (ENV_DOCS_DIR) > default — config file overrides env vars
     docs_dir = resolve_path(
         str(raw.get("docs_dir", os.environ.get(ENV_DOCS_DIR, DEFAULT_DOCS_DIR))),
         cfg_path.parent,

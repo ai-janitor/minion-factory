@@ -95,16 +95,20 @@ def register_commands(cli: click.Group) -> None:
             raise SystemExit(2)
         from minion.crew import recruit_agent as _recruit
         project_dir = ctx.obj.get("project_dir") or "."
+        # Config cascade: CLI explicit > config file (--from-crew) > defaults.
+        # Pass None/empty for unset options so recruit_agent can distinguish
+        # "user didn't specify" from "user chose a value". Defaults are applied
+        # inside recruit_agent after config file values are consulted.
         _output(_recruit(
             name=name,
-            agent_class=agent_class or "coder",
+            agent_class=agent_class,
             crew=crew,
             from_crew=from_crew,
             capabilities=capabilities,
             system=system,
-            provider=provider or "claude",
+            provider=provider,
             model=model,
-            transport=transport or "daemon",
+            transport=transport,
             permission_mode=permission_mode,
             zone=zone,
             runtime=runtime,

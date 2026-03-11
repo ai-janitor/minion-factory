@@ -22,25 +22,32 @@ from minion.crew.spawn import _find_crew_file
 
 def recruit_agent(
     name: str,
-    agent_class: str,
+    agent_class: str | None,
     crew: str,
     *,
     from_crew: str = "",
     capabilities: str = "",
     system: str = "",
-    provider: str = "claude",
+    provider: str | None = None,
     model: str = "",
-    transport: str = "daemon",
+    transport: str | None = None,
     permission_mode: str = "",
     zone: str = "",
     runtime: str = "python",
     project_dir: str = ".",
 ) -> dict[str, Any]:
-    """Add a single ad-hoc agent into an already-running crew tmux session."""
+    """Add a single ad-hoc agent into an already-running crew tmux session.
+
+    Config cascade (highest to lowest precedence):
+      1. CLI args (explicit, non-None values passed from crew_cmds.py)
+      2. Config file (--from-crew YAML character values)
+      3. Hardcoded defaults
+    """
 
     project_dir = os.path.abspath(project_dir)
 
     # --- Pull character config from source crew YAML ---
+    char_cfg: dict[str, Any] | None = None
     if from_crew:
         source_file = _find_crew_file(from_crew, project_dir)
         if not source_file:
@@ -57,19 +64,27 @@ def recruit_agent(
             if by_class:
                 char_cfg = next(iter(by_class.values()))
             # If still nothing, fall through — use CLI flags/defaults
-        if char_cfg:
-            # Source crew values are defaults — CLI flags override
-            agent_class = agent_class or char_cfg.get("role", "coder")
-            provider = provider or char_cfg.get("provider", "claude")
-            model = model or char_cfg.get("model", "")
-            transport = transport or char_cfg.get("transport", "daemon")
-            permission_mode = permission_mode or char_cfg.get("permission_mode", "")
-            zone = zone or char_cfg.get("zone", "")
-            system = system or char_cfg.get("system", "")
-            if not capabilities:
-                source_caps = char_cfg.get("capabilities")
-                if isinstance(source_caps, list):
-                    capabilities = ",".join(str(c) for c in source_caps)
+
+    # Config cascade: CLI explicit (non-None) > config file > defaults.
+    # For each field: if CLI provided a value (non-None/non-empty), use it.
+    # Otherwise check config file. Otherwise apply hardcoded default.
+    if char_cfg:
+        agent_class = agent_class or char_cfg.get("role") or "coder"
+        provider = provider or char_cfg.get("provider") or "claude"
+        model = model or char_cfg.get("model", "")
+        transport = transport or char_cfg.get("transport") or "daemon"
+        permission_mode = permission_mode or char_cfg.get("permission_mode", "")
+        zone = zone or char_cfg.get("zone", "")
+        system = system or char_cfg.get("system", "")
+        if not capabilities:
+            source_caps = char_cfg.get("capabilities")
+            if isinstance(source_caps, list):
+                capabilities = ",".join(str(c) for c in source_caps)
+
+    # Apply defaults for anything still unset (no CLI arg, no config file value)
+    agent_class = agent_class or "coder"
+    provider = provider or "claude"
+    transport = transport or "daemon"
 
     # --- Validate inputs ---
     if agent_class not in VALID_CLASSES:
