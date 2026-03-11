@@ -311,10 +311,38 @@ def test_stale_is_terminal_status(isolated_db):
 
 
 def test_terminal_statuses_contains_all_expected(isolated_db):
-    """SU-05: TERMINAL_STATUSES contains closed, abandoned, obsolete, completed, stale."""
+    """SU-05: TERMINAL_STATUSES contains closed, abandoned, obsolete, completed, stale, done."""
     from minion.tasks.dag import TERMINAL_STATUSES
-    expected = {"closed", "abandoned", "obsolete", "completed", "stale"}
+    expected = {"closed", "abandoned", "obsolete", "completed", "stale", "done"}
     assert expected == TERMINAL_STATUSES
+
+
+def test_done_is_terminal_status(isolated_db):
+    """B240: 'done' is a member of TERMINAL_STATUSES so done tasks leave the TUI."""
+    from minion.tasks.dag import TERMINAL_STATUSES
+    assert "done" in TERMINAL_STATUSES
+
+
+def test_task_done_and_close_produce_terminal_statuses(isolated_db):
+    """B240: Every status set by task done/close must be in TERMINAL_STATUSES.
+
+    Verifies that the hardcoded status strings in done.py and close_task.py
+    are present in TERMINAL_STATUSES so completed tasks are filtered from the TUI.
+    """
+    from minion.tasks.dag import TERMINAL_STATUSES
+
+    # done.py sets status to 'closed' (line: status = 'closed')
+    assert "closed" in TERMINAL_STATUSES, "'closed' (set by task done) missing from TERMINAL_STATUSES"
+
+    # close_task.py sets status to 'closed'
+    assert "closed" in TERMINAL_STATUSES, "'closed' (set by task close) missing from TERMINAL_STATUSES"
+
+    # 'done' can appear as a status value in the DB (e.g. external/manual updates)
+    assert "done" in TERMINAL_STATUSES, "'done' missing from TERMINAL_STATUSES"
+
+    # dead_ends from flow YAML files must all be terminal
+    for dead_end in ("abandoned", "stale", "obsolete"):
+        assert dead_end in TERMINAL_STATUSES, f"dead_end '{dead_end}' missing from TERMINAL_STATUSES"
 
 
 def test_stale_rollup_all_children_stale(isolated_db):
