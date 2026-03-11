@@ -64,19 +64,19 @@ def register_commands(cli: click.Group) -> None:
         from minion.intel import find_docs as _find_docs
         _output(_find_docs(tag, path_fragment), ctx.obj["human"], ctx.obj["compact"])
 
-    @intel_group.command("get")
-    @click.option("--slug", required=True, help="Intel doc slug")
-    @click.pass_context
-    def intel_get(ctx: click.Context, slug: str) -> None:
-        """Get metadata and links for a registered intel doc (alias: 'intel show')."""
-        from minion.intel import get_doc as _get_doc
-        _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
-
     @intel_group.command("show")
     @click.option("--slug", required=True, help="Intel doc slug")
     @click.pass_context
     def intel_show(ctx: click.Context, slug: str) -> None:
-        """Show metadata and links for a registered intel doc (alias for 'intel get')."""
+        """Show metadata and links for a registered intel doc."""
+        from minion.intel import get_doc as _get_doc
+        _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
+
+    @intel_group.command("get", hidden=True)
+    @click.option("--slug", required=True, help="Intel doc slug")
+    @click.pass_context
+    def intel_get(ctx: click.Context, slug: str) -> None:
+        """Show metadata and links for a registered intel doc (hidden alias for 'intel show')."""
         from minion.intel import get_doc as _get_doc
         _output(_get_doc(slug), ctx.obj["human"], ctx.obj["compact"])
 

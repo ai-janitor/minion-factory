@@ -186,7 +186,7 @@ class TestExpectedSubcommands:
             "test", "spec", "comment", "comments",
         },
         "flow": {"list", "show", "next-status", "transition"},
-        "war": {"set-plan", "get-plan", "update-status", "log", "list-log"},
+        "war": {"set-plan", "show-plan", "get-plan", "update", "update-status", "log", "list", "list-log"},
         "file": {"claim", "release", "list"},
         "crew": {"list", "spawn", "stand-down", "halt", "recruit", "hand-off-zone", "status"},
         "trigger": {"list", "clear-moon-crash"},

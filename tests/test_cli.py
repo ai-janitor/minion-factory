@@ -87,8 +87,8 @@ def test_task_group_subcommands():
     runner = CliRunner()
     result = runner.invoke(cli, ["task", "--help"])
     assert result.exit_code == 0
-    for sub in ["create", "assign", "update", "list", "get", "lineage",
-                "submit-result", "close", "reopen", "pull", "complete-phase", "check-work"]:
+    for sub in ["create", "assign", "update", "list", "show", "lineage",
+                "close", "reopen", "pull", "complete-phase", "check-work"]:
         assert sub in result.output, f"task group missing: {sub}"
 
 
@@ -104,7 +104,7 @@ def test_war_group_subcommands():
     runner = CliRunner()
     result = runner.invoke(cli, ["war", "--help"])
     assert result.exit_code == 0
-    for sub in ["set-plan", "get-plan", "update-status", "log", "list-log"]:
+    for sub in ["set-plan", "show-plan", "update", "log", "list"]:
         assert sub in result.output, f"war group missing: {sub}"
 
 
@@ -183,7 +183,7 @@ def test_intel_group_subcommands():
     runner = CliRunner()
     result = runner.invoke(cli, ["intel", "--help"])
     assert result.exit_code == 0
-    for sub in ["add", "list", "get", "find", "link", "for-task",
+    for sub in ["add", "list", "show", "find", "link", "for-task",
                 "read", "suggest", "register-docs", "reindex"]:
         assert sub in result.output, f"intel group missing: {sub}"
 

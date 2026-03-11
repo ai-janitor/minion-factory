@@ -61,7 +61,8 @@ def register_aliases(cli: click.Group) -> None:
     # Task group aliases
     for orig, alias in [("create", "create-task"), ("assign", "assign-task"),
                         ("update", "update-task"), ("list", "list-tasks"),
-                        ("get", "get-task"), ("lineage", "task-lineage"),
+                        ("show", "show-task"), ("get", "get-task"),
+                        ("lineage", "task-lineage"),
                         ("submit-result", "submit-result"), ("close", "close-task"),
                         ("reopen", "reopen-task"), ("pull", "pull-task"),
                         ("complete-phase", "complete-phase"), ("check-work", "check-work")]:
@@ -77,9 +78,10 @@ def register_aliases(cli: click.Group) -> None:
             _alias_map[alias] = cmd
 
     # War group aliases
-    for orig, alias in [("set-plan", "set-battle-plan"), ("get-plan", "get-battle-plan"),
-                        ("update-status", "update-battle-plan-status"),
-                        ("log", "log-raid"), ("list-log", "list-raid-log")]:
+    for orig, alias in [("set-plan", "set-battle-plan"), ("show-plan", "show-battle-plan"),
+                        ("get-plan", "get-battle-plan"),
+                        ("update", "update-battle-plan"), ("update-status", "update-battle-plan-status"),
+                        ("log", "log-raid"), ("list", "list-raid-log"), ("list-log", "list-raid-log")]:
         cmd = war_group.commands.get(orig)  # type: ignore[union-attr]
         if cmd:
             _alias_map[alias] = cmd
@@ -113,14 +115,14 @@ def register_aliases(cli: click.Group) -> None:
         if cmd:
             _alias_map[alias] = cmd
 
-    # Legacy get-* collection name aliases
+    # Legacy get-* collection name aliases (backwards compat)
     list_tasks_cmd = task_group.commands.get("list")  # type: ignore[union-attr]
     if list_tasks_cmd:
         _alias_map["get-tasks"] = list_tasks_cmd
     list_history_cmd = comms_group.commands.get("list-history")  # type: ignore[union-attr]
     if list_history_cmd:
         _alias_map["get-history"] = list_history_cmd
-    list_raid_cmd = war_group.commands.get("list-log")  # type: ignore[union-attr]
+    list_raid_cmd = war_group.commands.get("list")  # type: ignore[union-attr]
     if list_raid_cmd:
         _alias_map["get-raid-log"] = list_raid_cmd
     list_claims_cmd = file_group.commands.get("list")  # type: ignore[union-attr]

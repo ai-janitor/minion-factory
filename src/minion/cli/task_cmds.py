@@ -80,19 +80,19 @@ def register_commands(cli: click.Group) -> None:
         from minion.tasks import get_tasks as _get_tasks
         _output(_get_tasks(status, project, zone, assigned_to, class_required, count), ctx.obj["human"])
 
-    @task_group.command("get")
-    @click.option("--task-id", required=True, type=int)
-    @click.pass_context
-    def get_task(ctx: click.Context, task_id: int) -> None:
-        """Get full detail for a single task (alias: 'task show')."""
-        from minion.tasks import get_task as _get_task
-        _output(_get_task(task_id), ctx.obj["human"])
-
     @task_group.command("show")
     @click.option("--task-id", required=True, type=int)
     @click.pass_context
     def show_task(ctx: click.Context, task_id: int) -> None:
-        """Show full detail for a single task (alias for 'task get')."""
+        """Show full detail for a single task."""
+        from minion.tasks import get_task as _get_task
+        _output(_get_task(task_id), ctx.obj["human"])
+
+    @task_group.command("get", hidden=True)
+    @click.option("--task-id", required=True, type=int)
+    @click.pass_context
+    def get_task(ctx: click.Context, task_id: int) -> None:
+        """Show full detail for a single task (hidden alias for 'task show')."""
         from minion.tasks import get_task as _get_task
         _output(_get_task(task_id), ctx.obj["human"])
 
@@ -116,13 +116,13 @@ def register_commands(cli: click.Group) -> None:
         from minion.tasks import get_task_lineage as _get_lineage
         _output(_get_lineage(task_id), ctx.obj["human"])
 
-    @task_group.command("submit-result")
+    @task_group.command("submit-result", hidden=True)
     @_agent_option(required=True)
     @click.option("--task-id", required=True, type=int)
     @click.option("--result-file", required=True)
     @click.pass_context
     def submit_result(ctx: click.Context, agent: str, task_id: int, result_file: str) -> None:
-        """Submit a result file for a task."""
+        """Submit a result file for a task (hidden — use 'task result' instead)."""
         from minion.tasks import submit_result as _submit_result
         _output(_submit_result(agent, task_id, result_file), ctx.obj["human"])
 

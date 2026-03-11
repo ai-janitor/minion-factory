@@ -33,21 +33,41 @@ def register_commands(cli: click.Group) -> None:
         from minion.warroom import set_battle_plan as _set_battle_plan
         _output(_set_battle_plan(agent, plan), ctx.obj["human"])
 
-    @war_group.command("get-plan")
+    @war_group.command("show-plan")
     @click.option("--status", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
-    def get_battle_plan(ctx: click.Context, status: str) -> None:
-        """Get the session objective by status."""
+    def show_battle_plan(ctx: click.Context, status: str) -> None:
+        """Show the session objective by status."""
         from minion.warroom import get_battle_plan as _get_battle_plan
         _output(_get_battle_plan(status), ctx.obj["human"])
 
-    @war_group.command("update-status")
+    @war_group.command("get-plan", hidden=True)
+    @click.option("--status", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.pass_context
+    def get_battle_plan(ctx: click.Context, status: str) -> None:
+        """Show the session objective by status (hidden alias for 'war show-plan')."""
+        from minion.warroom import get_battle_plan as _get_battle_plan
+        _output(_get_battle_plan(status), ctx.obj["human"])
+
+    @war_group.command("update")
+    @_agent_option(required=True)
+    @click.option("--plan-id", required=True, type=int)
+    @click.option("--status", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
+    @click.pass_context
+    def update_battle_plan(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
+        """Update an objective's status. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.warroom import update_battle_plan_status as _update
+        _output(_update(agent, plan_id, status), ctx.obj["human"])
+
+    @war_group.command("update-status", hidden=True)
     @_agent_option(required=True)
     @click.option("--plan-id", required=True, type=int)
     @click.option("--status", required=True, type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))
     @click.pass_context
     def update_battle_plan_status(ctx: click.Context, agent: str, plan_id: int, status: str) -> None:
-        """Update an objective's status. Lead only."""
+        """Update an objective's status (hidden alias for 'war update'). Lead only."""
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
         from minion.warroom import update_battle_plan_status as _update
@@ -63,12 +83,22 @@ def register_commands(cli: click.Group) -> None:
         from minion.warroom import log_raid as _log_raid
         _output(_log_raid(agent, entry, priority), ctx.obj["human"])
 
-    @war_group.command("list-log")
+    @war_group.command("list")
+    @click.option("--priority", "-p", default=None, type=click.Choice(["low", "normal", "high", "critical"]))
+    @click.option("--count", "-n", default=20, type=int)
+    @_agent_option(default="")
+    @click.pass_context
+    def list_raid_log_canonical(ctx: click.Context, priority: str, count: int, agent: str) -> None:
+        """List progress log entries."""
+        from minion.warroom import get_raid_log as _get_raid_log
+        _output(_get_raid_log(priority, count, agent), ctx.obj["human"])
+
+    @war_group.command("list-log", hidden=True)
     @click.option("--priority", "-p", default=None, type=click.Choice(["low", "normal", "high", "critical"]))
     @click.option("--count", "-n", default=20, type=int)
     @_agent_option(default="")
     @click.pass_context
     def list_raid_log(ctx: click.Context, priority: str, count: int, agent: str) -> None:
-        """Read the progress log."""
+        """List progress log entries (hidden alias for 'war list')."""
         from minion.warroom import get_raid_log as _get_raid_log
         _output(_get_raid_log(priority, count, agent), ctx.obj["human"])
