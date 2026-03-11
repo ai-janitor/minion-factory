@@ -1,11 +1,11 @@
-"""Versioned schema migrations (v1 through v13).
+"""Versioned schema migrations (v1 through v16).
 Each migration is an idempotent callable that receives a sqlite3.Connection.
 Migrations run in order inside individual transactions — failure rolls back
 only the failed migration.
 
-Purpose: Versioned schema migrations (v1 through v13).
+Purpose: Versioned schema migrations (v1 through v16).
 Rationale: Extracted into own module for single-responsibility database access.
-Responsibility: Versioned schema migrations (v1 through v13). NOT responsible for unrelated concerns.
+Responsibility: Versioned schema migrations (v1 through v16). NOT responsible for unrelated concerns.
 Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
@@ -360,6 +360,23 @@ def _migrate_v15(conn: sqlite3.Connection) -> None:
     log.info("v15: added checklist_path column to tasks table")
 
 
+def _migrate_v16(conn: sqlite3.Connection) -> None:
+    """NULL out orphan tasks.requirement_id values that reference nonexistent requirements.
+
+    Backlog #239 / task #157: tasks.requirement_id REFERENCES requirements(id),
+    but some rows were written with backlog IDs instead of requirement IDs (before
+    FK enforcement was enabled). This migration NULLs any requirement_id that has
+    no matching row in the requirements table.
+    """
+    result = conn.execute("""
+        UPDATE tasks SET requirement_id = NULL
+        WHERE requirement_id IS NOT NULL
+          AND requirement_id NOT IN (SELECT id FROM requirements)
+    """)
+    cleaned = result.rowcount
+    log.info("v16: NULLed %d orphan requirement_id values in tasks table", cleaned)
+
+
 # Ordered list of (version, description, callable) tuples.
 # Each callable receives a sqlite3.Connection and runs DDL/DML for that version.
 _MIGRATIONS: list[tuple[int, str, Any]] = [
@@ -378,6 +395,7 @@ _MIGRATIONS: list[tuple[int, str, Any]] = [
     (13, "Add promoted_by column to backlog table", _migrate_v13),
     (14, "Add msg_type column to messages table", _migrate_v14),
     (15, "Add checklist_path column to tasks table", _migrate_v15),
+    (16, "NULL orphan requirement_id values referencing nonexistent requirements", _migrate_v16),
 ]
 
 

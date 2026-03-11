@@ -5,7 +5,7 @@ get_coordinator_db() connection factories with WAL mode and row factory.
 
 Convention: use connect(db_path) anywhere you have an explicit path.
 Use get_db() for the project-local DB. Use get_coordinator_db() for the global coordinator DB.
-All three set WAL mode, busy_timeout=5000, and row_factory=sqlite3.Row.
+All three set WAL mode, busy_timeout=5000, foreign_keys=ON, and row_factory=sqlite3.Row.
 
 ASSUMPTIONS:
 - Every connection uses WAL journal mode. Callers must NOT switch to DELETE or
@@ -20,9 +20,9 @@ ASSUMPTIONS:
 - _db_path is module-level cached after first resolution. Once resolved, it does NOT
   re-read env vars or re-walk the filesystem. If MINION_DB_PATH changes mid-process,
   call reset_db_path() to force re-resolution. Spawned subprocesses get a fresh cache.
-- get_db() enables foreign_keys=ON; get_coordinator_db() and raw connect() do NOT.
-  The coordinator DB has no foreign keys. If you add FK constraints to coordinator
-  schema, you must enable them explicitly.
+- connect() enables foreign_keys=ON on ALL connections. FK enforcement only
+  activates when a column has a REFERENCES clause, so coordinator/network DBs
+  (which have no FK constraints) are unaffected.
 - init_db() is NOT idempotent for migrations — it's safe to call multiple times
   (CREATE IF NOT EXISTS), but migrations only run forward. Running init_db() on a
   newer schema (from a newer code version) with an older binary is undefined.
@@ -68,9 +68,10 @@ def connect(db_path: str | os.PathLike, *, timeout: float = 5) -> sqlite3.Connec
     """Open a WAL-mode connection to any explicit db_path.
 
     Use this anywhere callers have a db_path in hand — avoids repeating
-    PRAGMA boilerplate across 10+ modules. Sets WAL, busy_timeout=5000, row_factory.
+    PRAGMA boilerplate across 10+ modules. Sets WAL, busy_timeout=5000,
+    foreign_keys=ON, row_factory.
 
-    Big-O: O(1) — sqlite3.connect + 2 PRAGMA calls. makedirs is O(depth) but
+    Big-O: O(1) — sqlite3.connect + 3 PRAGMA calls. makedirs is O(depth) but
     typically cached by OS. Hot path — called on every CLI command, every poll
     iteration, every dashboard cycle.
     """
@@ -84,6 +85,7 @@ def connect(db_path: str | os.PathLike, *, timeout: float = 5) -> sqlite3.Connec
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -94,10 +96,13 @@ def get_coordinator_db() -> sqlite3.Connection:
 
 
 def get_db() -> sqlite3.Connection:
-    """Open a WAL-mode connection to the project-local DB (.work/minion.db)."""
+    """Open a WAL-mode connection to the project-local DB (.work/minion.db).
+
+    Identical to connect() now that connect() enables foreign_keys=ON.
+    Kept as a convenience — callers don't need to resolve the path themselves.
+    """
     db_path = _get_db_path()
     conn = connect(db_path)
-    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
