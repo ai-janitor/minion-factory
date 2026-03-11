@@ -71,9 +71,9 @@ def test_tool_catalog_lead_only_commands():
 
 
 def test_all_classes_can_check_inbox():
-    """check-inbox is available to all registered classes."""
+    """comms check-inbox is available to all registered classes."""
     from minion.auth import TOOL_CATALOG, VALID_CLASSES
-    classes, _ = TOOL_CATALOG["check-inbox"]
+    classes, _ = TOOL_CATALOG["comms check-inbox"]
     assert classes == VALID_CLASSES
 
 
@@ -103,8 +103,8 @@ def test_get_tools_for_class_coder_excludes_lead_only():
     from minion.auth import get_tools_for_class
     coder_commands = {t["command"] for t in get_tools_for_class("coder")}
     lead_commands = {t["command"] for t in get_tools_for_class("lead")}
-    # lead-only commands like 'minion rename' should be absent from coder's list
-    assert "minion rename" not in coder_commands
+    # lead-only commands like 'minion agent rename' should be absent from coder's list
+    assert "minion agent rename" not in coder_commands
     # but all coder commands should be in lead's list (lead is superset)
     # (lead has VALID_CLASSES which includes itself)
     assert len(lead_commands) >= len(coder_commands)

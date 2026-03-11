@@ -3,7 +3,30 @@
 Purpose: Class-based authorization, constants, and gate functions.
 Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: Class-based authorization, constants, and gate functions. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- MINION_CLASS env var is the sole source of truth for the calling agent's class.
+  It defaults to 'lead' if unset — meaning unregistered/ad-hoc CLI sessions have
+  full lead privileges. This is intentional for human operators but means any
+  process without MINION_CLASS set can run lead-only commands.
+- VALID_CLASSES has a hardcoded fallback set that must stay in sync with
+  agent-classes.yaml. The YAML is the canonical source but the fallback is used
+  at module load time before lazy loading fires. If they diverge, TOOL_CATALOG
+  may allow/deny the wrong classes until _ensure_loaded() runs.
+- TOOL_CATALOG keys must exactly match CLI command names (space-separated for
+  subcommands like "task create"). If a CLI command is added without a TOOL_CATALOG
+  entry, it has NO auth gate — any class can run it.
+- require_class() and require_scope() are decorators applied to Click command
+  functions. They assume the Click context is active (sys.exit(1) for denial).
+  Calling decorated functions outside Click (e.g., from tests) will raise SystemExit.
+- Scope restrictions (SCOPE_RESTRICTIONS) are subtractive — they list commands a
+  scope CANNOT run. If a command is not in the restriction set, it's allowed.
+  New sensitive commands are allowed by default for all scopes unless explicitly added.
+- get_agent_scope() queries the coordinator DB (global ~/.minion/coordinator.db),
+  not the project-local DB. If the coordinator DB is missing or the agent isn't
+  registered there, scope check returns None and allows the command through.
+"""
 
 from __future__ import annotations
 
@@ -126,23 +149,36 @@ CLASS_BRIEFING_FILES: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
-    "register":              (VALID_CLASSES, "Register an agent into the session"),
-    "deregister":            (VALID_CLASSES, "Remove an agent from the registry"),
-    "rename":                ({"lead"}, "Rename an agent (zone reassignment)"),
-    "set-status":            (VALID_CLASSES, "Set your current status text"),
-    "set-context":           (VALID_CLASSES, "Update context summary and HP metrics"),
-    "who":                   (VALID_CLASSES, "List all registered agents"),
-    "send":                  (VALID_CLASSES, "Send a message to an agent or broadcast"),
-    "check-inbox":           (VALID_CLASSES, "Check and clear unread messages"),
-    "list-history":          (VALID_CLASSES, "Return last N messages across all agents"),
-    "purge-inbox":           (VALID_CLASSES, "Delete old messages from inbox"),
-    "set-battle-plan":       ({"lead"}, "Set the active battle plan for the session"),
-    "show-battle-plan":      (VALID_CLASSES, "Show battle plan by status"),
-    "get-battle-plan":       (VALID_CLASSES, "Show battle plan by status (alias for show-battle-plan)"),
-    "update-battle-plan":    ({"lead"}, "Update a battle plan's status"),
-    "update-battle-plan-status": ({"lead"}, "Update a battle plan's status (alias for update-battle-plan)"),
-    "log-raid":              (VALID_CLASSES, "Append an entry to the raid log"),
-    "list-raid-log":         (VALID_CLASSES, "Read the raid log"),
+    # --- agent group ---
+    "agent register":        (VALID_CLASSES, "Register an agent into the session"),
+    "agent deregister":      (VALID_CLASSES, "Remove an agent from the registry"),
+    "agent rename":          ({"lead"}, "Rename an agent (zone reassignment)"),
+    "agent set-status":      (VALID_CLASSES, "Set your current status text"),
+    "agent set-context":     (VALID_CLASSES, "Update context summary and HP metrics"),
+    "agent who":             (VALID_CLASSES, "List all registered agents"),
+    "agent update-hp":       ({"lead"}, "Daemon-only: write observed HP to SQLite"),
+    "agent cold-start":      (VALID_CLASSES, "Bootstrap into a session, get onboarding"),
+    "agent refresh":         (VALID_CLASSES, "Lightweight mid-session state refresh (no side effects)"),
+    "agent fenix-down":      (VALID_CLASSES, "Dump session knowledge before context death"),
+    "agent check-activity":  (VALID_CLASSES, "Check an agent's activity level"),
+    "agent check-freshness": ({"lead"}, "Check file freshness vs agent's last context"),
+    "agent interrupt":       ({"lead"}, "Interrupt an agent's current invocation"),
+    "agent resume":          ({"lead"}, "Send a resume message to an interrupted agent"),
+    "agent retire":          ({"lead"}, "Signal a single daemon to exit gracefully"),
+    # --- comms group ---
+    "comms send":            (VALID_CLASSES, "Send a message to an agent or broadcast"),
+    "comms check-inbox":     (VALID_CLASSES, "Check and clear unread messages"),
+    "comms list-history":    (VALID_CLASSES, "Return last N messages across all agents"),
+    "comms purge-inbox":     (VALID_CLASSES, "Delete old messages from inbox"),
+    # --- war group ---
+    "war set-plan":          ({"lead"}, "Set the active battle plan for the session"),
+    "war show-plan":         (VALID_CLASSES, "Show battle plan by status"),
+    "war get-plan":          (VALID_CLASSES, "Show battle plan by status (alias for war show-plan)"),
+    "war update":            ({"lead"}, "Update a battle plan's status"),
+    "war update-status":     ({"lead"}, "Update a battle plan's status (alias for war update)"),
+    "war log":               (VALID_CLASSES, "Append an entry to the raid log"),
+    "war list":              (VALID_CLASSES, "Read the raid log"),
+    # --- task group (already correct) ---
     "task create":           ({"lead"}, "Create a new task with spec file"),
     "task assign":           ({"lead"}, "Assign a task to an agent"),
     "task update":           (VALID_CLASSES, "Update task status, progress, or files"),
@@ -158,44 +194,43 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "task spec":             (VALID_CLASSES, "Read the spec file contents for a task"),
     "task define":           ({"lead"}, "Create a task spec file and task record in one command"),
     "task close":            ({"lead"}, "Close a completed task"),
-    "claim-file":            ({"coder", "builder", "planner"}, "Claim a file for exclusive editing"),
-    "release-file":          ({"coder", "builder", "planner"}, "Release a file claim"),
-    "list-claims":           (VALID_CLASSES, "List active file claims"),
-    "party-status":          ({"lead"}, "Full raid health dashboard"),
-    "check-activity":        (VALID_CLASSES, "Check an agent's activity level"),
-    "check-freshness":       ({"lead"}, "Check file freshness vs agent's last context"),
-    "sitrep":                (VALID_CLASSES, "Fused COP: agents + tasks + claims + flags"),
-    "update-hp":             ({"lead"}, "Daemon-only: write observed HP to SQLite"),
-    "cold-start":            (VALID_CLASSES, "Bootstrap into a session, get onboarding"),
-    "refresh":               (VALID_CLASSES, "Lightweight mid-session state refresh (no side effects)"),
-    "fenix-down":            (VALID_CLASSES, "Dump session knowledge before context death"),
-    "debrief":               ({"lead"}, "File a session debrief"),
-    "end-session":           ({"lead"}, "End the current session"),
-    "list-triggers":         (VALID_CLASSES, "Return the trigger word codebook"),
-    "clear-moon-crash":      ({"lead"}, "Clear emergency flag, resume assignments"),
-    "list-crews":            ({"lead"}, "List available crew YAML files"),
-    "spawn-party":           (VALID_CLASSES, "Spawn daemon workers in tmux panes (auto-registers lead)"),
-    "halt":                  ({"lead"}, "Graceful pause — agents finish work, fenix_down, stand down"),
-    "stand-down":            ({"lead"}, "Dismiss the party"),
-    "retire-agent":          ({"lead"}, "Signal a single daemon to exit gracefully"),
-    "recruit":               ({"lead"}, "Add an ad-hoc agent into a running crew"),
-    "interrupt":             ({"lead"}, "Interrupt an agent's current invocation"),
-    "resume":                ({"lead"}, "Send a resume message to an interrupted agent"),
-    "hand-off-zone":         (VALID_CLASSES, "Direct zone handoff between agents"),
-    "tools":                 (VALID_CLASSES, "List available tools for your class"),
     "task lineage":          (VALID_CLASSES, "Show task DAG history and who worked each stage"),
     "task reopen":           ({"lead"}, "Reopen a terminal task back to an earlier phase"),
     "task complete-phase":   (VALID_CLASSES, "Complete your phase — DAG routes to next stage"),
+    # --- file group ---
+    "file claim":            ({"coder", "builder", "planner"}, "Claim a file for exclusive editing"),
+    "file release":          ({"coder", "builder", "planner"}, "Release a file claim"),
+    "file list":             (VALID_CLASSES, "List active file claims"),
+    # --- crew group ---
+    "crew status":           ({"lead"}, "Full raid health dashboard"),
+    "crew list":             ({"lead"}, "List available crew YAML files"),
+    "crew spawn":            (VALID_CLASSES, "Spawn daemon workers in tmux panes (auto-registers lead)"),
+    "crew halt":             ({"lead"}, "Graceful pause — agents finish work, fenix_down, stand down"),
+    "crew stand-down":       ({"lead"}, "Dismiss the party"),
+    "crew recruit":          ({"lead"}, "Add an ad-hoc agent into a running crew"),
+    "crew hand-off-zone":    (VALID_CLASSES, "Direct zone handoff between agents"),
+    # --- trigger group ---
+    "trigger list":          (VALID_CLASSES, "Return the trigger word codebook"),
+    "trigger clear-moon-crash": ({"lead"}, "Clear emergency flag, resume assignments"),
+    # --- flow group ---
+    "flow list":             (VALID_CLASSES, "List available task flow types"),
+    # --- req group (already correct) ---
     "req create":            ({"lead", "planner"}, "Create a requirement folder with README and register it"),
     "req decompose":         ({"lead", "planner"}, "Decompose a requirement into children from a spec file"),
     "req itemize":           ({"lead", "planner"}, "Write itemized-requirements.md from a spec file"),
     "req findings":          (VALID_CLASSES, "Write findings.md from a spec file"),
-    "poll":                  (VALID_CLASSES, "Poll for messages and tasks (replaces poll.sh)"),
-    "list-flows":            (VALID_CLASSES, "List available task flow types"),
+    # --- mission group (already correct) ---
     "mission list":          (VALID_CLASSES, "List available mission templates"),
     "mission suggest":       ({"lead"}, "Show resolved slots and eligible characters for a mission"),
     "mission spawn":         ({"lead"}, "Resolve mission, draft party, and spawn"),
+    # --- backlog group (already correct) ---
     "backlog promote":       ({"lead"}, "Promote a backlog item to requirement (lead only)"),
+    # --- top-level commands (legitimate, no group prefix) ---
+    "poll":                  (VALID_CLASSES, "Poll for messages and tasks (replaces poll.sh)"),
+    "sitrep":                (VALID_CLASSES, "Fused COP: agents + tasks + claims + flags"),
+    "debrief":               ({"lead"}, "File a session debrief"),
+    "end-session":           ({"lead"}, "End the current session"),
+    "tools":                 (VALID_CLASSES, "List available tools for your class"),
 }
 
 
@@ -280,9 +315,9 @@ SCOPE_RESTRICTIONS: dict[str, set[str]] = {
         "task complete-phase", "task block", "task reopen", "task update",
         "task result", "task review", "task test", "task define",
         "file claim", "file release", "file waitlist",
-        "war set-battle-plan",
-        "crew spawn-party", "crew stand-down", "crew retire",
-        "register", "deregister",
+        "war set-plan",
+        "crew spawn", "crew stand-down", "crew retire",
+        "agent register", "agent deregister",
         "comms send local",  # sys-lead uses global only
     },
     # project and cross-repo scopes have no additional restrictions
@@ -307,12 +342,11 @@ def require_class(*allowed: str) -> Callable[[F], F]:
         def wrapper(*args: object, **kwargs: object) -> object:
             cls = get_agent_class()
             if cls not in allowed:
-                click.echo(
-                    f"BLOCKED: Class '{cls}' cannot run this command. "
-                    f"Requires: {', '.join(sorted(allowed))}",
-                    err=True,
-                )
-                sys.exit(1)
+                from minion.output import output
+                output({
+                    "error": f"BLOCKED: Class '{cls}' cannot run this command. "
+                    f"Requires: {', '.join(sorted(allowed))}"
+                })
             return func(*args, **kwargs)
         return wrapper  # type: ignore[return-value]
     return decorator
@@ -338,12 +372,11 @@ def require_scope(command_path: str) -> Callable[[F], F]:
                 return func(*args, **kwargs)  # no agent identity = no enforcement
             blocked = SCOPE_RESTRICTIONS.get(scope, set())
             if command_path in blocked:
-                click.echo(
-                    f"BLOCKED: Scope '{scope}' cannot run '{command_path}'. "
-                    f"This operation is restricted for {scope}-scoped agents.",
-                    err=True,
-                )
-                sys.exit(1)
+                from minion.output import output
+                output({
+                    "error": f"BLOCKED: Scope '{scope}' cannot run '{command_path}'. "
+                    f"This operation is restricted for {scope}-scoped agents."
+                })
             return func(*args, **kwargs)
         return wrapper  # type: ignore[return-value]
     return decorator
