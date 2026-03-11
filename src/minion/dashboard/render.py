@@ -45,6 +45,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from minion.tasks.dag import TERMINAL_STATUSES
+
 # ANSI escape codes
 _RESET  = "\033[0m"
 _BOLD   = "\033[1m"
@@ -142,9 +144,10 @@ def _render_tasks(tasks: list[sqlite3.Row], width: int) -> list[str]:
         result_flag = " ✓" if row["has_result"] else ""
         title = _truncate(row["title_short"], title_w)
         assignee = _truncate(row["assignee"], 12)
+        status_col = _visible_pad(f"{color}{status}{_RESET}", 12)
         line = (
             f"{row['id']:>4}  "
-            f"{color}{status:<12}{_RESET}  "
+            f"{status_col}  "
             f"{assignee:<12}  "
             f"{title:<{title_w}}"
             f"{result_flag}"
@@ -351,12 +354,15 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
 
         last_seen = _relative_time(row["effective_last_seen"])
         seen_color = _RED if "h ago" in last_seen or "d ago" in last_seen or last_seen == "never" else _DIM
+        model_col = _visible_pad(f"{_DIM}{model_short}{_RESET}", 8)
+        status_col = _visible_pad(f"{status_color}{display_status}{_RESET}", 10)
+        seen_col = _visible_pad(f"{seen_color}{last_seen}{_RESET}", 8)
         lines.append(
             f"{row['name']:<14}  "
             f"{row['agent_class']:<8}  "
-            f"{_DIM}{model_short:<8}{_RESET}  "
-            f"{status_color}{display_status:<10}{_RESET}  "
-            f"{seen_color}{last_seen:<8}{_RESET}  "
+            f"{model_col}  "
+            f"{status_col}  "
+            f"{seen_col}  "
             f"{_visible_pad(bar, 20)}  "
             f"{_visible_pad(checklist_col, 14)}"
         )
@@ -385,8 +391,8 @@ def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]
     Capped to max_rows visible items with overflow indicator (#230).
     """
     lines: list[str] = [
-        f"{_BOLD}{'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'UPDATED':<8}  {'TITLE':<35}{_RESET}",
-        "─" * 88,
+        f"{_BOLD}{'#':>2}  {'ID':>4}  {'TYPE':<8}  {'PRI':<8}  {'STATUS':<10}  {'TASK':<12}  {'UPDATED':<8}  {'TITLE':<35}{_RESET}",
+        "─" * 92,
     ]
 
     if not backlog:
@@ -398,7 +404,7 @@ def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]
     overflow = len(backlog) - len(visible)
 
     lines.insert(0, f"{_BOLD}BACKLOG{_RESET}")
-    for row in visible:
+    for idx, row in enumerate(visible):
         pri_color = _PRIORITY_COLORS.get(row["priority"], _DIM)
         # Show task stage if promoted, otherwise show backlog status
         if row["promoted_to"]:
@@ -408,13 +414,19 @@ def _render_backlog(backlog: list[sqlite3.Row], max_rows: int = 10) -> list[str]
         task_info = _truncate(task_info, 12)
         title = row["title_short"]
         updated = _relative_time(row["updated_at"]) if row["updated_at"] else ""
+        pri_col = _visible_pad(f"{pri_color}{row['priority']}{_RESET}", 8)
+        updated_col = _visible_pad(f"{_DIM}{updated}{_RESET}", 8)
+        # Show 1-9 index for keyboard navigation, blank for items beyond 9
+        key_hint = f"{_CYAN}{idx + 1}{_RESET}" if idx < 9 else " "
+        key_col = _visible_pad(key_hint, 2)
         lines.append(
+            f"{key_col}  "
             f"{row['id']:>4}  "
             f"{_truncate(row['type'], 8):<8}  "
-            f"{pri_color}{row['priority']:<8}{_RESET}  "
+            f"{pri_col}  "
             f"{row['status']:<10}  "
             f"{task_info:<12}  "
-            f"{_DIM}{updated:<8}{_RESET}  "
+            f"{updated_col}  "
             f"{title}"
         )
 
@@ -438,9 +450,21 @@ def _render_activity(activity: list[sqlite3.Row]) -> list[str]:
         to_s = row["to_status"] or "—"
         agent = row["agent"] or "—"
         title = _truncate(row["title"], 25)
-        lines.append(f"  {_DIM}{ts}{_RESET}  #{row['task_id']} {title}  {from_s} → {_GREEN}{to_s}{_RESET}  [{agent}]")
+        # Fixed-width columns: ts(8), id(5), title(25), from(10), arrow+to(12), agent(12)
+        ts_col = _visible_pad(f"{_DIM}{ts}{_RESET}", 8)
+        id_col = f"#{row['task_id']:<4}"
+        title_col = f"{title:<25}"
+        from_col = f"{from_s:<10}"
+        to_col = _visible_pad(f"→ {_GREEN}{to_s}{_RESET}", 12)
+        agent_col = f"[{agent}]"
+        lines.append(f"  {ts_col}  {id_col} {title_col}  {from_col} {to_col}  {agent_col}")
 
     return lines
+
+
+# Click map type: maps terminal row number (1-indexed) → action tuple
+# Actions: ("lineage", backlog_id) | ("browser",)
+ClickMap = dict[int, tuple]
 
 
 def render_screen(
@@ -451,8 +475,12 @@ def render_screen(
     height: int,
     work_dir: str = "",
     backlog: list[sqlite3.Row] | None = None,
-) -> str:
+    activity_task_to_backlog: dict[int, int] | None = None,
+) -> tuple[str, ClickMap]:
     """Compose the full screen string from data sections.
+
+    Returns (screen_string, click_map) where click_map maps terminal row numbers
+    to navigation actions for mouse click handling.
 
     Layout: tasks (top), agents (middle), backlog (if any), activity (bottom).
     Heights are proportional to terminal size.
@@ -462,9 +490,15 @@ def render_screen(
     O(A) filesystem lookups for checklist files. Hot path — called every 2s.
     """
     lines: list[str] = []
+    click_map: ClickMap = {}
 
+    from importlib.metadata import version as pkg_version
+    try:
+        ver = pkg_version("minion-factory")
+    except Exception:
+        ver = "?"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = f"{_BOLD}{_CYAN}  ⚡ MINION DASHBOARD{_RESET}  {_DIM}{now_str}{_RESET}"
+    header = f"{_BOLD}{_CYAN}  ⚡ MINION DASHBOARD{_RESET}  {_DIM}v{ver}  {now_str}{_RESET}"
     lines.append(header)
     lines.append("")
 
@@ -486,13 +520,267 @@ def render_screen(
     # Cap visible rows to available height, same pattern as agents (#230)
     if backlog:
         backlog_max = max(2, height - len(lines) - 12)  # reserve rows for activity + headers
+        # Record line offset before backlog rows start
+        # +1 for "BACKLOG" header, +1 for column header, +1 for separator
+        backlog_start_line = len(lines) + 3
         lines.extend(_render_backlog(backlog, max_rows=backlog_max))
+        # Map each backlog row to its click action (line numbers are 1-indexed for terminal)
+        for idx, row in enumerate(backlog[:backlog_max]):
+            # +1 because terminal rows are 1-indexed
+            click_map[backlog_start_line + idx + 1] = ("lineage", row["id"])
         lines.append("")
 
     # Activity feed — fixed 10-line block at bottom
+    # Record line offset before activity rows start
+    # +1 for "RECENT ACTIVITY" header, +1 for separator
+    activity_start_line = len(lines) + 2
     lines.extend(_render_activity(activity))
+    # Map activity rows to lineage actions (if we can resolve task → backlog)
+    if activity_task_to_backlog:
+        for idx, row in enumerate(activity):
+            task_id = row["task_id"]
+            if task_id in activity_task_to_backlog:
+                click_map[activity_start_line + idx + 1] = ("lineage", activity_task_to_backlog[task_id])
 
+    # Navigation hint — always visible
+    lines.append("")
+    lines.append(f"  {_DIM}Click backlog/activity row for lineage │ L: browse all │ q: quit{_RESET}")
+
+    return "\n".join(lines), click_map
+
+
+def _render_dag_inline(flow_type: str, current_status: str, transitions: list) -> str:
+    """Render a task's DAG progression inline, showing which stages have been visited.
+
+    Uses the task's flow definition to render the full stage pipeline,
+    marking completed stages (from transition log) and the current position.
+
+    Example: open → assigned → [IN_PROGRESS] → fixed → verified → closed
+    """
+    try:
+        from minion.tasks.loader import load_flow
+        flow = load_flow(flow_type)
+        return flow.render_dag(current_status)
+    except Exception:
+        # Fallback: just show transition history
+        if not transitions:
+            return current_status
+        parts = []
+        for t in transitions:
+            if t["from_status"] and not parts:
+                parts.append(t["from_status"])
+            parts.append(t["to_status"])
+        return " → ".join(parts)
+
+
+def _render_lineage(lineage: dict, width: int, height: int) -> list[str]:
+    """Render the full lineage tree for a backlog item.
+
+    Shows: backlog header → requirements → tasks per requirement → DAG per task.
+    Each requirement is a branch in the tree. Each task shows its DAG inline.
+    """
+    lines: list[str] = []
+    bk = lineage["backlog"]
+    if not bk:
+        lines.append(f"  {_DIM}(backlog item not found){_RESET}")
+        return lines
+
+    # Header
+    lines.append(
+        f"{_BOLD}{_CYAN}  ⚡ LINEAGE: Backlog #{bk['id']}{_RESET}"
+    )
+    lines.append(f"  {_BOLD}{bk['title']}{_RESET}")
+    lines.append(
+        f"  Status: {_GREEN}{bk['status']}{_RESET}  │  "
+        f"Type: {bk['type']}  │  "
+        f"Priority: {bk['priority']}"
+    )
+    if bk["promoted_to"]:
+        lines.append(f"  {_DIM}Path: {bk['promoted_to']}{_RESET}")
+    lines.append("")
+
+    reqs = lineage["requirements"]
+    if not reqs:
+        lines.append(f"  {_DIM}(no requirements linked — not yet promoted or path mismatch){_RESET}")
+        return lines
+
+    # Render each requirement branch
+    for i, req_entry in enumerate(reqs):
+        req = req_entry["req"]
+        tasks = req_entry["tasks"]
+        is_last_req = (i == len(reqs) - 1)
+        branch = "└" if is_last_req else "├"
+        cont = " " if is_last_req else "│"
+
+        # Requirement line
+        # Extract the short suffix from the file_path for display
+        req_path = req["file_path"]
+        # Show just the last segment (requirement slug)
+        parts = req_path.rsplit("/", 1)
+        req_slug = parts[-1] if len(parts) > 1 else req_path
+        req_slug = _truncate(req_slug, max(30, width - 40))
+
+        stage_color = _GREEN if req["stage"] in ("completed", "done") else _YELLOW
+        lines.append(
+            f"  {branch}── {_BOLD}Req #{req['id']}{_RESET}: "
+            f"{req_slug}  "
+            f"[{stage_color}{req['stage']}{_RESET}]"
+        )
+
+        if not tasks:
+            lines.append(f"  {cont}   {_DIM}(no tasks){_RESET}")
+            continue
+
+        # Render each task under this requirement
+        for j, task_entry in enumerate(tasks):
+            task = task_entry["task"]
+            transitions = task_entry["transitions"]
+            is_last_task = (j == len(tasks) - 1)
+            t_branch = "└" if is_last_task else "├"
+            t_cont = " " if is_last_task else "│"
+
+            # Task status color
+            status = task["status"]
+            s_color = _STATUS_COLORS.get(status, _WHITE)
+            if status in TERMINAL_STATUSES:
+                s_color = _DIM
+
+            title = _truncate(task["title"], max(30, width - 50))
+            assignee = task["assigned_to"] or "—"
+
+            lines.append(
+                f"  {cont}   {t_branch}── Task #{task['id']}: "
+                f"{title}  "
+                f"[{s_color}{status}{_RESET}]  "
+                f"{_DIM}{assignee}{_RESET}"
+            )
+
+            # DAG progression line
+            dag_str = _render_dag_inline(task["flow_type"], status, transitions)
+            lines.append(f"  {cont}   {t_cont}   {_DIM}DAG:{_RESET} {dag_str}")
+
+            # Transition history (compact)
+            if transitions:
+                hist_parts = []
+                for t in transitions:
+                    from_s = t["from_status"] or "·"
+                    to_s = t["to_status"]
+                    agent = t["triggered_by"] or "?"
+                    hist_parts.append(f"{from_s}→{to_s}({agent})")
+                hist = "  ".join(hist_parts)
+                lines.append(f"  {cont}   {t_cont}   {_DIM}History: {hist}{_RESET}")
+
+        if not is_last_req:
+            lines.append(f"  {cont}")
+
+    return lines
+
+
+def render_lineage_screen(lineage: dict, width: int, height: int) -> str:
+    """Compose the lineage view screen.
+
+    Called when user drills into a backlog item from the dashboard.
+    """
+    lines = _render_lineage(lineage, width, height)
+    lines.append("")
+    lines.append(f"  {_DIM}Press ESC or 'q' to return │ L to go back to browser{_RESET}")
     return "\n".join(lines)
+
+
+# Valid sort modes for the browser and their display labels
+BROWSER_SORT_MODES = ("id", "type", "priority")
+_SORT_LABELS = {"id": "ID ▼", "type": "TYPE ▼", "priority": "PRI ▼"}
+
+
+def sort_backlog(items: list, sort_by: str) -> list:
+    """Sort backlog items by the given field.
+
+    Returns a new sorted list. Does not mutate the input.
+    """
+    if sort_by == "id":
+        return sorted(items, key=lambda r: r["id"], reverse=True)
+    elif sort_by == "type":
+        return sorted(items, key=lambda r: (r["type"], -r["id"]))
+    elif sort_by == "priority":
+        pri_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unset": 4}
+        return sorted(items, key=lambda r: (pri_order.get(r["priority"], 5), -r["id"]))
+    return list(items)
+
+
+def render_browser_screen(
+    all_backlog: list,
+    width: int,
+    height: int,
+    page: int = 0,
+    sort_by: str = "id",
+) -> tuple[str, ClickMap]:
+    """Render the backlog browser — paginated list of ALL backlog items for lineage selection.
+
+    Shows all backlog items (including closed) with key hints 1-9 per page.
+    Supports pagination with n/p keys for next/prev page.
+    Press 's' to cycle sort: id → type → priority → id → ...
+    Returns (screen_string, click_map).
+    """
+    lines: list[str] = []
+    click_map: ClickMap = {}
+    lines.append(f"{_BOLD}{_CYAN}  ⚡ BACKLOG LINEAGE BROWSER{_RESET}  {_DIM}sorted by: {sort_by}{_RESET}")
+    lines.append("")
+
+    if not all_backlog:
+        lines.append(f"  {_DIM}(no backlog items found){_RESET}")
+        lines.append("")
+        lines.append(f"  {_DIM}Press ESC or 'q' to return to dashboard{_RESET}")
+        return "\n".join(lines), click_map
+
+    page_size = 9  # keys 1-9
+    total_pages = (len(all_backlog) + page_size - 1) // page_size
+    page = max(0, min(page, total_pages - 1))
+    start = page * page_size
+    page_items = all_backlog[start:start + page_size]
+
+    # Header row — highlight the active sort column
+    id_hdr = _SORT_LABELS["id"] if sort_by == "id" else "ID"
+    type_hdr = _SORT_LABELS["type"] if sort_by == "type" else "TYPE"
+    pri_hdr = _SORT_LABELS["priority"] if sort_by == "priority" else "PRI"
+    lines.append(
+        f"  {_BOLD}{'#':>2}  {id_hdr:>4}  {type_hdr:<8}  {pri_hdr:<8}  {'STATUS':<10}  {'TITLE':<50}{_RESET}"
+    )
+    lines.append("  " + "─" * (width - 4))
+
+    # Data rows start after: header line, blank, column header, separator = line index 4
+    data_start_line = len(lines)
+    for idx, row in enumerate(page_items):
+        pri_color = _PRIORITY_COLORS.get(row["priority"], _DIM)
+        status = row["status"]
+        s_color = _GREEN if status == "closed" else _YELLOW if status == "promoted" else _WHITE
+        title = _truncate(row["title_short"], 50)
+        key_col = _visible_pad(f"{_CYAN}{idx + 1}{_RESET}", 2)
+        pri_col = _visible_pad(f"{pri_color}{row['priority']}{_RESET}", 8)
+        status_col = _visible_pad(f"{s_color}{status}{_RESET}", 10)
+        lines.append(
+            f"  {key_col}  "
+            f"{row['id']:>4}  "
+            f"{_truncate(row['type'], 8):<8}  "
+            f"{pri_col}  "
+            f"{status_col}  "
+            f"{title}"
+        )
+        # Click map: terminal rows are 1-indexed
+        click_map[data_start_line + idx + 1] = ("lineage", row["id"])
+
+    lines.append("")
+    page_info = f"Page {page + 1}/{total_pages}  ({len(all_backlog)} items)"
+    nav_keys = []
+    if page > 0:
+        nav_keys.append("p: prev")
+    if page < total_pages - 1:
+        nav_keys.append("n: next")
+    nav_keys.append("s: sort")
+    nav_keys.append("click or 1-9: lineage")
+    nav_keys.append("ESC/q: back")
+    lines.append(f"  {_DIM}{page_info}  │  {' │ '.join(nav_keys)}{_RESET}")
+
+    return "\n".join(lines), click_map
 
 
 def clear_and_print(screen: str) -> None:

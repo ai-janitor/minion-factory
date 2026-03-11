@@ -207,8 +207,9 @@ def test_render_screen_with_data(tmp_path):
     finally:
         conn.close()
 
-    screen = render_screen(tasks, agents, activity, width=120, height=40)
+    screen, click_map = render_screen(tasks, agents, activity, width=120, height=40)
     assert isinstance(screen, str)
+    assert isinstance(click_map, dict)
     assert "TASKS" in screen
     assert "AGENTS" in screen
     assert "ACTIVITY" in screen
@@ -218,6 +219,7 @@ def test_render_screen_empty_data():
     """render_screen handles empty data gracefully."""
     from minion.dashboard.render import render_screen
 
-    screen = render_screen([], [], [], width=80, height=24)
+    screen, click_map = render_screen([], [], [], width=80, height=24)
     assert isinstance(screen, str)
+    assert isinstance(click_map, dict)
     assert "no active tasks" in screen

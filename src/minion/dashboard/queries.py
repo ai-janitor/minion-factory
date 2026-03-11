@@ -263,6 +263,117 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         return []
 
 
+def fetch_lineage(conn: sqlite3.Connection, backlog_id: int) -> dict:
+    """Fetch full lineage for a backlog item: backlog → requirements → tasks → transitions.
+
+    Returns a dict with:
+      - backlog: the backlog row (id, title, status, type, priority, promoted_to, ...)
+      - requirements: list of dicts, each with:
+          - req: requirement row (id, file_path, origin, stage)
+          - tasks: list of dicts, each with:
+              - task: task row (id, title, status, flow_type, assigned_to)
+              - transitions: list of transition rows (from_status, to_status, triggered_by, created_at)
+
+    Big-O: O(R * T * L) where R = requirements, T = tasks per requirement,
+    L = transition log entries per task. Typically small (single-digit R and T).
+    NOT on the hot path — called only when user selects a backlog item.
+    """
+    result: dict = {"backlog": None, "requirements": []}
+
+    # Fetch backlog item
+    bk_row = conn.execute(
+        "SELECT id, title, status, type, priority, promoted_to, created_at, updated_at "
+        "FROM backlog WHERE id = ?",
+        (backlog_id,),
+    ).fetchone()
+    if not bk_row:
+        return result
+    result["backlog"] = bk_row
+
+    promoted_to = bk_row["promoted_to"]
+    if not promoted_to:
+        return result
+
+    # Fetch requirements whose file_path starts with promoted_to prefix
+    req_rows = conn.execute(
+        "SELECT id, file_path, origin, stage, created_at "
+        "FROM requirements WHERE file_path LIKE ? || '%' "
+        "ORDER BY id",
+        (promoted_to,),
+    ).fetchall()
+
+    for req in req_rows:
+        req_entry: dict = {"req": req, "tasks": []}
+
+        # Fetch tasks linked to this requirement
+        task_rows = conn.execute(
+            "SELECT id, title, status, flow_type, assigned_to, created_at, updated_at "
+            "FROM tasks WHERE requirement_id = ? ORDER BY id",
+            (req["id"],),
+        ).fetchall()
+
+        for task in task_rows:
+            # Fetch transition log for this task
+            transitions = conn.execute(
+                "SELECT from_status, to_status, triggered_by, created_at "
+                "FROM transition_log "
+                "WHERE entity_type = 'task' AND entity_id = ? "
+                "ORDER BY created_at",
+                (task["id"],),
+            ).fetchall()
+            req_entry["tasks"].append({"task": task, "transitions": transitions})
+
+        result["requirements"].append(req_entry)
+
+    return result
+
+
+def fetch_all_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Fetch ALL backlog items for lineage browser — including closed.
+
+    Returns every backlog item so user can browse full history and view lineage.
+    Ordered by most recently updated first, so recent work is at the top.
+    """
+    try:
+        return conn.execute("""
+            SELECT id, type, SUBSTR(title, 1, 50) AS title_short, priority, status,
+                   promoted_to, updated_at
+            FROM backlog
+            ORDER BY updated_at DESC, id DESC
+        """).fetchall()
+    except sqlite3.DatabaseError:
+        return []
+
+
+def fetch_task_to_backlog_map(conn: sqlite3.Connection, task_ids: list[int]) -> dict[int, int]:
+    """Map task IDs back to their originating backlog item IDs.
+
+    Chain: task.requirement_id → requirements.id → requirements.file_path
+    → backlog.promoted_to (prefix match on file_path).
+
+    Returns {task_id: backlog_id} for tasks that can be traced back.
+    Only called when activity rows need click targets — NOT on the hot path.
+    """
+    if not task_ids:
+        return {}
+    result: dict[int, int] = {}
+    try:
+        placeholders = ", ".join("?" for _ in task_ids)
+        rows = conn.execute(f"""
+            SELECT t.id AS task_id, b.id AS backlog_id
+            FROM tasks t
+            JOIN requirements r ON t.requirement_id = r.id
+            JOIN backlog b ON r.file_path LIKE b.promoted_to || '%'
+            WHERE t.id IN ({placeholders})
+              AND b.promoted_to IS NOT NULL AND b.promoted_to <> ''
+        """, task_ids).fetchall()
+        for row in rows:
+            result[row["task_id"]] = row["backlog_id"]
+    except sqlite3.DatabaseError:
+        pass
+    return result
+
+
 def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Recent task status transitions — one per task, most recent only.
 
