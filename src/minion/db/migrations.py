@@ -395,6 +395,10 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     Each migration runs in its own transaction. On failure the single
     migration is rolled back and the error propagates — later migrations
     are skipped so the DB stays at the last successful version.
+
+    Big-O: O(P * M_i) where P = pending migrations, M_i = cost of each migration.
+    Most migrations are O(1) ALTER TABLE. v3 (table rebuild) is O(T) where T = task rows.
+    v5/v6 are O(T) for backfill/copy. Runs once per schema version bump, not per request.
     """
     # Precondition assertion — backlog #63
     assert conn is not None, "DB connection must not be None"

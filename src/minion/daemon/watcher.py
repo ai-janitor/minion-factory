@@ -136,6 +136,11 @@ class CommsWatcher:
             )
 
     def unread_count(self) -> int:
+        """Count unread direct + broadcast messages.
+
+        Big-O: O(M + B) where M = direct messages (COUNT with WHERE), B = broadcast
+        messages (LEFT JOIN + IS NULL filter). Two queries per call.
+        """
         with self._connect() as conn:
             direct = conn.execute(
                 "SELECT COUNT(*) AS c FROM messages WHERE to_agent = ? AND read_flag = 0",
@@ -154,6 +159,13 @@ class CommsWatcher:
         return int(direct) + int(broadcast)
 
     def pop_next_message(self) -> Optional[CommsMessage]:
+        """Fetch and mark-read the oldest unread message (direct or broadcast).
+
+        Big-O: O(M + B) for the UNION ALL subquery where M = unread direct, B = unread
+        broadcast. ORDER BY id ASC LIMIT 1 picks the oldest. Mark-read is O(1) UPDATE
+        or INSERT. Called per-message, so total cost to drain inbox is O(N * (M+B))
+        where N = messages to drain — but M+B shrinks each iteration.
+        """
         now = utc_now_iso()
         with self._connect() as conn:
             row = conn.execute(

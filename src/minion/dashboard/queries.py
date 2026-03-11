@@ -21,6 +21,10 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Active tasks ordered by status priority then ID.
 
     Excludes terminal states. Includes blocked_by for tree rendering.
+
+    Big-O: O(T * log(T)) where T = active (non-terminal) tasks. Full table scan
+    with NOT IN filter + CASE-based ORDER BY. LIMIT 50 caps output. Hot path —
+    called every 2 seconds by dashboard loop.
     """
     cursor = conn.execute("""
         SELECT
@@ -56,6 +60,9 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     Computes effective_last_seen as the most recent of last_seen,
     context_updated_at, or registered_at — so newly registered agents
     that haven't heartbeated yet don't show "never".
+
+    Big-O: O(A * log(A)) where A = agents with daemon/terminal transport.
+    Full scan + ORDER BY agent_class, name. Hot path — called every 2s by dashboard.
     """
     cursor = conn.execute("""
         SELECT
@@ -85,6 +92,10 @@ def get_agent_summary(conn: sqlite3.Connection) -> list[dict]:
     """Query all agents with health data for web dashboard.
 
     SU-22: Returns enriched agent list with HP percentage, current task, unread count.
+
+    Big-O: O(A * (T + M)) where A = agents, T = tasks per agent (LIMIT 1 subquery),
+    M = messages per agent (COUNT). Each agent triggers 2 additional queries.
+    Total: O(A) agents * O(1) per subquery = O(A). Space: O(A).
     """
     agents = []
     for row in conn.execute(
@@ -123,6 +134,9 @@ def get_task_pipeline(conn: sqlite3.Connection) -> dict[str, list[dict]]:
     """Query tasks grouped by status for kanban-style display.
 
     SU-22: Returns {status: [task_dicts]} for web dashboard pipeline view.
+
+    Big-O: O(T * log(T)) where T = total tasks (ORDER BY updated_at DESC, full scan).
+    Space: O(T) for the result dict. No LIMIT — returns all tasks.
     """
     pipeline: dict[str, list[dict]] = {}
     for row in conn.execute(
@@ -141,6 +155,10 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
     """Query DB and system stats for web dashboard health view.
 
     SU-22: Returns DB size, row counts per table, WAL mode, agent/task counts.
+
+    Big-O: O(sum(Ni)) where Ni = row count of each table. COUNT(*) on each table
+    is O(Ni) without covering index. Number of tables is fixed (~15), so bounded by
+    total DB row count. Also runs GROUP BY on agents and tasks — O(A + T).
     """
     import os
     stats: dict = {"tables": {}, "agents": {}, "tasks": {}}
@@ -208,6 +226,10 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     Shows backlog items with their promoted_to task ID so the TUI can display
     the DAG stage of the linked task. Only shows items with status != 'closed'.
     Backlog #112: TUI dashboard should show promoted backlog items with DAG stage.
+
+    Big-O: O(B * log(B)) where B = non-closed backlog items. LEFT JOIN tasks is
+    O(B) with PK lookup on tasks.id. CASE-based ORDER BY + LIMIT 20. Hot path —
+    called every 2s by dashboard.
     """
     # The backlog table may not exist in older DBs — fail gracefully
     try:
@@ -242,7 +264,13 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def fetch_activity(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Recent task status transitions — one per task, most recent only."""
+    """Recent task status transitions — one per task, most recent only.
+
+    Big-O: O(L * log(L)) where L = transition_log rows for task entities.
+    Window function ROW_NUMBER() requires sort. JOIN tasks O(1) per row by PK.
+    idx_transition_entity index helps filter. Outer LIMIT 8 caps output.
+    Hot path — called every 2s by dashboard loop.
+    """
     cursor = conn.execute("""
         SELECT
             task_id,

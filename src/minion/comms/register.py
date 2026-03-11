@@ -40,6 +40,14 @@ def register(
     crew: str = "",
     scope: str = "project",
 ) -> dict[str, object]:
+    """Register an agent in local + coordinator DBs, return onboarding payload.
+
+    Big-O: O(B + F) where B = old broadcast messages to auto-dismiss (INSERT OR IGNORE
+    batch), F = file I/O for onboarding docs + roster file write + crew YAML parse.
+    DB operations: O(1) UPSERT into agents (PK), O(B) broadcast_reads batch,
+    O(1) coordinator UPSERT. Crew merge: O(1) YAML parse + dict lookup.
+    Total dominated by broadcast dismissal — O(B) where B = broadcasts older than 1hr.
+    """
     # Auto-detect model from environment if not explicitly provided (#235)
     if not model:
         model = os.environ.get("MINION_MODEL", "")
@@ -240,6 +248,12 @@ def register(
 
 
 def deregister(agent_name: str) -> dict[str, object]:
+    """Remove agent from local + coordinator DBs, release file claims, clean up filesystem.
+
+    Big-O: O(C + W) where C = file claims held by agent, W = waitlist entries.
+    For each claim, checks waitlist (O(1) indexed). DELETE operations O(C) + O(1) for
+    agent row. Filesystem: O(1) roster file + O(1) inbox dir removal.
+    """
     # Precondition — backlog #63
     assert agent_name, "agent_name must not be empty"
     conn = get_db()
@@ -468,6 +482,12 @@ def set_context(
 
 
 def who() -> dict[str, object]:
+    """List all registered agents in this project with enriched HP/staleness data.
+
+    Big-O: O(A * log(A)) where A = registered agents (ORDER BY last_seen DESC).
+    enrich_agent_row is O(1) per agent, so total O(A * log(A)) dominated by sort.
+    Space: O(A) for the result list. Typically A < 50 per project.
+    """
     conn = get_db()
     cursor = conn.cursor()
     now = datetime.datetime.now()

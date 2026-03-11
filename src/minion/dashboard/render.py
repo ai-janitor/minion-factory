@@ -344,7 +344,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
         checklist_path = _find_checklist(row["name"], work_dir) if work_dir else None
         if checklist_path:
             tally = _parse_checklist_tally(checklist_path)
-            display = tally if tally else "checklist"
+            display = tally if tally else "ERROR"
             checklist_col = _osc8_link(checklist_path, f"{_CYAN}{display}{_RESET}")
         else:
             checklist_col = f"{_DIM}—{_RESET}"
@@ -456,6 +456,10 @@ def render_screen(
 
     Layout: tasks (top), agents (middle), backlog (if any), activity (bottom).
     Heights are proportional to terminal size.
+
+    Big-O: O(T + A + B + V) where T = tasks, A = agents, B = backlog items,
+    V = activity entries. Each section renders linearly. Agent rendering does
+    O(A) filesystem lookups for checklist files. Hot path — called every 2s.
     """
     lines: list[str] = []
 

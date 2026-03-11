@@ -26,6 +26,10 @@ def route_cross_repo(
     """Deliver message to a remote project's local DB via coordinator lookup.
 
     Returns a result dict if cross-repo delivery succeeded, None if agent not found globally.
+
+    Big-O: O(1) — coordinator lookup by PRIMARY KEY, single file write (atomic),
+    single DB INSERT into remote project's messages table. Schema compatibility
+    check is O(C) where C = columns (~6), effectively constant.
     """
     # Precondition assertions — backlog #63
     assert to_agent, "to_agent must not be empty"

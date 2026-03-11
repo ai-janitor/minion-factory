@@ -20,6 +20,10 @@ def scan_triggers(message: str) -> list[str]:
     """Return trigger words found in message text.
 
     Only matches deliberate !!trigger!! pattern — not casual mentions.
+
+    Big-O: O(T * M) where T = number of trigger words (~10), M = message length.
+    Each `in` check is O(M). T is fixed/small, so effectively O(M).
+    Called on every send().
     """
     # Precondition assertions — backlog #63
     if not isinstance(message, str):

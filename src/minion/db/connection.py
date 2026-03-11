@@ -49,6 +49,10 @@ def connect(db_path: str | os.PathLike, *, timeout: float = 5) -> sqlite3.Connec
 
     Use this anywhere callers have a db_path in hand — avoids repeating
     PRAGMA boilerplate across 10+ modules. Sets WAL, busy_timeout=5000, row_factory.
+
+    Big-O: O(1) — sqlite3.connect + 2 PRAGMA calls. makedirs is O(depth) but
+    typically cached by OS. Hot path — called on every CLI command, every poll
+    iteration, every dashboard cycle.
     """
     # SU-09: Precondition assertions
     assert db_path, "db_path must not be empty"

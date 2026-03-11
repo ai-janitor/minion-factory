@@ -24,7 +24,13 @@ from minion.dashboard.render import clear_and_print, render_screen
 
 
 def run() -> None:
-    """Poll loop: fetch DB → render → sleep 2s → repeat until signal."""
+    """Poll loop: fetch DB → render → sleep 2s → repeat until signal.
+
+    Big-O per cycle: O(T*log(T) + A*log(A) + L*log(L) + B*log(B)) where T = tasks,
+    A = agents, L = transition_log rows, B = backlog items. Dominated by fetch_activity
+    window function on large transition logs. Each cycle opens a fresh read-only connection
+    (PRAGMA query_only=ON) to get the latest WAL snapshot.
+    """
     db_path = resolve_db_path()
     work_dir = str(db_path.parent) if hasattr(db_path, 'parent') else os.path.dirname(str(db_path))
     _shutdown = False

@@ -25,7 +25,11 @@ def _to_naive_local(dt: datetime.datetime) -> datetime.datetime:
 
 
 def get_lead(cursor: sqlite3.Cursor) -> str | None:
-    """Return the name of the first registered lead agent, or None."""
+    """Return the name of the first registered lead agent, or None.
+
+    Big-O: O(N) worst-case where N = agents table rows (no index on agent_class).
+    In practice N < 50 agents per project, so effectively O(1).
+    """
     cursor.execute("SELECT name FROM agents WHERE agent_class = 'lead' LIMIT 1")
     row = cursor.fetchone()
     return row[0] if row else None
@@ -62,7 +66,11 @@ def hp_summary(
 
 
 def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]:
-    """Add HP, staleness, and last_seen_mins_ago to an agent row dict."""
+    """Add HP, staleness, and last_seen_mins_ago to an agent row dict.
+
+    Big-O: O(1) per row — constant-time dict copy + arithmetic.
+    Called once per agent in who() and dashboard render, so total O(A) where A = agent count.
+    """
     # Import here to avoid circular dependency with auth
     from minion.defaults import CLASS_STALENESS_SECONDS
 
@@ -101,6 +109,9 @@ def staleness_check(cursor: sqlite3.Cursor, agent_name: str) -> tuple[bool, str]
     """Check if agent's context is stale per class threshold.
 
     Returns (is_stale, message). is_stale=True means BLOCKED.
+
+    Big-O: O(1) — single indexed lookup by PRIMARY KEY (agents.name), constant-time
+    timestamp comparison. Called on every send() and check_inbox().
     """
     # Precondition assertions — backlog #63
     assert cursor is not None, "cursor must not be None"

@@ -11,6 +11,13 @@ from collections import deque
 
 
 class RollingBuffer:
+    """Fixed-capacity rolling text buffer backed by a deque.
+
+    Big-O: append() is O(1) amortized — appends to deque tail, popleft from head
+    when over capacity. snapshot() is O(K) where K = number of chunks (joins all).
+    Space: O(max_tokens * 4) chars. Used by daemon runner to buffer agent output.
+    """
+
     def __init__(self, max_tokens: int) -> None:
         self.max_chars = max_tokens * 4
         self._chunks: deque[str] = deque()

@@ -38,7 +38,11 @@ def init_coordinator_db() -> None:
 
 
 def _prune_local_stale_agents(cutoff: str) -> None:
-    """Remove agents from the local .work/minion.db whose last_seen is older than cutoff."""
+    """Remove agents from the local .work/minion.db whose last_seen is older than cutoff.
+
+    Big-O: O(S * T) where S = stale agent candidates, T = tasks per agent (COUNT query).
+    DELETE is O(S) for the batch. Called at most once per 10 minutes via touch_coordinator_activity.
+    """
     try:
         local = get_db()
         try:
@@ -73,6 +77,10 @@ def touch_coordinator_activity(agent_name: str) -> None:
     """Bump last_active for an agent in the coordinator DB. Best-effort, never raises.
 
     Auto-prunes agents inactive for 6+ hours, checked at most once per 10 minutes.
+
+    Big-O: O(1) amortized — the UPSERT is O(1) by PRIMARY KEY. Every 10 minutes,
+    prune runs O(S) where S = stale agents (SELECT + DELETE). Filesystem ops O(S)
+    for roster file cleanup. Amortized over 600s interval, effectively O(1) per call.
     """
     import time as _time
     global _last_prune_check

@@ -21,6 +21,14 @@ from minion.fs import read_content_file
 
 
 def check_inbox(agent_name: str, msg_type: str | None = None) -> dict[str, object]:
+    """Check and return all unread messages for an agent, marking them as read.
+
+    Big-O: O(M + B) where M = unread direct messages, B = unread broadcast messages.
+    Direct query: O(M) scan on to_agent (no index). Broadcast query: O(B) with NOT IN subquery.
+    Mark-read writes: O(M) UPDATE + O(B) INSERTs into broadcast_reads.
+    File I/O: O(M+B) content file reads. Sorting: O((M+B) * log(M+B)).
+    Hot path — called on every poll cycle and explicit inbox check.
+    """
     # Precondition assertions — backlog #63
     assert agent_name, "agent_name must not be empty"
 
@@ -108,6 +116,9 @@ def check_inbox_silent(agent_name: str) -> str:
 
     Designed for PostToolUse hooks — fast, no JSON wrapper, no warnings.
     Marks messages as read on retrieval.
+
+    Big-O: Same as check_inbox — O(M + B) where M = direct, B = broadcast messages.
+    Optimized for hook context: no staleness check, no JSON envelope.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -161,6 +172,11 @@ def check_inbox_silent(agent_name: str) -> str:
 
 
 def get_history(count: int = 20) -> dict[str, object]:
+    """Return last N messages across all agents.
+
+    Big-O: O(N * log(N)) where N = total messages (ORDER BY + LIMIT).
+    File I/O: O(count) content file reads. Bounded by count parameter (default 20).
+    """
     # Precondition assertions — backlog #63
     if not isinstance(count, int) or count < 1:
         raise ValueError(f"count must be a positive int, got {count}")
@@ -178,6 +194,12 @@ def get_history(count: int = 20) -> dict[str, object]:
 
 
 def purge_inbox(agent_name: str, older_than_hours: int = 2) -> dict[str, object]:
+    """Delete old messages for an agent and dismiss old broadcasts.
+
+    Big-O: O(M) DELETE on direct messages + O(B) INSERT for broadcast dismissal +
+    O(R) orphan cleanup of broadcast_reads. Total O(M + B + R) where M = direct
+    messages older than cutoff, B = broadcasts older than cutoff, R = orphaned reads.
+    """
     # Precondition assertions — backlog #63
     assert agent_name, "agent_name must not be empty"
     if not isinstance(older_than_hours, int) or older_than_hours < 0:

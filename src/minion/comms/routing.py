@@ -17,7 +17,11 @@ from minion.db import connect, get_coordinator_db
 
 
 def who_global() -> dict[str, object]:
-    """List all agents across all projects from the coordinator DB."""
+    """List all agents across all projects from the coordinator DB.
+
+    Big-O: O(A * log(A)) where A = total agents across all projects (full table scan + ORDER BY).
+    Space: O(A) for the result list. Typically A < 100.
+    """
     try:
         coord = get_coordinator_db()
         try:
@@ -89,6 +93,10 @@ def prune_global(stale_minutes: int = 30) -> dict[str, object]:
 
     Agents with active tasks (open/assigned/in_progress/fixed) in their project
     are protected from pruning regardless of staleness.
+
+    Big-O: O(S * T) where S = stale agent candidates, T = task count per agent's project DB.
+    For each candidate, opens remote DB and runs COUNT query. DELETE is O(S) batch.
+    Filesystem cleanup O(S) for roster file removal. Typically S < 10.
     """
     # Precondition assertions — backlog #63
     if not isinstance(stale_minutes, int):

@@ -266,7 +266,11 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
 
 
 def _check_signals(agent: str) -> str | None:
-    """Check stand_down / retire. Returns signal name or None."""
+    """Check stand_down / retire. Returns signal name or None.
+
+    Big-O: O(1) — three PK/indexed lookups (flags, agent_retire, agent_interrupt).
+    Called every poll iteration (every 5s by default).
+    """
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -294,6 +298,10 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
       - tasks: list of available task dicts (if any)
       - signal: "stand_down" or "retire" (if exit_code 3)
       - transport_hint: restart reminder for terminal agents
+
+    Big-O: O(timeout/interval) iterations. Per iteration: O(1) signal check +
+    O(1) message count + O(T*B) task finding (see _find_available_tasks).
+    On content delivery: O(M+B) message fetch + sort. PID management O(1).
     """
     # Precondition assertions — backlog #63
     assert agent, "agent name must not be empty"
