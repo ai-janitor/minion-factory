@@ -3,7 +3,25 @@
 Purpose: YAML loading, inheritance resolution, and validation for task flow DAGs.
 Rationale: Extracted into own module for single-responsibility task management.
 Responsibility: YAML loading, inheritance resolution, and validation for task flow DAGs. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- Flow YAML search order: MINION_FLOWS_DIR env > ~/.minion/task-flows/ > bundled
+  package dir > repo root task-flows/. The FIRST existing directory wins — there is
+  no merge across directories. If a user overrides with env var, bundled flows are
+  completely invisible.
+- _DEFAULT_FLOWS_DIR is resolved at module import time and cached. If the flows
+  directory is created after the first import, it won't be found until process restart.
+- Flow inheritance (_resolve_inheritance) is single-parent only. A flow can inherit
+  from one parent via the 'inherits' key. There is no multiple inheritance or mixin
+  support. Circular inheritance will cause infinite recursion (no cycle detection).
+- Stage merging during inheritance: override stages REPLACE base stage keys entirely
+  at the per-key level (shallow merge per stage). If a base stage has 5 keys and the
+  override specifies 2, the result has all 5 with 2 overridden. But nested dicts
+  within stage values are NOT deep-merged — they're replaced wholesale.
+- _FLOW_CACHE is never invalidated. Flows are loaded once per process. Hot-reloading
+  flow YAML requires process restart.
+"""
 
 from __future__ import annotations
 

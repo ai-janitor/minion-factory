@@ -5,7 +5,31 @@ schema versioning, and coordinator tables. No runtime logic — just DDL strings
 Purpose: SQL schema definitions for all tables.
 Rationale: Extracted into own module for single-responsibility database access.
 Responsibility: SQL schema definitions for all tables. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- SQLite is the only backend. All DDL uses SQLite syntax (TEXT for timestamps,
+  INTEGER PRIMARY KEY AUTOINCREMENT, CREATE TABLE IF NOT EXISTS).
+- Timestamps are stored as ISO-8601 TEXT, not SQLite DATETIME. All readers must
+  parse with datetime.fromisoformat(). Timezone is UTC but not always explicit —
+  some columns use datetime('now') (UTC) while others use now_iso() (explicit UTC).
+- agent.name is a globally unique TEXT primary key — no UUID, no auto-increment.
+  Callers must ensure uniqueness before INSERT. Re-registration reuses the same name.
+- messages.content_file stores an absolute filesystem path, not the message content
+  itself. The file must exist and be readable at that path when the message is consumed.
+  If the file is deleted or moved, the message content is lost.
+- file_claims uses os.path.abspath() normalized paths as the PRIMARY KEY. All claim
+  operations must normalize paths identically or lookups will silently miss.
+- The coordinator schema (agents table in ~/.minion/coordinator.db) is a SEPARATE
+  database from the project-local agents table. Same table name, different columns,
+  different DB file. Do not confuse them.
+- tasks.blocked_by is a comma-separated string of task IDs, not a foreign key or
+  junction table. Parsing is done by callers with split(',').
+- tasks.files and tasks.progress are JSON-encoded TEXT fields. Callers must
+  json.loads()/json.dumps() them. NULL means empty, not '[]'.
+- Schema migrations (migrations.py) assume forward-only — no rollback support.
+  The schema_version table tracks applied migrations monotonically.
+"""
 
 _COMMS_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS agents (

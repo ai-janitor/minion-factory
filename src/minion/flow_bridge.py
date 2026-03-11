@@ -4,7 +4,22 @@ No fallbacks. Missing YAML = hard failure.
 Purpose: Bridge to task DAG engine — all queries route through YAML-defined flows.
 Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: Bridge to task DAG engine — all queries route through YAML-defined flows. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- Default task_type is "bugfix" everywhere. If a task row has NULL or empty task_type,
+  all functions in this module treat it as "bugfix". This means bugfix.yaml MUST always
+  exist and be loadable — it's the implicit fallback for every task without an explicit type.
+- Flow YAML files are loaded once and cached in _flow_cache for the process lifetime.
+  If YAML files are edited on disk while the process runs (e.g., during development),
+  the old version is served until process restart. There is no cache invalidation.
+- TaskFlow objects are assumed to be immutable after loading. If any caller mutates a
+  cached TaskFlow's stages dict, all subsequent callers see the mutation. No defensive
+  copy is made on cache retrieval.
+- workers_for() returns None when the current assignee should continue. Callers must
+  distinguish None (no reassignment needed) from empty list (no eligible class exists).
+  Treating None as "no workers available" will break task routing.
+"""
 
 from __future__ import annotations
 

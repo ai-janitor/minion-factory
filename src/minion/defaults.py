@@ -5,7 +5,25 @@ Merges commsv2/defaults.py + swarm/config.py path logic.
 Purpose: Shared constants — env var names, default paths, resolvers.
 Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: Shared constants — env var names, default paths, resolvers. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- resolve_db_path() uses Path.cwd() at call time. If the process cwd changes after
+  import, the resolved path changes too. The db/connection.py module caches the first
+  resolution — so cwd at first DB access determines the project for the entire process.
+- Walk-up DB discovery stops at git repo boundaries. This assumes every project is
+  inside a git repo. Non-git projects must set MINION_DB_PATH explicitly or the
+  walk-up falls through to cwd fallback.
+- MINION_PROJECTS uses colon (:) as separator, Unix-style. This will break on Windows
+  paths containing drive letters (C:). Not currently a supported platform.
+- CLASS_STALENESS_SECONDS values are hardcoded here, not in the YAML agent-classes
+  config. If new agent classes are added to YAML without updating this dict, staleness
+  checks will KeyError. The dict.get() callers in db/agents.py handle this gracefully
+  but auth.py does not.
+- All paths returned by resolvers use os.path or pathlib — they are platform-native.
+  Callers storing paths in SQLite must be aware that paths are not portable across
+  OS boundaries (forward vs back slashes, case sensitivity).
+"""
 
 from __future__ import annotations
 

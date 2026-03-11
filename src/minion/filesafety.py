@@ -3,7 +3,24 @@
 Purpose: File Safety — claim, release, get_claims.
 Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: File Safety — claim, release, get_claims. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- File paths are normalized with os.path.abspath() before DB operations. All callers
+  of claim_file/release_file MUST pass paths that resolve consistently — relative
+  paths, symlinks, and trailing slashes will produce different abspath() results and
+  cause phantom duplicate claims.
+- Claims are advisory locks, not filesystem-level locks. Nothing prevents an agent
+  from editing a file it hasn't claimed. The system relies on agents checking claims
+  before writing. CI/pre-commit hooks are the enforcement layer (not yet implemented).
+- The waitlist is FIFO by added_at timestamp but does NOT auto-promote. When a claim
+  is released, waitlisted agents are notified in the response but must re-claim
+  manually. There is no automatic handoff.
+- release_file() with force=True requires the calling agent to be class 'lead'.
+  This check reads agent_class from the project-local DB, not from MINION_CLASS env
+  var. If the agent's class in the DB differs from their env var (stale registration),
+  the DB value wins for force-release authorization.
+"""
 
 from __future__ import annotations
 

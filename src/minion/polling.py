@@ -8,7 +8,29 @@ Exit codes (minion-swarm contract):
 Purpose: Poll loop — replaces poll.sh with first-class Python.
 Rationale: Extracted into own module following single-responsibility principle.
 Responsibility: Poll loop — replaces poll.sh with first-class Python. NOT responsible for unrelated concerns.
-Organization: Standalone functions and/or a single class. See source."""
+Organization: Standalone functions and/or a single class. See source.
+
+ASSUMPTIONS:
+- Only ONE poll process per agent per project. _kill_existing_poll() enforces this
+  via PID files, but relies on SIGTERM being deliverable. If a poll process is
+  zombied or in uninterruptible sleep, the new poll may fail to take over.
+- Orphan detection uses os.getppid() — if the parent PID changes, poll exits.
+  This assumes the parent process is the daemon/terminal that spawned us. On Linux
+  with PR_SET_PDEATHSIG this is reliable; on macOS it's best-effort (reparenting
+  to launchd/PID 1 is the signal, but there's a small race window).
+- _fetch_messages() does ALL reads before ALL writes within a single connection to
+  maintain WAL snapshot isolation. Interleaving reads and writes would cause messages
+  to be marked read but not returned in the same transaction.
+- seen_task_ids prevents re-surfacing tasks that were already shown to the agent in
+  this poll session. This set lives in memory — if the poll process restarts, all
+  tasks appear as "new" again. This is intentional (restart = fresh view).
+- The 5-second default poll interval means message delivery latency is 0-5 seconds.
+  Reducing the interval below 1 second risks SQLite lock contention under multi-agent
+  load. The interval is not configurable at runtime via the DB — only via CLI flag.
+- Exit code 3 is a CONTRACT with the daemon runner (daemon/runner/_state.py). The
+  daemon uses exit code 3 to distinguish "agent dismissed" from "poll crashed" (exit 1).
+  Changing these exit codes breaks daemon lifecycle management.
+"""
 
 from __future__ import annotations
 

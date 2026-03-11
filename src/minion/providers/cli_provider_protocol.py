@@ -7,6 +7,22 @@ Organization: Standalone functions and/or a single class. See source.
 
 SU-14: Shared error handling delegated to _shared_error_log and _shared_error_classifier.
 BaseProvider methods are thin wrappers for backward compatibility.
+
+ASSUMPTIONS:
+- Subclasses MUST implement build_command() and prompt_guardrails(). These are the
+  only two abstract methods. All other methods have default implementations.
+- filter_log_line() assumes lines longer than 500 chars are likely error output
+  (JSON blobs, stack traces). Lines <= 500 chars pass through unmodified. If a
+  provider produces long non-error output (e.g., base64 data), it will be
+  misclassified as an error and logged to the error file.
+- error_log Path passed to filter_log_line() must be writable. If the path's parent
+  directory doesn't exist, _append_error_log will create it. But if the path is on a
+  read-only filesystem, errors are silently lost (no exception raised).
+- session_id is set externally after construction (by the daemon runner). Providers
+  that support --resume use this to continue existing sessions. If session_id is None,
+  resume is skipped — a new session starts. Stale session_id values (from a crashed
+  session) may cause the provider CLI to error; the daemon handles this by retrying
+  without resume.
 """
 from __future__ import annotations
 

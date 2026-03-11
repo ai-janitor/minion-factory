@@ -6,6 +6,26 @@ get_coordinator_db() connection factories with WAL mode and row factory.
 Convention: use connect(db_path) anywhere you have an explicit path.
 Use get_db() for the project-local DB. Use get_coordinator_db() for the global coordinator DB.
 All three set WAL mode, busy_timeout=5000, and row_factory=sqlite3.Row.
+
+ASSUMPTIONS:
+- Every connection uses WAL journal mode. Callers must NOT switch to DELETE or
+  TRUNCATE mode — concurrent readers (poll loops, dashboard) depend on WAL for
+  snapshot isolation. Switching modes mid-session causes "database is locked" errors.
+- busy_timeout=5000ms (5 seconds). If a write takes longer than 5s to acquire the
+  lock, sqlite3.OperationalError is raised. This assumes write transactions are short
+  (single INSERT/UPDATE). Long-running writes will cause timeout cascades.
+- row_factory=sqlite3.Row is set on ALL connections. Every module that calls get_db()
+  or connect() expects dict-like Row objects, not tuples. Removing this breaks all
+  row["column_name"] access patterns across the entire codebase.
+- _db_path is module-level cached after first resolution. Once resolved, it does NOT
+  re-read env vars or re-walk the filesystem. If MINION_DB_PATH changes mid-process,
+  call reset_db_path() to force re-resolution. Spawned subprocesses get a fresh cache.
+- get_db() enables foreign_keys=ON; get_coordinator_db() and raw connect() do NOT.
+  The coordinator DB has no foreign keys. If you add FK constraints to coordinator
+  schema, you must enable them explicitly.
+- init_db() is NOT idempotent for migrations — it's safe to call multiple times
+  (CREATE IF NOT EXISTS), but migrations only run forward. Running init_db() on a
+  newer schema (from a newer code version) with an older binary is undefined.
 """
 
 from __future__ import annotations
