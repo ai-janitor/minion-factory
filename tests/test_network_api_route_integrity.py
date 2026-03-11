@@ -123,9 +123,13 @@ def test_expected_core_routes_exist():
     assert any("/overview" in p for p in get_patterns), "Missing /overview route"
     assert any("/alerts" in p for p in get_patterns), "Missing /alerts route"
 
+    # Scaling routes (F-052: must be reachable, even as 501 stubs)
+    assert any("/capacity" in p for p in get_patterns), "Missing /capacity route"
+
     # Essential POST routes
     assert any("/register" in p for p in post_patterns), "Missing /register route"
     assert any("/send" in p for p in post_patterns), "Missing /send route"
+    assert any("/spawn" in p for p in post_patterns), "Missing /spawn route"
 
     # SU-18: New CLI-parity routes
     assert any("/lifecycle/cold-start" in p for p in post_patterns), "Missing /lifecycle/cold-start route"

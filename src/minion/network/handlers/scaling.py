@@ -10,8 +10,8 @@ Organization: Two endpoints — spawn (write, future) and capacity (read, now).
 
 Implementation order: 9th (last — spawn is a stub, capacity reads network DB).
 
-SU-17 decision: KEPT but not wired to router. Scaling is deferred to v3.
-Not registered in router.py — endpoints are unreachable by design.
+SU-17 decision: KEPT. Scaling implementation deferred to v3 (501 stubs).
+Registered in router.py via register_all() — endpoints are reachable but return 501.
 """
 
 from __future__ import annotations
