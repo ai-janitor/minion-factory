@@ -16,15 +16,9 @@ pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 @pytest.fixture
-def fresh_db(tmp_path, monkeypatch):
-    """Set up a fresh minion DB in a temp directory."""
-    db_path = str(tmp_path / ".work" / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-
-    from minion.db.connection import reset_db_path, init_db
-    reset_db_path()
-    init_db()
-    return db_path
+def fresh_db(isolated_db_path):
+    """Alias for conftest.isolated_db_path — returns the DB file path string."""
+    return isolated_db_path
 
 
 # ── DB Prune ──────────────────────────────────────────────────────────

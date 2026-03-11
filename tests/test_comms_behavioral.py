@@ -11,30 +11,17 @@ import sqlite3
 
 import pytest
 
-from minion.db import init_db, reset_db_path
-
 pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 # ---------------------------------------------------------------------------
-# DB isolation fixture
+# Auto-apply isolated_db_with_coordinator from conftest to every test
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    db_path = str(work_dir / "minion.db")
-    # Isolate coordinator DB too — prevents cross-test name conflicts in global registry
-    coord_db_path = str(tmp_path / "coordinator.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    monkeypatch.setenv("MINION_COORDINATOR_DB_PATH", coord_db_path)
-    reset_db_path()
-    init_db()
-    monkeypatch.chdir(tmp_path)
-    yield tmp_path
-    reset_db_path()
+def _use_isolated_db(isolated_db_with_coordinator):
+    """Delegate to conftest.isolated_db_with_coordinator; autouse ensures DB isolation."""
 
 
 # ---------------------------------------------------------------------------

@@ -15,8 +15,6 @@ import sqlite3
 
 import pytest
 
-from minion.db import init_db, reset_db_path
-
 pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
@@ -26,14 +24,9 @@ pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 def _setup_project(tmp_path) -> tuple[str, str]:
-    """Create .work/ tree, initialize DB, return (work_dir, db_path)."""
+    """Return (work_dir, db_path) — DB is already initialized by conftest.isolated_db."""
     work = tmp_path / ".work"
-    work.mkdir()
-    db_path = str(work / "minion.db")
-    os.environ["MINION_DB_PATH"] = db_path
-    reset_db_path()
-    init_db()
-    return str(work), db_path
+    return str(work), str(work / "minion.db")
 
 
 def _insert_agent(db_path: str, name: str, agent_class: str = "coder") -> None:
@@ -91,15 +84,8 @@ def _task_result_file(db_path: str, task_id: int) -> str | None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path):
-    """Each test gets its own .work/ and DB; env var is restored after."""
-    original = os.environ.get("MINION_DB_PATH")
-    yield tmp_path
-    if original is None:
-        os.environ.pop("MINION_DB_PATH", None)
-    else:
-        os.environ["MINION_DB_PATH"] = original
-    reset_db_path()
+def _use_isolated_db(isolated_db):
+    """Delegate to conftest.isolated_db; autouse ensures every test gets DB isolation."""
 
 
 # ---------------------------------------------------------------------------

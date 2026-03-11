@@ -10,27 +10,17 @@ import os
 
 import pytest
 
-from minion.db import init_db, reset_db_path
-
 pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 # ---------------------------------------------------------------------------
-# DB isolation fixture
+# Auto-apply isolated_db from conftest to every test in this module
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    reset_db_path()
-    init_db()
-    monkeypatch.chdir(tmp_path)
-    yield tmp_path
-    reset_db_path()
+def _use_isolated_db(isolated_db):
+    """Delegate to conftest.isolated_db; autouse ensures every test gets DB isolation."""
 
 
 # ---------------------------------------------------------------------------

@@ -11,46 +11,25 @@ import json
 
 import pytest
 import yaml
-from click.testing import CliRunner
 
 pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 from minion.cli import cli
-from minion.db import init_db, reset_db_path, register_agent_db
+from minion.db import register_agent_db
 
 
 # ---------------------------------------------------------------------------
-# DB isolation fixture
+# Auto-apply isolated_db_with_requirements from conftest to every test
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Each test gets its own .work/ dir and isolated SQLite DB."""
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    req_dir = work_dir / "requirements"
-    req_dir.mkdir(parents=True, exist_ok=True)
+def isolated_db(isolated_db_with_requirements):
+    """Delegate to conftest.isolated_db_with_requirements; autouse ensures DB isolation.
 
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    reset_db_path()
-    init_db()
-
-    monkeypatch.chdir(tmp_path)
-    yield tmp_path
-
-    reset_db_path()
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def runner():
-    return CliRunner()
+    Named 'isolated_db' so existing test signatures still resolve.
+    """
+    return isolated_db_with_requirements
 
 
 @pytest.fixture

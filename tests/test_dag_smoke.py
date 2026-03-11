@@ -24,32 +24,21 @@ import yaml
 
 pytestmark = [pytest.mark.smoke, pytest.mark.integration, pytest.mark.db]
 
-from minion.db import init_db, register_agent_db, reset_db_path
+from minion.db import register_agent_db
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Auto-apply isolated_db_with_requirements from conftest to every test
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Each test gets its own .work/ tree and isolated DB."""
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    req_dir = work_dir / "requirements"
-    req_dir.mkdir(parents=True, exist_ok=True)
+def isolated_db(isolated_db_with_requirements):
+    """Delegate to conftest.isolated_db_with_requirements; autouse ensures DB isolation.
 
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    reset_db_path()
-    init_db()
-
-    # cwd must be tmp_path so relative path resolution in minion.defaults works
-    monkeypatch.chdir(tmp_path)
-    yield tmp_path
-
-    reset_db_path()
+    Named 'isolated_db' so existing test signatures (def test_x(isolated_db)) still resolve.
+    """
+    return isolated_db_with_requirements
 
 
 # ---------------------------------------------------------------------------

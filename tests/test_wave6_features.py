@@ -159,19 +159,10 @@ def test_su21_implementation_flow_has_scaffolding_gate():
     assert plan_stage.gate == "scaffolding", f"plan stage gate should be 'scaffolding', got '{plan_stage.gate}'"
 
 
-def test_su21_scaffolding_gate_blocks_missing_files(tmp_path, monkeypatch):
+def test_su21_scaffolding_gate_blocks_missing_files(isolated_db, monkeypatch):
     """complete_phase should block scaffolding stage if listed files don't exist."""
-    from minion.db import init_db, reset_db_path
-
-    # Set up isolated DB
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True)
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
+    tmp_path = isolated_db
     monkeypatch.setenv("MINION_PROJECT_DIR", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    reset_db_path()
-    init_db()
 
     from minion.db import get_db, now_iso
     conn = get_db()
@@ -200,21 +191,11 @@ def test_su21_scaffolding_gate_blocks_missing_files(tmp_path, monkeypatch):
     assert "Scaffolding incomplete" in result["error"]
     assert "src/missing.py" in result["error"]
 
-    reset_db_path()
 
-
-def test_su21_scaffolding_gate_passes_with_files(tmp_path, monkeypatch):
+def test_su21_scaffolding_gate_passes_with_files(isolated_db, monkeypatch):
     """complete_phase should pass scaffolding stage if listed files exist."""
-    from minion.db import init_db, reset_db_path
-
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True)
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
+    tmp_path = isolated_db
     monkeypatch.setenv("MINION_PROJECT_DIR", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    reset_db_path()
-    init_db()
 
     # Create the file that the task lists
     src_dir = tmp_path / "src"
@@ -245,21 +226,11 @@ def test_su21_scaffolding_gate_passes_with_files(tmp_path, monkeypatch):
     if "error" in result:
         assert "Scaffolding incomplete" not in result["error"], f"Unexpected scaffolding block: {result}"
 
-    reset_db_path()
 
-
-def test_su21_lead_bypass_scaffolding_gate(tmp_path, monkeypatch):
+def test_su21_lead_bypass_scaffolding_gate(isolated_db, monkeypatch):
     """Lead class should bypass scaffolding gate even with missing files."""
-    from minion.db import init_db, reset_db_path
-
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True)
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
+    tmp_path = isolated_db
     monkeypatch.setenv("MINION_PROJECT_DIR", str(tmp_path))
-    monkeypatch.chdir(tmp_path)
-    reset_db_path()
-    init_db()
 
     from minion.db import get_db, now_iso
     conn = get_db()
@@ -284,8 +255,6 @@ def test_su21_lead_bypass_scaffolding_gate(tmp_path, monkeypatch):
     if "error" in result:
         assert "Scaffolding incomplete" not in result["error"], f"Lead should bypass scaffolding gate: {result}"
 
-    reset_db_path()
-
 
 # ---------------------------------------------------------------------------
 # SU-22: Dashboard Queries
@@ -305,18 +274,9 @@ def test_su22_dashboard_queries_importable():
     assert callable(get_recent_messages)
 
 
-def test_su22_dashboard_queries_run(tmp_path, monkeypatch):
+def test_su22_dashboard_queries_run(isolated_db):
     """Dashboard queries should execute without error on a fresh DB."""
-    from minion.db import init_db, reset_db_path
-
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True)
-    db_path = str(work_dir / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    monkeypatch.chdir(tmp_path)
-    reset_db_path()
-    init_db()
-
+    db_path = str(isolated_db / ".work" / "minion.db")
     from minion.db import get_db
     conn = get_db()
 
@@ -342,4 +302,3 @@ def test_su22_dashboard_queries_run(tmp_path, monkeypatch):
     assert isinstance(messages, list)
 
     conn.close()
-    reset_db_path()

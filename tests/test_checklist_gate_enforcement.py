@@ -17,9 +17,19 @@ from pathlib import Path
 
 import pytest
 
-from minion.db import init_db, reset_db_path, get_db
+from minion.db import get_db
 
 pytestmark = [pytest.mark.integration, pytest.mark.db]
+
+
+# ---------------------------------------------------------------------------
+# Auto-apply isolated_db from conftest to every test in this module
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _use_isolated_db(isolated_db):
+    """Delegate to conftest.isolated_db; autouse ensures every test gets DB isolation."""
 
 
 # ---------------------------------------------------------------------------
@@ -28,13 +38,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 def _setup(tmp_path):
-    """Create an isolated DB with a lead and a coder, plus an assigned task."""
-    work_dir = tmp_path / ".work"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    db_path = str(work_dir / "minion.db")
-    os.environ["MINION_DB_PATH"] = db_path
-    reset_db_path()
-    init_db()
+    """Set up agents and an assigned task — DB is already initialized by conftest.isolated_db."""
+    db_path = str(tmp_path / ".work" / "minion.db")
 
     now = "2026-03-10T00:00:00"
     conn = sqlite3.connect(db_path)

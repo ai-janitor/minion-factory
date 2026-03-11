@@ -94,6 +94,39 @@ def isolated_db_with_coordinator(tmp_path, monkeypatch):
     reset_db_path()
 
 
+@pytest.fixture()
+def isolated_db_with_intel(tmp_path, monkeypatch):
+    """Like isolated_db but also creates .work/intel/ directory.
+
+    Used by tests that create/search intel docs and need the intel
+    directory tree to exist.
+    """
+    work_dir = tmp_path / ".work"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    intel_dir = work_dir / "intel"
+    intel_dir.mkdir(parents=True, exist_ok=True)
+
+    db_path = str(work_dir / "minion.db")
+    monkeypatch.setenv("MINION_DB_PATH", db_path)
+    reset_db_path()
+    init_db()
+
+    monkeypatch.chdir(tmp_path)
+    yield tmp_path
+
+    reset_db_path()
+
+
+@pytest.fixture()
+def isolated_db_path(isolated_db):
+    """Return the DB file path (str) instead of the project root.
+
+    Convenience fixture for tests that need the raw sqlite3 path rather
+    than the tmp_path project root.
+    """
+    return str(isolated_db / ".work" / "minion.db")
+
+
 # ---------------------------------------------------------------------------
 # CLI runner
 # ---------------------------------------------------------------------------

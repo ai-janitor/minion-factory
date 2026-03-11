@@ -12,18 +12,9 @@ pytestmark = [pytest.mark.integration, pytest.mark.db]
 
 
 @pytest.fixture
-def fresh_db(tmp_path, monkeypatch):
-    """Set up a fresh minion DB in a temp directory."""
-    db_path = str(tmp_path / ".work" / "minion.db")
-    monkeypatch.setenv("MINION_DB_PATH", db_path)
-    # Isolate coordinator DB so tests don't hit real agent registry
-    coord_path = str(tmp_path / ".work" / "coordinator.db")
-    monkeypatch.setenv("MINION_COORDINATOR_DB_PATH", coord_path)
-
-    from minion.db.connection import reset_db_path, init_db
-    reset_db_path()
-    init_db()
-    return db_path
+def fresh_db(isolated_db_with_coordinator):
+    """Return the DB file path, using conftest.isolated_db_with_coordinator for setup."""
+    return str(isolated_db_with_coordinator / ".work" / "minion.db")
 
 
 def _register_agents(fresh_db):
