@@ -1,5 +1,10 @@
 # Napoleon Checklist — <name> [0/N-0NA]
 
+## Rules
+- Do NOT spawn workers in worktrees — workers run on main so they can edit checklists and access .work/
+- After completing each item, edit this file to mark it `[x]` and update the tally in the header `[done/total-NNA]`. The TUI parses this file.
+- Every `minion` command prefixed with `cd <project-root> &&`
+
 ## Mission
 - Mission: <mission-title>
 - Backlog items: <items>

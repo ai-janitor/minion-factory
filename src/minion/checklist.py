@@ -131,22 +131,32 @@ def get_checklist_dir(project_dir: str | Path | None = None) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def write_checklist(agent_name: str, content: str, project_dir: str | Path | None = None) -> Path:
+def write_checklist(agent_name: str, content: str, project_dir: str | Path | None = None, template_type: str | None = None) -> Path:
     """Write a checklist file for an agent.
+
+    File naming matches TUI lookup convention (_find_checklist in dashboard/render.py):
+      - template_type == "lead" → lead-<agent_name>.md
+      - everything else        → <agent_name>.md
 
     Args:
         agent_name: The agent's registered name (e.g. 'b238-w1').
         content: The full markdown content of the checklist.
         project_dir: Optional project directory override.
+        template_type: Template type used ('napoleon', 'lead', 'worker', or None).
 
     Returns:
-        Path to the written file (<project>/.work/checklists/<agent_name>.md).
+        Path to the written file.
     """
     # Ensure directory exists
     checklist_dir = get_checklist_dir(project_dir)
 
-    # Write the checklist content
-    path = checklist_dir / f"{agent_name}.md"
+    # Lead checklists use lead-<name>.md to match TUI lookup order
+    if template_type == "lead":
+        filename = f"lead-{agent_name}.md"
+    else:
+        filename = f"{agent_name}.md"
+
+    path = checklist_dir / filename
     path.write_text(content, encoding="utf-8")
 
     return path
@@ -160,8 +170,11 @@ def write_checklist(agent_name: str, content: str, project_dir: str | Path | Non
 def read_checklist(agent_name: str, project_dir: str | Path | None = None) -> str | None:
     """Read a checklist file for an agent.
 
-    Checks <project>/.work/checklists/<agent_name>.md.
-    Returns None if the file does not exist.
+    Search order matches TUI convention (_find_checklist in dashboard/render.py):
+    1. lead-<agent_name>.md  (lead checklist)
+    2. <agent_name>.md       (worker/generic checklist)
+
+    Returns None if neither file exists.
 
     Args:
         agent_name: The agent's registered name.
@@ -171,7 +184,10 @@ def read_checklist(agent_name: str, project_dir: str | Path | None = None) -> st
         The checklist content as a string, or None if not found.
     """
     checklist_dir = get_checklist_dir(project_dir)
-    path = checklist_dir / f"{agent_name}.md"
+
+    # Match TUI lookup order: lead- prefix first, then plain name
+    for filename in (f"lead-{agent_name}.md", f"{agent_name}.md"):
+        path = checklist_dir / filename
     if path.exists():
         return path.read_text(encoding="utf-8")
 

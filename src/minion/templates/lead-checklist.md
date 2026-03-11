@@ -5,6 +5,10 @@
 - Files affected: <list>
 - Acceptance criteria: <what must pass>
 
+## Rules
+- Spawn workers on main — do NOT use worktrees. Workers need access to .work/ and checklists.
+- After completing each item, edit this file to mark it `[x]` and update the tally in the header `[done/total-NNA]`. The TUI parses this file.
+
 ## Workers
 - [ ] Worker <worker-name> — items #<ids>
   - [ ] Registered (`minion agent register --name <worker-name> --class coder --model <model-id>`)

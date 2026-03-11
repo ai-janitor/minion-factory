@@ -1,7 +1,9 @@
 # Worker Checklist — <name> [0/N-0NA]
 
-## Minion Access From Worktrees
-Use `-C <project-root>` to reach the source project DB:
+## Rules
+- After completing each item, edit this file to mark it `[x]` and update the tally in the header `[done/total-NNA]`. The TUI parses this file.
+
+## Minion CLI
 ```
 minion -C <project-root> agent register --name <name> --class coder --model <model-id>
 minion -C <project-root> set-context --agent <name> --context "working on X" --hp 90
