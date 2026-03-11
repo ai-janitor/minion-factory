@@ -1,10 +1,11 @@
-"""Tests for assign_task setting agent status to 'busy'.
+"""Tests for assign_task setting agent status to 'working'.
 
-Purpose: Verify that when a task is assigned to an agent, the agent's status is updated to 'busy'.
-Rationale: Backlog #102 — the dashboard should reflect that an agent is busy after task assignment.
+Purpose: Verify that when a task is assigned to an agent, the agent's status is updated to 'working'.
+Rationale: Backlog #102 — the dashboard should reflect that an agent is working after task assignment.
+    Updated from 'busy' to 'working' per backlog #83 (formal state machine — 'busy' is not a valid state).
 Responsibility: Tests ONLY the agent-status-update side effect of assign_task. NOT responsible for
     other assign_task behaviors (those are tested elsewhere).
-Organization: One TestClass for the assign-sets-busy behavior."""
+Organization: One TestClass for the assign-sets-working behavior."""
 
 from __future__ import annotations
 
@@ -107,11 +108,11 @@ def db_path(project_dir):
 # ---------------------------------------------------------------------------
 
 
-class TestAssignTaskSetsAgentBusy:
-    """Verify that assign_task updates the assigned agent's status to 'busy'."""
+class TestAssignTaskSetsAgentWorking:
+    """Verify that assign_task updates the assigned agent's status to 'working'."""
 
-    def test_agent_status_becomes_busy_after_assign(self, db_path, monkeypatch):
-        """After assign_task succeeds, the assigned agent's status should be 'busy'."""
+    def test_agent_status_becomes_working_after_assign(self, db_path, monkeypatch):
+        """After assign_task succeeds, the assigned agent's status should be 'working'."""
         monkeypatch.chdir(db_path.replace("/.work/minion.db", ""))
         _insert_lead(db_path)
         _insert_coder(db_path, name="worker-1")
@@ -125,8 +126,8 @@ class TestAssignTaskSetsAgentBusy:
 
         assert "error" not in result
         assert result["status"] == "assigned"
-        # Core assertion: agent status is now busy
-        assert _get_agent_status(db_path, "worker-1") == "busy"
+        # Core assertion: agent status is now working (was 'busy' before backlog #83)
+        assert _get_agent_status(db_path, "worker-1") == "working"
 
     def test_lead_status_unchanged_after_assigning(self, db_path, monkeypatch):
         """The lead who assigns the task should NOT have their status changed."""

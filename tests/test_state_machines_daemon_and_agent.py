@@ -77,6 +77,38 @@ class TestAgentStatusTransitions:
     def test_retired_can_reregister(self):
         assert validate_transition(AGENT_STATUS_TRANSITIONS, "agent", "retired", "waiting for work")
 
+    def test_working_to_phoenix_down(self):
+        """Agent can go from working to phoenix_down (terminal agent context death)."""
+        assert validate_transition(AGENT_STATUS_TRANSITIONS, "agent", "working", "phoenix_down")
+
+    def test_phoenix_down_to_waiting(self):
+        """Agent can re-register from phoenix_down back to waiting for work."""
+        assert validate_transition(AGENT_STATUS_TRANSITIONS, "agent", "phoenix_down", "waiting for work")
+
+    def test_phoenix_down_to_deregistered(self):
+        """Agent can be deregistered from phoenix_down."""
+        assert validate_transition(AGENT_STATUS_TRANSITIONS, "agent", "phoenix_down", "deregistered")
+
+    def test_invalid_waiting_to_phoenix_down(self):
+        """Cannot go from waiting directly to phoenix_down — must be working first."""
+        with pytest.raises(InvalidTransition):
+            validate_transition(AGENT_STATUS_TRANSITIONS, "agent", "waiting for work", "phoenix_down")
+
+    def test_busy_is_not_valid_state(self):
+        """'busy' is not a valid agent status — use 'working' instead."""
+        # 'busy' was an old ad-hoc status in create_task.py, replaced by 'working'
+        assert "busy" not in AGENT_STATUS_TRANSITIONS
+
+    def test_all_states_have_transitions(self):
+        """Every state defined in the machine has at least an entry (even if empty set)."""
+        # Collect all states referenced as targets
+        all_targets = set()
+        for targets in AGENT_STATUS_TRANSITIONS.values():
+            all_targets.update(targets)
+        # Every target should be a defined state (except deregistered which is terminal-ish)
+        for target in all_targets:
+            assert target in AGENT_STATUS_TRANSITIONS, f"Target state '{target}' has no transition entry"
+
 
 # ── Transition helper ────────────────────────────────────────────────
 

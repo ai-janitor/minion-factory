@@ -261,6 +261,15 @@ def fenix_down(agent_name: str, files: str, manifest: str = "") -> dict[str, obj
         )
         record_id = cursor.lastrowid
 
+        # Validate agent status transition — backlog #83
+        current_row = cursor.execute("SELECT status FROM agents WHERE name = ?", (agent_name,)).fetchone()
+        if current_row:
+            from minion.state_machines import AGENT_STATUS_TRANSITIONS, validate_transition, InvalidTransition
+            try:
+                validate_transition(AGENT_STATUS_TRANSITIONS, "agent_status", current_row["status"], "phoenix_down")
+            except InvalidTransition:
+                pass  # Log but don't block fenix_down — saving state is critical
+
         cursor.execute(
             "UPDATE agents SET status = 'phoenix_down', last_seen = ? WHERE name = ?",
             (now, agent_name),

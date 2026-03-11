@@ -300,7 +300,7 @@ def _agent_display_status(row: sqlite3.Row) -> tuple[str, str]:
         display = display[:9] + "…"
     if agent_status == "ready":
         return (display, _GREEN)
-    elif agent_status == "busy":
+    elif agent_status in ("busy", "working"):
         return (display, _YELLOW)
     else:
         return (display, _DIM)

@@ -9,6 +9,20 @@ transition() functions for both daemon and agent state machines.
 Organization: Used by daemon/runner/_state.py (daemon states) and
 db/agents.py + comms/register.py (agent statuses).
 
+ASSUMPTIONS:
+- Unknown source states are ALLOWED with a pass-through (validate_transition returns
+  True). This is for backward compatibility — if a DB has a status value from a newer
+  code version, older code won't crash. This means typos in from_state silently pass
+  validation instead of raising errors.
+- DAEMON_TRANSITIONS and AGENT_STATUS_TRANSITIONS are the ONLY two state machines.
+  Both are static dicts defined at module level. If daemon or agent statuses need to
+  be configurable (e.g., per-flow or per-provider), this module must be refactored.
+- "stopped" is terminal for daemons (empty transition set). Once a daemon reaches
+  "stopped", the only way back is to spawn a new process. The state machine does not
+  model process restart — that's handled by crew/lifecycle.py.
+- "deregistered" can transition to "waiting for work" to support re-registration.
+  This means deregistration is not permanent — the same agent name can be reused.
+
 Pseudo-logic:
   State machine = dict[str, set[str]] mapping current_state -> valid_next_states.
   validate_transition(machine, from_state, to_state):
@@ -62,9 +76,10 @@ DAEMON_TRANSITIONS: dict[str, set[str]] = {
 
 AGENT_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "waiting for work":  {"working", "stood_down", "retired", "deregistered"},
-    "working":           {"waiting for work", "stood_down", "retired", "deregistered", "error"},
+    "working":           {"waiting for work", "stood_down", "retired", "deregistered", "error", "phoenix_down"},
     "stood_down":        {"waiting for work", "working", "retired", "deregistered"},
     "error":             {"waiting for work", "working", "retired", "deregistered"},
+    "phoenix_down":      {"waiting for work", "deregistered"},  # Terminal agent saved state, can re-register
     "retired":           {"deregistered", "waiting for work"},  # Can re-register
     "deregistered":      {"waiting for work"},  # Can re-register from scratch
 }

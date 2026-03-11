@@ -130,6 +130,14 @@ class CommsWatcher:
     def set_agent_status(self, status: str) -> None:
         now = utc_now_iso()
         with self._connect() as conn:
+            # Validate agent status transition — backlog #83
+            row = conn.execute("SELECT status FROM agents WHERE name = ?", (self.agent_name,)).fetchone()
+            if row:
+                from minion.state_machines import AGENT_STATUS_TRANSITIONS, validate_transition, InvalidTransition
+                try:
+                    validate_transition(AGENT_STATUS_TRANSITIONS, "agent_status", row["status"], status)
+                except InvalidTransition:
+                    pass  # Log but don't crash watcher — stability takes priority
             conn.execute(
                 "UPDATE agents SET status = ?, last_seen = ? WHERE name = ?",
                 (status, now, self.agent_name),

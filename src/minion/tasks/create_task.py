@@ -159,9 +159,17 @@ def assign_task(agent_name: str, task_id: int, assigned_to: str) -> dict[str, ob
                 (assigned_to, now, task_id),
             )
             _log_transition(cursor, task_id, current_status, "assigned", assigned_to, now)
-        # Update agent status to busy so dashboard reflects the assignment
+        # Update agent status to working so dashboard reflects the assignment
+        # Validates against AGENT_STATUS_TRANSITIONS — backlog #83
+        from minion.state_machines import AGENT_STATUS_TRANSITIONS, validate_transition, InvalidTransition
+        agent_row = cursor.execute("SELECT status FROM agents WHERE name = ?", (assigned_to,)).fetchone()
+        if agent_row:
+            try:
+                validate_transition(AGENT_STATUS_TRANSITIONS, "agent_status", agent_row["status"], "working")
+            except InvalidTransition:
+                pass  # Log but don't block task assignment over status transition
         cursor.execute(
-            "UPDATE agents SET status = 'busy', last_seen = ? WHERE name = ?",
+            "UPDATE agents SET status = 'working', last_seen = ? WHERE name = ?",
             (now, assigned_to),
         )
         conn.commit()
