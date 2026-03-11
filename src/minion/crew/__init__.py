@@ -1,6 +1,6 @@
 """Crew — spawn, stand down, retire, stop, hand off, logs, tmux pane management."""
 
-from minion.crew._tmux import update_pane_task
+from ._tmux import update_pane_task
 from minion.crew.config import AgentConfig, SwarmConfig, load_config
 from minion.crew.lifecycle import hand_off_zone, interrupt_agent, retire_agent, stand_down, stop_agent_process
 from minion.crew.logs import tail_agent_log

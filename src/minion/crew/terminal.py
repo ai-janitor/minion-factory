@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from minion.crew._tmux import open_terminal_with_command
+from ._tmux import open_terminal_with_command
 
 
 def spawn_terminal(

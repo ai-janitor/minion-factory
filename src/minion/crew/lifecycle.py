@@ -18,7 +18,7 @@ from minion.comms import deregister
 from minion.db import get_db, now_iso
 
 log = logging.getLogger(__name__)
-from minion.crew._tmux import close_terminal_by_title, kill_all_crews, kill_tmux_pane_by_title
+from ._tmux import close_terminal_by_title, kill_all_crews, kill_tmux_pane_by_title
 from minion.defaults import resolve_swarm_runtime_dir
 
 

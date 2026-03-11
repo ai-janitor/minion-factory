@@ -15,7 +15,7 @@ import yaml
 
 from minion.auth import VALID_CAPABILITIES, VALID_CLASSES
 from minion.comms import register as _register
-from minion.crew._tmux import finalize_layout, style_pane
+from ._tmux import finalize_layout, style_pane
 from minion.crew.daemon import init_swarm, spawn_pane, start_swarm
 from minion.crew.spawn import _find_crew_file
 

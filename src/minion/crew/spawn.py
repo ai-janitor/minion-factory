@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 from minion.auth import VALID_CLASSES
 from minion.db import get_db, reset_db_path
 from minion.defaults import ENV_DB_PATH
-from minion.crew._tmux import (
+from ._tmux import (
     finalize_layout,
     kill_all_crews,
     style_pane,
