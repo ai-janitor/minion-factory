@@ -115,14 +115,41 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--agent", "-a", required=True, help="Agent performing the promotion (must be lead class)")
     @click.option("--id", "-i", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
     @click.option("--origin", "-o", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
-    @click.option("--slug", "-s", default=None, help="Override the auto-derived requirement slug")
+    @click.option("--slug", "-s", default=None, help="Override the auto-derived requirement slug (single promote)")
     @click.option("--flow", "-f", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
                   help="Lifecycle flow: 'requirement' (full 9-stage, default) or 'requirement-lite' (4-stage shortcut)")
+    @click.option("--count", "-n", default=1, type=int,
+                  help="Number of requirements to create (default 1). A complex backlog item may decompose into N independent requirements.")
+    @click.option("--slugs", default=None,
+                  help="Comma-separated list of N slug names. MANDATORY when --count > 1. Example: --slugs 'auth-api,auth-ui,auth-tests'")
     @click.pass_context
-    def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str) -> None:
-        """Promote a backlog item into the requirement pipeline. Requires lead class."""
+    def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str, count: int, slugs: str | None) -> None:
+        """Promote a backlog item into the requirement pipeline.
+
+        Creates one or more requirements from a single backlog item. By default,
+        creates exactly 1 requirement (existing behavior). Use --count N with
+        --slugs to decompose a complex backlog item into N independent requirements.
+
+        A backlog item that has already been promoted can be re-promoted with --count
+        to add additional requirements (the 'already promoted' guard is lifted for
+        multi-promote).
+
+        Requires lead class.
+        """
         if not path and not item_id:
             _echo_error({"error": "Provide a path argument or --id <N>."}, exit_code=2)
+        # Validate --count / --slugs consistency
+        if count < 1:
+            _echo_error({"error": "--count must be >= 1."}, exit_code=2)
+        if count > 1 and not slugs:
+            _echo_error({"error": "--slugs is required when --count > 1. Provide comma-separated slug names."}, exit_code=2)
+        if slugs and count == 1:
+            _echo_error({"error": "--slugs requires --count > 1. For a single promote, use --slug instead."}, exit_code=2)
+        slug_list: list[str] | None = None
+        if slugs:
+            slug_list = [s.strip() for s in slugs.split(",") if s.strip()]
+            if len(slug_list) != count:
+                _echo_error({"error": f"--slugs has {len(slug_list)} items but --count is {count}. They must match."}, exit_code=2)
         if item_id and not path:
             from minion.backlog import get_item as _get_item
             item = _get_item(item_id=item_id)
@@ -131,7 +158,8 @@ def register_commands(cli: click.Group) -> None:
             path = item["file_path"]
         from minion.backlog import promote as _promote
         try:
-            result = _promote(path, origin, slug=slug, flow=flow, agent_name=agent)
+            result = _promote(path, origin, slug=slug, flow=flow, agent_name=agent,
+                              count=count, slugs=slug_list)
         except ValueError as e:
             _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))

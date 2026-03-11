@@ -75,6 +75,71 @@ def _scan_crew_characters(needed_classes: set[str]) -> list[dict[str, str]]:
     return characters
 
 
+def _promote_single(
+    file_path: str,
+    origin: str,
+    slug: str,
+    flow: str,
+    agent_name: str,
+    agent_class: str,
+    backlog_id: int,
+    backlog_type: str,
+    backlog_title: str,
+    backlog_readme: str,
+    req_root: str,
+    cursor: Any,
+    prev_status: str,
+) -> dict[str, Any]:
+    """Create a single requirement from a backlog item. Internal helper.
+
+    Purpose: Encapsulate the per-requirement creation logic so it can be called
+    once (count=1) or N times (count>1) without duplicating code.
+    Returns the per-requirement result dict.
+    """
+    req_folder_name = f"{origin}s"  # bugs/ or features/
+    req_rel_path = f"{req_folder_name}/{slug}"
+    req_abs_path = os.path.join(req_root, req_folder_name, slug)
+
+    # --- Guard: requirement folder must not already exist ---
+    if os.path.exists(req_abs_path):
+        raise ValueError(
+            f"Requirement folder already exists at '{req_abs_path}'. Cannot overwrite."
+        )
+
+    # --- Create the requirement folder and copy README ---
+    os.makedirs(req_abs_path, exist_ok=False)
+    if os.path.exists(backlog_readme):
+        shutil.copy2(backlog_readme, os.path.join(req_abs_path, "README.md"))
+
+    # --- Register requirement in DB ---
+    reg_result = register(file_path=req_rel_path, created_by="backlog-promote", flow_type=flow)
+    if "error" in reg_result:
+        # Rollback: remove the folder we just created
+        shutil.rmtree(req_abs_path, ignore_errors=True)
+        raise RuntimeError(f"Failed to register requirement: {reg_result['error']}")
+
+    # --- SU-07: Ensure requirement_id propagates for lineage tracking ---
+    requirement_id = reg_result.get("id") or reg_result.get("requirement_id")
+    if requirement_id is None:
+        fallback_conn = get_db()
+        try:
+            fallback_row = fallback_conn.execute(
+                "SELECT id FROM requirements WHERE file_path = ? ORDER BY id DESC LIMIT 1",
+                (req_rel_path,),
+            ).fetchone()
+            if fallback_row:
+                requirement_id = fallback_row["id"]
+        finally:
+            fallback_conn.close()
+
+    return {
+        "requirement_id": requirement_id,
+        "file_path": req_rel_path,
+        "abs_path": req_abs_path,
+        "registration": reg_result,
+    }
+
+
 def promote(
     file_path: str,
     origin: str | None = None,
@@ -82,26 +147,30 @@ def promote(
     slug: str | None = None,
     flow: str = "requirement",
     agent_name: str | None = None,
+    count: int = 1,
+    slugs: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Promote an open backlog item to a requirement.
+    """Promote an open backlog item to one or more requirements.
 
     file_path is relative to .work/backlog/ (e.g. 'bugs/preview-final-word-loss').
     flow selects the requirement lifecycle DAG — 'requirement' (default, 9 stages)
-    or 'requirement-lite' (4 stages: seed → decomposing → tasked → completed).
+    or 'requirement-lite' (4 stages: seed -> decomposing -> tasked -> completed).
     agent_name is required — only lead class agents can promote.
+
+    When count=1 (default): creates exactly 1 requirement (existing behavior).
+    When count>1: creates N requirements, one per slug in the slugs list.
+    The promoted_to field stores a comma-separated list of requirement paths.
+    Items already promoted can be re-promoted with count>1 to add more requirements.
 
     Steps:
     1. Auth gate: verify agent exists and is lead class.
-    2. Verify backlog item exists and status=open.
+    2. Verify backlog item exists and status is open (or promoted when count>1).
     3. Infer origin (bug|feature) from backlog type if not provided.
-    4. Determine requirement target path: {origin}s/{slug} under .work/requirements/.
-    5. Create the requirement folder.
-    6. Copy the backlog README.md into the requirement folder.
-    7. Register the requirement in the DB with the selected flow_type.
-    8. Update backlog row: status=promoted, promoted_to=requirement_path, updated_at.
-    9. Append to the backlog README.md Outcome section.
-    10. Inject class duties reminder from _agent-classes.yaml.
-    11. Return summary dict.
+    4. For each slug: create requirement folder, copy README, register in DB.
+    5. Update backlog row: status=promoted, promoted_to=comma-separated paths.
+    6. Append to the backlog README.md Outcome section.
+    7. Inject class duties reminder from _agent-classes.yaml.
+    8. Return summary dict with all created requirements.
     """
     # --- Auth gate: only lead class can promote ---
     if not agent_name:
@@ -135,7 +204,7 @@ def promote(
     finally:
         conn.close()
 
-    # --- Verify backlog item exists and is open ---
+    # --- Verify backlog item exists and check status ---
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -148,15 +217,19 @@ def promote(
             raise ValueError(f"Backlog item '{file_path}' not found.")
 
         status = row["status"]
-        if status == "promoted":
+        existing_promoted_to = row["promoted_to"] or ""
+
+        # Status gate: allow re-promotion (status=promoted) when count>1
+        if status == "promoted" and count <= 1:
             raise ValueError(
-                f"Backlog item '{file_path}' is already promoted to '{row['promoted_to']}'."
+                f"Backlog item '{file_path}' is already promoted to '{row['promoted_to']}'. "
+                f"Use --count N --slugs to add more requirements."
             )
         if status in ("killed", "deferred"):
             raise ValueError(
                 f"Backlog item '{file_path}' has status '{status}' and cannot be promoted."
             )
-        if status != "open":
+        if status not in ("open", "promoted"):
             raise ValueError(
                 f"Backlog item '{file_path}' has unexpected status '{status}'. Expected 'open'."
             )
@@ -168,54 +241,69 @@ def promote(
         if origin is None:
             origin = "bug" if backlog_type in _BUG_TYPES else "feature"
 
-        # --- Determine requirement target path ---
-        # Use explicit slug override, otherwise derive from file_path
-        slug = slug or file_path.split("/")[-1]
-        req_folder_name = f"{origin}s"  # bugs/ or features/
-        req_rel_path = f"{req_folder_name}/{slug}"
+        # --- Build the list of slugs to create ---
+        if count == 1:
+            # Single promote: existing behavior
+            effective_slugs = [slug or file_path.split("/")[-1]]
+        else:
+            # Multi promote: slugs list is mandatory (validated by CLI)
+            if not slugs or len(slugs) != count:
+                raise ValueError(f"--slugs must provide exactly {count} slug names.")
+            effective_slugs = slugs
 
-        req_abs_path = os.path.join(req_root, req_folder_name, slug)
-
-        # --- Guard: requirement folder must not already exist ---
-        if os.path.exists(req_abs_path):
-            raise ValueError(
-                f"Requirement folder already exists at '{req_abs_path}'. Cannot overwrite."
+        # --- Create each requirement ---
+        created_requirements: list[dict[str, Any]] = []
+        created_paths: list[str] = []
+        for s in effective_slugs:
+            req_info = _promote_single(
+                file_path=file_path,
+                origin=origin,
+                slug=s,
+                flow=flow,
+                agent_name=agent_name,
+                agent_class=agent_class,
+                backlog_id=backlog_id,
+                backlog_type=backlog_type,
+                backlog_title=row["title"],
+                backlog_readme=backlog_readme,
+                req_root=req_root,
+                cursor=cursor,
+                prev_status=status,
             )
-
-        # --- Create the requirement folder and copy README ---
-        os.makedirs(req_abs_path, exist_ok=False)
-        if os.path.exists(backlog_readme):
-            shutil.copy2(backlog_readme, os.path.join(req_abs_path, "README.md"))
-
-        # --- Register requirement in DB ---
-        reg_result = register(file_path=req_rel_path, created_by="backlog-promote", flow_type=flow)
-        if "error" in reg_result:
-            # Rollback: remove the folder we just created
-            shutil.rmtree(req_abs_path, ignore_errors=True)
-            raise RuntimeError(f"Failed to register requirement: {reg_result['error']}")
+            created_requirements.append(req_info)
+            created_paths.append(req_info["file_path"])
 
         # --- Update backlog row ---
+        # Merge new paths with any existing promoted_to paths
+        all_paths = []
+        if existing_promoted_to:
+            all_paths = [p.strip() for p in existing_promoted_to.split(",") if p.strip()]
+        all_paths.extend(created_paths)
+        promoted_to_value = ",".join(all_paths)
+
         now = now_iso()
         cursor.execute(
             "UPDATE backlog SET status = 'promoted', promoted_to = ?, promoted_by = ?, updated_at = ? WHERE id = ?",
-            (req_rel_path, agent_name, now, backlog_id),
+            (promoted_to_value, agent_name, now, backlog_id),
         )
 
         # Log promotion to transition_log for lineage tracking
+        from_status = status if status != "promoted" else "promoted"
         cursor.execute(
             "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) "
-            "VALUES (?, 'backlog', 'open', 'promoted', ?, ?)",
-            (backlog_id, agent_name, now),
+            "VALUES (?, 'backlog', ?, 'promoted', ?, ?)",
+            (backlog_id, from_status, agent_name, now),
         )
 
         conn.commit()
 
         # --- Append to backlog README Outcome section ---
         date_str = now[:10]  # YYYY-MM-DD
-        outcome_line = f"Promoted to requirement: {req_rel_path} on {date_str}\n"
-        if os.path.exists(backlog_readme):
-            with open(backlog_readme, "a") as f:
-                f.write(f"\n{outcome_line}")
+        for cp in created_paths:
+            outcome_line = f"Promoted to requirement: {cp} on {date_str}\n"
+            if os.path.exists(backlog_readme):
+                with open(backlog_readme, "a") as f:
+                    f.write(f"\n{outcome_line}")
 
         # Build DAG stage guide for the assigned flow
         dag_guide = ""
@@ -223,7 +311,7 @@ def promote(
             from minion.tasks.loader import load_flow
             flow_obj = load_flow(flow)
             stages = [s.name for s in flow_obj.stages]
-            dag_guide = " → ".join(stages)
+            dag_guide = " -> ".join(stages)
         except (ImportError, FileNotFoundError, ValueError, AttributeError):
             dag_guide = f"(flow '{flow}' — run `minion flow show {flow}` for stages)"
 
@@ -255,39 +343,53 @@ def promote(
         except (ImportError, OSError):
             pass
 
-        # --- SU-07: Ensure requirement_id propagates for lineage tracking ---
-        requirement_id = reg_result.get("id") or reg_result.get("requirement_id")
-        if requirement_id is None:
-            # Fallback: query DB for the requirement we just registered
-            fallback_conn = get_db()
-            try:
-                fallback_row = fallback_conn.execute(
-                    "SELECT id FROM requirements WHERE file_path = ? ORDER BY id DESC LIMIT 1",
-                    (req_rel_path,),
-                ).fetchone()
-                if fallback_row:
-                    requirement_id = fallback_row["id"]
-            finally:
-                fallback_conn.close()
-
-        result: dict[str, Any] = {
-            "status": "promoted",
-            "requirement_id": requirement_id,
-            "backlog": {
-                "id": backlog_id,
-                "file_path": file_path,
-                "type": backlog_type,
-                "title": row["title"],
-                "promoted_to": req_rel_path,
-            },
-            "requirement": reg_result,
-            "next_steps": (
-                f"Follow the DAG: {dag_guide}. "
-                f"Check status: minion req status --path {req_rel_path}. "
-                f"Advance stage: minion req update --path {req_rel_path} --stage <next>. "
-                f"Decompose: minion req decompose --path {req_rel_path} --by <agent> --inline '<yaml>'"
-            ),
-        }
+        # --- Build result ---
+        if count == 1:
+            # Single promote: backward-compatible result shape
+            req_info = created_requirements[0]
+            result: dict[str, Any] = {
+                "status": "promoted",
+                "requirement_id": req_info["requirement_id"],
+                "backlog": {
+                    "id": backlog_id,
+                    "file_path": file_path,
+                    "type": backlog_type,
+                    "title": row["title"],
+                    "promoted_to": promoted_to_value,
+                },
+                "requirement": req_info["registration"],
+                "next_steps": (
+                    f"Follow the DAG: {dag_guide}. "
+                    f"Check status: minion req status --path {req_info['file_path']}. "
+                    f"Advance stage: minion req update --path {req_info['file_path']} --stage <next>. "
+                    f"Decompose: minion req decompose --path {req_info['file_path']} --by <agent> --inline '<yaml>'"
+                ),
+            }
+        else:
+            # Multi promote: return list of created requirements
+            result = {
+                "status": "promoted",
+                "count": count,
+                "backlog": {
+                    "id": backlog_id,
+                    "file_path": file_path,
+                    "type": backlog_type,
+                    "title": row["title"],
+                    "promoted_to": promoted_to_value,
+                },
+                "requirements": [
+                    {
+                        "requirement_id": r["requirement_id"],
+                        "file_path": r["file_path"],
+                        "registration": r["registration"],
+                    }
+                    for r in created_requirements
+                ],
+                "next_steps": (
+                    f"Follow the DAG: {dag_guide}. "
+                    f"Created {count} requirements: {', '.join(created_paths)}."
+                ),
+            }
         if duties_text:
             result["duties_reminder"] = duties_text
         if required_crew:

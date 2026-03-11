@@ -897,3 +897,185 @@ class TestBacklogCLI:
         slug = item_path.split("/")[-1]
         req_folder = project_dir / ".work" / "requirements" / "bugs" / slug
         assert req_folder.is_dir()
+
+
+# ---------------------------------------------------------------------------
+# Multi-promote tests — --count N and --slugs
+# ---------------------------------------------------------------------------
+
+
+class TestMultiPromote:
+    """Tests for multi-requirement promote with --count and --slugs flags."""
+
+    def test_multi_promote_creates_n_requirements(self, runner, project_dir, db_path):
+        """Promote with --count 3 and 3 slugs creates 3 requirement folders and DB rows."""
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Big Feature")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/big-feature",
+            "--count", "3", "--slugs", "auth-api,auth-ui,auth-tests",
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["status"] == "promoted"
+        assert data["count"] == 3
+        assert len(data["requirements"]) == 3
+
+        # Verify all 3 requirement folders exist
+        for slug in ("auth-api", "auth-ui", "auth-tests"):
+            req_folder = project_dir / ".work" / "requirements" / "features" / slug
+            assert req_folder.is_dir(), f"Missing folder for slug '{slug}'"
+
+        # Verify all 3 requirements registered in DB
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        for slug in ("auth-api", "auth-ui", "auth-tests"):
+            row = conn.execute(
+                "SELECT * FROM requirements WHERE file_path = ?", (f"features/{slug}",)
+            ).fetchone()
+            assert row is not None, f"Missing DB row for features/{slug}"
+        conn.close()
+
+        # Verify promoted_to is comma-separated
+        assert "features/auth-api" in data["backlog"]["promoted_to"]
+        assert "features/auth-ui" in data["backlog"]["promoted_to"]
+        assert "features/auth-tests" in data["backlog"]["promoted_to"]
+
+    def test_multi_promote_slugs_count_mismatch_error(self, runner, project_dir):
+        """--count 2 but 3 slugs -> error."""
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Mismatch")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/mismatch",
+            "--count", "2", "--slugs", "a,b,c",
+        )
+        assert res.exit_code != 0
+        data = _parse_json(res.output)
+        assert "3 items" in data["error"] or "must match" in data["error"]
+
+    def test_multi_promote_slugs_required_when_count_gt_1(self, runner, project_dir):
+        """--count 2 but no --slugs -> error."""
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "No Slugs")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/no-slugs",
+            "--count", "2",
+        )
+        assert res.exit_code != 0
+        data = _parse_json(res.output)
+        assert "slugs" in data["error"].lower()
+
+    def test_slugs_without_count_errors(self, runner, project_dir):
+        """--slugs without --count > 1 is an error."""
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Bad Combo")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/bad-combo",
+            "--slugs", "a,b",
+        )
+        assert res.exit_code != 0
+        data = _parse_json(res.output)
+        assert "count" in data["error"].lower()
+
+    def test_re_promote_allowed_for_multi(self, runner, project_dir, db_path):
+        """First promote (count=1), then re-promote (count=2) on same item succeeds."""
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Expandable")
+        # First promote: single
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/expandable",
+        )
+        assert res.exit_code == 0, res.output
+
+        # Second promote: multi — should succeed (re-promote)
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/expandable",
+            "--count", "2", "--slugs", "expand-part-a,expand-part-b",
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["status"] == "promoted"
+        assert data["count"] == 2
+
+        # Verify promoted_to now has all 3 paths (original + 2 new)
+        promoted_to = data["backlog"]["promoted_to"]
+        paths = [p.strip() for p in promoted_to.split(",")]
+        assert len(paths) == 3
+        assert "features/expandable" in paths
+        assert "features/expand-part-a" in paths
+        assert "features/expand-part-b" in paths
+
+    def test_double_promote_single_still_blocked(self, runner, project_dir):
+        """Single promote on already-promoted item (no --count) still blocked."""
+        _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Double Block")
+        _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/double-block")
+        res = _run(runner, project_dir, "backlog", "promote", "--agent", "test-lead", "bugs/double-block")
+        assert res.exit_code == 1
+        data = _parse_json(res.output)
+        assert "already promoted" in data["error"]
+
+    def test_close_guard_multi_requirement(self, runner, project_dir, db_path):
+        """Close guard checks ALL linked requirements when promoted_to is comma-separated."""
+        # Create and multi-promote
+        _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Guard Test")
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead", "ideas/guard-test",
+            "--count", "2", "--slugs", "guard-a,guard-b",
+        )
+        assert res.exit_code == 0, res.output
+
+        # Add tasks table (needed for close guard check) — must match real schema
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                task_file TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                created_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                requirement_id INTEGER
+            )
+        """)
+
+        # Find the requirement IDs
+        row_a = conn.execute("SELECT id FROM requirements WHERE file_path = 'features/guard-a'").fetchone()
+        row_b = conn.execute("SELECT id FROM requirements WHERE file_path = 'features/guard-b'").fetchone()
+        assert row_a and row_b
+
+        # Create an open task on requirement A
+        conn.execute(
+            "INSERT INTO tasks (title, task_file, status, created_by, created_at, updated_at, requirement_id) "
+            "VALUES (?, 'dummy.md', 'open', 'test', datetime('now'), datetime('now'), ?)",
+            ("Task on A", row_a[0]),
+        )
+        conn.commit()
+        conn.close()
+
+        # Try to close — should be blocked because of open task on req A
+        res = _run(
+            runner, project_dir,
+            "backlog", "update", "ideas/guard-test", "--status", "closed",
+        )
+        assert res.exit_code == 0  # CLI succeeds but returns error in JSON
+        data = _parse_json(res.output)
+        assert "error" in data
+        assert "Cannot close" in data["error"]
+
+        # Close the task on A
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE tasks SET status = 'closed' WHERE title = 'Task on A'")
+        conn.commit()
+        conn.close()
+
+        # Now close should succeed
+        res = _run(
+            runner, project_dir,
+            "backlog", "update", "ideas/guard-test", "--status", "closed",
+        )
+        assert res.exit_code == 0
+        data = _parse_json(res.output)
+        assert data.get("status") == "closed"

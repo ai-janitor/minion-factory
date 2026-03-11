@@ -46,26 +46,36 @@ def _check_open_tasks_before_close(
         if not promoted_to:
             return None  # not promoted — no linked requirement, safe to close
 
-        # Find the requirement by file_path
-        req_row = conn.execute(
-            "SELECT id FROM requirements WHERE file_path = ?", (promoted_to,)
-        ).fetchone()
-        if not req_row:
-            return None  # requirement not found — safe to close
+        # promoted_to may be comma-separated (multi-promote: "features/a,features/b")
+        req_paths = [p.strip() for p in promoted_to.split(",") if p.strip()]
 
-        req_id = req_row["id"]
+        all_open_tasks = []
+        for req_path in req_paths:
+            # Find the requirement by file_path
+            req_row = conn.execute(
+                "SELECT id FROM requirements WHERE file_path = ?", (req_path,)
+            ).fetchone()
+            if not req_row:
+                continue  # requirement not found — skip (may have been deleted)
 
-        # Check for open or assigned tasks linked to this requirement
-        open_tasks = conn.execute(
-            "SELECT id, title, status FROM tasks WHERE requirement_id = ? AND status IN ('open', 'assigned', 'in_progress')",
-            (req_id,),
-        ).fetchall()
+            req_id = req_row["id"]
 
-        if open_tasks:
-            task_list = ", ".join(f"#{t['id']} ({t['status']})" for t in open_tasks)
+            # Check for open or assigned tasks linked to this requirement
+            open_tasks = conn.execute(
+                "SELECT id, title, status FROM tasks WHERE requirement_id = ? AND status IN ('open', 'assigned', 'in_progress')",
+                (req_id,),
+            ).fetchall()
+
+            for t in open_tasks:
+                all_open_tasks.append((req_id, t))
+
+        if all_open_tasks:
+            task_list = ", ".join(
+                f"#{t['id']} ({t['status']}, req #{rid})" for rid, t in all_open_tasks
+            )
             return {
-                "error": f"Cannot close backlog item — {len(open_tasks)} open/in-progress task(s) "
-                         f"linked to requirement #{req_id}: {task_list}. "
+                "error": f"Cannot close backlog item — {len(all_open_tasks)} open/in-progress task(s) "
+                         f"linked to {len(req_paths)} requirement(s): {task_list}. "
                          f"Close or reassign these tasks first."
             }
         return None
