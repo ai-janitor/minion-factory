@@ -4,18 +4,50 @@ Purpose: Codex module.
 Rationale: Extracted into own module for single-responsibility provider configuration.
 Responsibility: Codex. NOT responsible for unrelated concerns.
 Organization: Standalone functions and/or a single class. See source.
+F-051: _classify_error delegates to shared classify_provider_error() with Codex config.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 from typing import List, Optional
 
+from ._shared_error_classifier import ProviderErrorConfig, classify_provider_error
 from .cli_provider_protocol import BaseProvider
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# F-051: Codex-specific error config — declarative, not procedural
+# ---------------------------------------------------------------------------
+
+
+def _codex_json_extractor(data: dict) -> Optional[str]:
+    """Extract error summary from Codex's JSON error structure.
+
+    Codex errors have: {"error": str|dict, "message": str} at top level.
+    """
+    err_msg = data.get("error") or data.get("message") or ""
+    if isinstance(err_msg, str) and err_msg:
+        return f"CODEX_ERROR — {err_msg[:120]}"
+    if isinstance(err_msg, dict):
+        return f"CODEX_ERROR — {err_msg.get('message', '')[:120]}"
+    return None
+
+
+_CODEX_ERROR_CONFIG = ProviderErrorConfig(
+    prefix="CODEX_ERROR",
+    json_extractor=_codex_json_extractor,
+    regex_patterns=[
+        # Pattern: "capacity exhausted", "rate limit", "overloaded" in raw text
+        (
+            re.compile(r'(capacity\s+exhausted|rate\s*limit|overloaded)', re.IGNORECASE),
+            lambda m: f"CODEX_ERROR — {m.group(1)}",
+        ),
+    ],
+)
 
 
 class CodexProvider(BaseProvider):
@@ -57,25 +89,10 @@ class CodexProvider(BaseProvider):
     def _classify_error(self, line: str) -> Optional[str]:
         """Extract short error summary from Codex verbose output.
 
-        Codex-specific patterns: JSON error/message fields, capacity exhausted,
-        rate limit. Falls back to base _extract_error_summary for generic cases.
+        F-051: Delegates to shared classify_provider_error() with Codex-specific
+        config (JSON extractor for error/message fields, regex fallback for
+        capacity/rate-limit patterns). Falls back to generic extract_error_summary.
         """
-        try:
-            data = json.loads(line)
-            if isinstance(data, dict):
-                err_msg = data.get("error") or data.get("message") or ""
-                if isinstance(err_msg, str) and err_msg:
-                    return f"CODEX_ERROR — {err_msg[:120]}"
-                if isinstance(err_msg, dict):
-                    return f"CODEX_ERROR — {err_msg.get('message', '')[:120]}"
-        except (json.JSONDecodeError, TypeError, AttributeError):
-            pass
-
-        # Pattern: "capacity exhausted", "rate limit", etc.
-        m = re.search(r'(capacity\s+exhausted|rate\s*limit|overloaded)', line, re.IGNORECASE)
-        if m:
-            return f"CODEX_ERROR — {m.group(1)}"
-
-        return self._extract_error_summary(line)
+        return classify_provider_error(line, _CODEX_ERROR_CONFIG)
 
     # _append_error_log inherited from BaseProvider

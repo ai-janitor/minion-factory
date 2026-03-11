@@ -2,11 +2,14 @@
 
 Purpose: Verify _append_error_log writes timestamped entries, _extract_error_summary
          classifies long lines, and filter_log_line integrates both correctly.
+         F-051: Also tests classify_provider_error() shared pattern and provider configs.
 Rationale: Error classification prevents tmux panes from flooding with multi-KB
            JSON blobs. If classification breaks, operators lose visibility.
 Responsibility: Test _append_error_log, _extract_error_summary, _classify_error,
-                filter_log_line. NOT responsible for build_command or session management.
-Organization: Grouped by method — error log I/O, summary extraction, filter integration.
+                filter_log_line, classify_provider_error, Gemini/Codex configs.
+                NOT responsible for build_command or session management.
+Organization: Grouped by method — error log I/O, summary extraction, filter integration,
+              shared classifier, provider-specific configs.
 """
 
 from __future__ import annotations
@@ -205,3 +208,165 @@ def test_classify_error_delegates_to_extract_summary():
     # Long line — should return a summary
     result = p.provider._classify_error("y" * 600)
     assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# F-051: classify_provider_error — shared 3-phase pattern
+# ---------------------------------------------------------------------------
+
+
+def test_classify_provider_error_short_line_returns_none():
+    """Short lines bypass all classification phases."""
+    from minion.providers._shared_error_classifier import (
+        ProviderErrorConfig,
+        classify_provider_error,
+    )
+
+    config = ProviderErrorConfig(prefix="TEST")
+    result = classify_provider_error("short", config)
+    assert result is None
+
+
+def test_classify_provider_error_json_phase():
+    """Phase 1: JSON extractor fires when line is valid JSON."""
+    from minion.providers._shared_error_classifier import (
+        ProviderErrorConfig,
+        classify_provider_error,
+    )
+
+    def extractor(data: dict):
+        if "err" in data:
+            return f"GOT_IT: {data['err']}"
+        return None
+
+    config = ProviderErrorConfig(prefix="TEST", json_extractor=extractor)
+    payload = json.dumps({"err": "boom", "pad": "x" * 600})
+    result = classify_provider_error(payload, config)
+    assert result == "GOT_IT: boom"
+
+
+def test_classify_provider_error_regex_phase():
+    """Phase 2: Regex patterns fire when JSON parse fails."""
+    import re as _re
+
+    from minion.providers._shared_error_classifier import (
+        ProviderErrorConfig,
+        classify_provider_error,
+    )
+
+    config = ProviderErrorConfig(
+        prefix="TEST",
+        regex_patterns=[
+            (_re.compile(r"FATAL_(\w+)"), lambda m: f"CAUGHT: {m.group(1)}"),
+        ],
+    )
+    line = "FATAL_CRASH " + "x" * 600
+    result = classify_provider_error(line, config)
+    assert result == "CAUGHT: CRASH"
+
+
+def test_classify_provider_error_fallback_phase():
+    """Phase 3: Falls back to extract_error_summary when no phases match."""
+    from minion.providers._shared_error_classifier import (
+        ProviderErrorConfig,
+        classify_provider_error,
+    )
+
+    config = ProviderErrorConfig(prefix="TEST")
+    line = "a" * 600
+    result = classify_provider_error(line, config)
+    assert result is not None
+    assert "Large output" in result
+
+
+# ---------------------------------------------------------------------------
+# F-051: Gemini _classify_error via shared pattern
+# ---------------------------------------------------------------------------
+
+
+def test_gemini_classify_error_json():
+    """GeminiProvider._classify_error extracts from JSON error structure."""
+    from minion.providers.gemini import GeminiProvider
+
+    provider = GeminiProvider(
+        agent_name="gem-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    payload = json.dumps({
+        "error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"},
+        "padding": "x" * 600,
+    })
+    result = provider._classify_error(payload)
+    assert result is not None
+    assert "RESOURCE_EXHAUSTED" in result
+    assert "429" in result
+
+
+def test_gemini_classify_error_regex_fallback():
+    """GeminiProvider._classify_error handles raw text with code pattern."""
+    from minion.providers.gemini import GeminiProvider
+
+    provider = GeminiProvider(
+        agent_name="gem-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    line = '"code": 503, "status": "UNAVAILABLE", "message": "Service down" ' + "x" * 600
+    result = provider._classify_error(line)
+    assert result is not None
+    assert "503" in result
+
+
+def test_gemini_classify_error_short_returns_none():
+    """GeminiProvider._classify_error returns None for short lines."""
+    from minion.providers.gemini import GeminiProvider
+
+    provider = GeminiProvider(
+        agent_name="gem-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    result = provider._classify_error("short line")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# F-051: Codex _classify_error via shared pattern
+# ---------------------------------------------------------------------------
+
+
+def test_codex_classify_error_json():
+    """CodexProvider._classify_error extracts from JSON error field."""
+    from minion.providers.codex import CodexProvider
+
+    provider = CodexProvider(
+        agent_name="codex-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    payload = json.dumps({
+        "error": "model overloaded, try again",
+        "padding": "x" * 600,
+    })
+    result = provider._classify_error(payload)
+    assert result is not None
+    assert "CODEX_ERROR" in result
+    assert "overloaded" in result
+
+
+def test_codex_classify_error_regex_capacity():
+    """CodexProvider._classify_error catches capacity exhausted in raw text."""
+    from minion.providers.codex import CodexProvider
+
+    provider = CodexProvider(
+        agent_name="codex-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    line = "Error: capacity exhausted for this model " + "x" * 600
+    result = provider._classify_error(line)
+    assert result is not None
+    assert "CODEX_ERROR" in result
+    assert "capacity exhausted" in result
+
+
+def test_codex_classify_error_short_returns_none():
+    """CodexProvider._classify_error returns None for short lines."""
+    from minion.providers.codex import CodexProvider
+
+    provider = CodexProvider(
+        agent_name="codex-test", agent_cfg=FakeAgentCfg(), use_poll=False
+    )
+    result = provider._classify_error("short line")
+    assert result is None
