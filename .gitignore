@@ -3,3 +3,29 @@ __pycache__/
 .work/
 .minion-swarm/
 CLAUDE.md
+
+# Claude Code
+.claude/
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
