@@ -396,8 +396,10 @@ async def _ws_handler(websocket: Any, db_path: str) -> None:
     Pseudo-logic:
     1. Add client to _clients set
     2. Send initial snapshot immediately
-    3. Listen for incoming messages (lineage requests)
-    4. On message: parse JSON, if type=="lineage_request", build and send lineage
+    3. Listen for incoming messages (lineage requests, agent commands)
+    4. On message: parse JSON, dispatch by type:
+       - "lineage_request": build and send lineage
+       - "agent_command": send comms message to agent, return command_ack
     5. On disconnect: remove from _clients set
     """
     _clients.add(websocket)
@@ -412,10 +414,17 @@ async def _ws_handler(websocket: Any, db_path: str) -> None:
         async for message in websocket:
             try:
                 msg = json.loads(message)
-                if msg.get("type") == "lineage_request":
+                msg_type = msg.get("type")
+                if msg_type == "lineage_request":
                     backlog_id = int(msg["backlog_id"])
                     lineage = _build_lineage(db_path, backlog_id)
                     await websocket.send(json.dumps(lineage))
+                elif msg_type == "agent_command":
+                    # --- Agent control buttons: send command to agent via minion comms ---
+                    # Validates command is in the allowed set, sends via minion comms,
+                    # and returns a command_ack to the client.
+                    ack = await _handle_agent_command(msg, db_path)
+                    await websocket.send(json.dumps(ack))
             except Exception as e:
                 # Generate a short error ID for correlation — log full details server-side only.
                 # Client receives only the generic message + error_id (no stack trace, no file paths).
@@ -439,6 +448,88 @@ async def _ws_handler(websocket: Any, db_path: str) -> None:
     finally:
         _clients.discard(websocket)
         logger.info("WebSocket client disconnected (%d remaining)", len(_clients))
+
+
+# --- Agent command handler ---
+# Receives agent control commands from the dashboard and dispatches via minion comms.
+# Allowed commands: halt, sitrep, rally — maps to trigger words sent as messages.
+
+_ALLOWED_COMMANDS = {"halt", "sitrep", "rally"}
+
+
+async def _handle_agent_command(msg: dict[str, Any], db_path: str) -> dict[str, Any]:
+    """Handle an agent_command WebSocket message.
+
+    Pseudo-logic:
+    1. Validate command is in allowed set
+    2. Extract agent name from message
+    3. Send message via minion comms (subprocess call)
+    4. Return command_ack or error
+
+    Args:
+        msg: {"type": "agent_command", "agent": "<name>", "command": "halt|sitrep|rally"}
+        db_path: Path to the minion database
+
+    Returns:
+        {"type": "command_ack", "agent": "<name>", "command": "<cmd>"} on success
+        {"type": "error", "message": "..."} on failure
+    """
+    agent_name = msg.get("agent", "")
+    command = msg.get("command", "")
+
+    if command not in _ALLOWED_COMMANDS:
+        return {"type": "error", "message": f"Unknown command: {command}"}
+
+    if not agent_name:
+        return {"type": "error", "message": "Missing agent name"}
+
+    # Send the command as a trigger word via minion comms
+    # Run in executor to avoid blocking the event loop
+    import asyncio
+    import subprocess
+
+    work_dir = os.path.dirname(db_path)
+    project_dir = os.path.dirname(work_dir)
+
+    try:
+        proc = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                [
+                    "minion", "-C", project_dir,
+                    "comms", "send", "local",
+                    "--from", "dashboard",
+                    "--to", agent_name,
+                    "--message", f"!!{command}!!",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            ),
+        )
+
+        if proc.returncode != 0:
+            logger.warning(
+                "Agent command failed: agent=%s cmd=%s rc=%d stderr=%s",
+                agent_name, command, proc.returncode, proc.stderr[:200],
+            )
+            return {
+                "type": "error",
+                "message": f"Command failed for agent {agent_name}",
+            }
+
+        logger.info("Agent command sent: agent=%s cmd=%s", agent_name, command)
+        return {
+            "type": "command_ack",
+            "agent": agent_name,
+            "command": command,
+        }
+
+    except subprocess.TimeoutExpired:
+        return {"type": "error", "message": "Command timed out"}
+    except Exception as e:
+        logger.error("Agent command error: %s", e)
+        return {"type": "error", "message": "Internal error sending command"}
 
 
 # --- Broadcast loop ---

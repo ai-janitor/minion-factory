@@ -811,6 +811,9 @@ function connectWS() {
         }
       } else if (msg.type === 'lineage') {
         renderLineage(msg.data);
+      } else if (msg.type === 'command_ack') {
+        // Agent command acknowledged — brief visual flash on the button
+        console.log('Command sent:', msg.command, 'to', msg.agent);
       } else if (msg.type === 'error') {
         console.error('Server error:', msg.message);
         // Show error visibly in lineage panel
@@ -1098,11 +1101,23 @@ function _insertDetailPanel(rowElement, agentName) {
   var td = document.createElement('td');
   td.setAttribute('colspan', '8');
 
+  // --- Control buttons: halt, sitrep, rally ---
+  var controlHtml = '<div style="padding:0.4rem 0.6rem;display:flex;gap:0.5rem;border-bottom:1px solid var(--border)">' +
+    '<button class="agent-cmd-btn" data-agent="' + escapeHtml(agentName) + '" data-cmd="sitrep" ' +
+      'style="background:var(--cyan);color:var(--bg);border:none;border-radius:4px;padding:0.2rem 0.6rem;font-size:0.65rem;cursor:pointer;font-family:JetBrains Mono,monospace">sitrep</button>' +
+    '<button class="agent-cmd-btn" data-agent="' + escapeHtml(agentName) + '" data-cmd="halt" ' +
+      'style="background:var(--amber);color:var(--bg);border:none;border-radius:4px;padding:0.2rem 0.6rem;font-size:0.65rem;cursor:pointer;font-family:JetBrains Mono,monospace">halt</button>' +
+    '<button class="agent-cmd-btn" data-agent="' + escapeHtml(agentName) + '" data-cmd="rally" ' +
+      'style="background:var(--green);color:var(--bg);border:none;border-radius:4px;padding:0.2rem 0.6rem;font-size:0.65rem;cursor:pointer;font-family:JetBrains Mono,monospace">rally</button>' +
+    '</div>';
+
   if (!events.length) {
     td.innerHTML = '<div class="agent-detail-panel">' +
+      controlHtml +
       '<div class="detail-header">No tool call history for ' + escapeHtml(agentName) + '</div></div>';
   } else {
     var html = '<div class="agent-detail-panel">' +
+      controlHtml +
       '<div class="detail-header">Tool call history for ' + escapeHtml(agentName) +
       ' (' + events.length + ' events)</div>';
     events.forEach(function(ev) {
@@ -1115,6 +1130,17 @@ function _insertDetailPanel(rowElement, agentName) {
     td.innerHTML = html;
   }
 
+  // Attach click handlers to control buttons (stop propagation to prevent row toggle)
+  var buttons = td.querySelectorAll('.agent-cmd-btn');
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var agent = btn.getAttribute('data-agent');
+      var cmd = btn.getAttribute('data-cmd');
+      sendAgentCommand(agent, cmd, btn);
+    });
+  });
+
   detailRow.appendChild(td);
   // Insert after the clicked row
   if (rowElement.nextSibling) {
@@ -1122,6 +1148,33 @@ function _insertDetailPanel(rowElement, agentName) {
   } else {
     rowElement.parentNode.appendChild(detailRow);
   }
+}
+
+// --- Send agent command via WebSocket ---
+// Sends {type: "agent_command", agent: "<name>", command: "halt|sitrep|rally"} to server.
+// Provides visual feedback on the button during the request.
+function sendAgentCommand(agentName, command, buttonEl) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    logger.error("WebSocket not connected — cannot send agent command");
+    return;
+  }
+
+  // Visual feedback — disable button during send
+  var originalText = buttonEl.textContent;
+  buttonEl.textContent = '...';
+  buttonEl.disabled = true;
+
+  ws.send(JSON.stringify({
+    type: 'agent_command',
+    agent: agentName,
+    command: command,
+  }));
+
+  // Reset button after a short delay (ack handled by message listener)
+  setTimeout(function() {
+    buttonEl.textContent = originalText;
+    buttonEl.disabled = false;
+  }, 2000);
 }
 
 function renderBacklog(items) {
