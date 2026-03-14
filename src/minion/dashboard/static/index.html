@@ -464,6 +464,54 @@
   .checklist-fill.partial { background: var(--amber); }
   .checklist-fill.none { background: var(--rose); }
 
+  /* === Agent detail panel (click-to-expand tool call history) === */
+  .agent-detail-row td {
+    padding: 0 !important;
+    border-top: none !important;
+  }
+  .agent-detail-panel {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 0.25rem 0.5rem 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+    animation: slideIn 0.2s ease;
+  }
+  .agent-detail-panel .detail-header {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .agent-detail-panel .detail-event {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  .agent-detail-panel .detail-event:last-child {
+    border-bottom: none;
+  }
+  .agent-detail-panel .detail-event .tool-badge {
+    background: var(--cyan);
+    color: var(--bg);
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .agent-detail-panel .detail-event .tool-input {
+    color: var(--text-dim);
+    word-break: break-all;
+    line-height: 1.4;
+  }
+
   /* === DAG stage tooltip (interactive stages) === */
   .dag-stage { position: relative; cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
   .dag-stage .stage-agent { display: block; font-size: 0.55rem; color: var(--cyan); opacity: 0.8; max-width: 70px; overflow: hidden; text-overflow: ellipsis; }
@@ -893,6 +941,12 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// --- Agent detail panel state ---
+// Track which agent's detail panel is currently expanded (null = none)
+var _expandedAgent = null;
+// Store latest agent activity data for click handlers
+var _latestAgentActivity = {};
+
 // --- Dashboard rendering ---
 
 function renderDashboard(snapshot) {
@@ -950,6 +1004,9 @@ function renderTasks(tasks) {
 }
 
 function renderAgents(agents, agentActivity) {
+  // Store activity globally for detail panel click handlers
+  _latestAgentActivity = agentActivity || {};
+
   document.getElementById('agent-count').textContent = agents.length + ' registered';
   var tbody = document.getElementById('agents-body');
   tbody.innerHTML = '';
@@ -959,6 +1016,8 @@ function renderAgents(agents, agentActivity) {
   }
   agents.forEach(function(a) {
     var tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.setAttribute('data-agent-name', a.name);
     var lastSeen = relativeTime(a.effective_last_seen);
     var seenCritical = lastSeen.indexOf('h ago') !== -1 || lastSeen.indexOf('d ago') !== -1 || lastSeen === 'never';
     var checklistCell = '';
@@ -977,7 +1036,7 @@ function renderAgents(agents, agentActivity) {
 
     // --- Agent activity cell: show last tool call or "idle" ---
     var activityCell = '';
-    var events = (agentActivity || {})[a.name] || [];
+    var events = _latestAgentActivity[a.name] || [];
     if (events.length > 0) {
       var latest = events[0];
       activityCell = '<span class="badge" style="background:var(--cyan);color:var(--bg);font-size:0.65rem;margin-right:4px">' +
@@ -997,8 +1056,72 @@ function renderAgents(agents, agentActivity) {
       '<td>' + tokenBar(a.tokens_used || 0, a.tokens_limit || 0) + '</td>' +
       '<td>' + checklistCell + '</td>' +
       '<td>' + activityCell + '</td>';
+
+    // Click handler for detail panel toggle
+    tr.onclick = (function(agentName) {
+      return function() { toggleAgentDetail(agentName, this); };
+    })(a.name);
+
     tbody.appendChild(tr);
+
+    // Re-expand detail panel if this agent was already expanded
+    if (_expandedAgent === a.name) {
+      _insertDetailPanel(tr, a.name);
+    }
   });
+}
+
+// --- Agent detail panel: click-to-expand tool call history ---
+// Toggle detail panel below clicked agent row. Only one panel open at a time.
+function toggleAgentDetail(agentName, rowElement) {
+  // Close any existing detail panel
+  var existing = document.querySelector('.agent-detail-row');
+  if (existing) {
+    existing.remove();
+  }
+
+  // If clicking the same agent, just close (toggle off)
+  if (_expandedAgent === agentName) {
+    _expandedAgent = null;
+    return;
+  }
+
+  _expandedAgent = agentName;
+  _insertDetailPanel(rowElement, agentName);
+}
+
+function _insertDetailPanel(rowElement, agentName) {
+  var events = _latestAgentActivity[agentName] || [];
+  var detailRow = document.createElement('tr');
+  detailRow.className = 'agent-detail-row';
+
+  var td = document.createElement('td');
+  td.setAttribute('colspan', '8');
+
+  if (!events.length) {
+    td.innerHTML = '<div class="agent-detail-panel">' +
+      '<div class="detail-header">No tool call history for ' + escapeHtml(agentName) + '</div></div>';
+  } else {
+    var html = '<div class="agent-detail-panel">' +
+      '<div class="detail-header">Tool call history for ' + escapeHtml(agentName) +
+      ' (' + events.length + ' events)</div>';
+    events.forEach(function(ev) {
+      html += '<div class="detail-event">' +
+        '<span class="tool-badge">' + escapeHtml(ev.tool) + '</span>' +
+        '<span class="tool-input">' + escapeHtml(ev.input_summary || '') + '</span>' +
+        '</div>';
+    });
+    html += '</div>';
+    td.innerHTML = html;
+  }
+
+  detailRow.appendChild(td);
+  // Insert after the clicked row
+  if (rowElement.nextSibling) {
+    rowElement.parentNode.insertBefore(detailRow, rowElement.nextSibling);
+  } else {
+    rowElement.parentNode.appendChild(detailRow);
+  }
 }
 
 function renderBacklog(items) {

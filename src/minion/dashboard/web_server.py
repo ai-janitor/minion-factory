@@ -317,7 +317,7 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
             logs_dir = os.path.join(project_root, ".minion-swarm", "logs")
             if os.path.isdir(logs_dir):
                 agent_names = [a.get("name", "") for a in agents if a.get("name")]
-                agent_activity = tail_agent_activity(logs_dir, agent_names, max_events=5)
+                agent_activity = tail_agent_activity(logs_dir, agent_names, max_events=20)
         except Exception:
             logger.debug("Failed to read agent activity from stream.jsonl", exc_info=True)
 
