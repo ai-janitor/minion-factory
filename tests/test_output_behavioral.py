@@ -33,11 +33,20 @@ def _capture(capsys, fn, *args, **kwargs):
 # ---------------------------------------------------------------------------
 
 
-def test_output_json_mode_default(capsys):
-    """output() with no flags prints valid JSON to stdout."""
+def test_output_human_mode_default(capsys):
+    """output() with no flags prints human-readable text to stdout (new default)."""
     from minion.output import output
     data = {"status": "ok", "agent": "leo"}
     out, _ = _capture(capsys, output, data)
+    assert "status: ok" in out
+    assert "agent: leo" in out
+
+
+def test_output_json_mode_explicit(capsys):
+    """output() with human=False prints valid JSON to stdout."""
+    from minion.output import output
+    data = {"status": "ok", "agent": "leo"}
+    out, _ = _capture(capsys, output, data, human=False)
     parsed = json.loads(out)
     assert parsed["status"] == "ok"
     assert parsed["agent"] == "leo"

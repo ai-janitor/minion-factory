@@ -54,8 +54,11 @@ def runner():
 
 
 def _run(runner, project_dir, *args):
-    """Invoke CLI with a temporary project dir so DB is isolated."""
-    return runner.invoke(cli, ["-C", str(project_dir)] + list(args))
+    """Invoke CLI with a temporary project dir so DB is isolated.
+
+    Uses --json because many tests parse output as JSON.
+    """
+    return runner.invoke(cli, ["--json", "-C", str(project_dir)] + list(args))
 
 
 # ---------------------------------------------------------------------------

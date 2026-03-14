@@ -59,8 +59,11 @@ def seeded_project(tmp_path):
 
 
 def _run(runner, project_dir, *args, input=None):
-    """Invoke CLI with temp project dir for DB isolation."""
-    return runner.invoke(cli, ["-C", str(project_dir)] + list(args), input=input)
+    """Invoke CLI with temp project dir for DB isolation.
+
+    Uses --json because many tests parse output as JSON.
+    """
+    return runner.invoke(cli, ["--json", "-C", str(project_dir)] + list(args), input=input)
 
 
 # ---------------------------------------------------------------------------
