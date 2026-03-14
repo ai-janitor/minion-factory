@@ -311,3 +311,149 @@ def test_dag_render_failure_returns_explicit_error_string_not_empty():
         f"dag field does not indicate failure: {dag_val!r}. "
         "Expected an explicit error message so agent knows DAG render failed."
     )
+
+
+# ---------------------------------------------------------------------------
+# multi_project_poll — exception narrowing (bug #213)
+# ---------------------------------------------------------------------------
+
+
+def test_multi_project_poll_operational_error_sets_error_field_with_type(tmp_path):
+    """multi_project_poll sets error field with type+message on OperationalError.
+
+    OperationalError is the expected case for missing table or uninitialized DB.
+    The error field must contain the exception class name so operators can tell
+    this apart from 'no tasks available' (GLOBAL-152: no silent failures).
+    """
+    from unittest.mock import MagicMock, patch
+    from minion.polling import multi_project_poll
+
+    # Create a fake project dir with a DB file (so path/exists checks pass)
+    proj_dir = tmp_path / "fake-project"
+    proj_dir.mkdir()
+    work_dir = proj_dir / ".work"
+    work_dir.mkdir()
+    db_path = work_dir / "minion.db"
+    db_path.touch()
+
+    # connect() raises OperationalError — simulates missing table
+    with patch("minion.db.connect") as mock_connect:
+        mock_connect.side_effect = sqlite3.OperationalError("no such table: messages")
+        result = multi_project_poll("test-agent", project_paths=[str(proj_dir)])
+
+    projects = result["projects"]
+    assert len(projects) == 1, "Expected one project in results"
+    error = projects[0].get("error", "")
+    assert "OperationalError" in error, (
+        f"error field must include exception type 'OperationalError', got: {error!r}. "
+        "Operators need the type to distinguish missing table from real DB failures."
+    )
+    assert "no such table" in error, (
+        f"error field must include the exception message, got: {error!r}"
+    )
+
+
+def test_multi_project_poll_oserror_sets_error_field_with_type(tmp_path):
+    """multi_project_poll sets error field with type+message on OSError.
+
+    OSError covers file-level failures (permissions, file not found).
+    The error field must include the exception type and message.
+    """
+    from unittest.mock import patch
+    from minion.polling import multi_project_poll
+
+    proj_dir = tmp_path / "fake-project"
+    proj_dir.mkdir()
+    work_dir = proj_dir / ".work"
+    work_dir.mkdir()
+    db_path = work_dir / "minion.db"
+    db_path.touch()
+
+    with patch("minion.db.connect") as mock_connect:
+        mock_connect.side_effect = OSError("Permission denied")
+        result = multi_project_poll("test-agent", project_paths=[str(proj_dir)])
+
+    projects = result["projects"]
+    assert len(projects) == 1
+    error = projects[0].get("error", "")
+    assert "OSError" in error, (
+        f"error field must include exception type 'OSError', got: {error!r}"
+    )
+    assert "Permission denied" in error, (
+        f"error field must include the exception message, got: {error!r}"
+    )
+
+
+def test_multi_project_poll_broad_database_error_sets_error_field_with_type(tmp_path):
+    """multi_project_poll sets error field with type+message for non-OperationalError DatabaseError.
+
+    Non-OperationalError DatabaseErrors (corruption, disk I/O) must NOT be silently swallowed
+    as 'DB unavailable'. The error field must distinguish them from expected missing-table cases
+    so operators can diagnose real DB health issues (GLOBAL-152: no silent failures).
+    """
+    from unittest.mock import patch
+    from minion.polling import multi_project_poll
+
+    proj_dir = tmp_path / "fake-project"
+    proj_dir.mkdir()
+    work_dir = proj_dir / ".work"
+    work_dir.mkdir()
+    db_path = work_dir / "minion.db"
+    db_path.touch()
+
+    class FakeDatabaseError(sqlite3.DatabaseError):
+        pass
+
+    with patch("minion.db.connect") as mock_connect:
+        mock_connect.side_effect = FakeDatabaseError("disk I/O error")
+        result = multi_project_poll("test-agent", project_paths=[str(proj_dir)])
+
+    projects = result["projects"]
+    assert len(projects) == 1
+    error = projects[0].get("error", "")
+    # Must NOT be the old generic string
+    assert error != "DB unavailable", (
+        "error field is the old generic 'DB unavailable' — must include exception type+message "
+        "so operators can distinguish real DB failures from missing table (GLOBAL-152)."
+    )
+    assert "DatabaseError" in error or "FakeDatabaseError" in error, (
+        f"error field must include the exception class name, got: {error!r}"
+    )
+    assert "disk I/O error" in error, (
+        f"error field must include the exception message, got: {error!r}"
+    )
+
+
+def test_multi_project_poll_happy_path_returns_no_error(tmp_path):
+    """multi_project_poll returns messages and tasks with no error field on success.
+
+    Regression guard: the narrowed exception handling must not break the happy path.
+    Uses a mock connection so the test is independent of schema details.
+    """
+    import sqlite3 as _sqlite3
+    from unittest.mock import MagicMock, patch
+    from minion.polling import multi_project_poll
+
+    proj_dir = tmp_path / "fake-project"
+    proj_dir.mkdir()
+    work_dir = proj_dir / ".work"
+    work_dir.mkdir()
+    db_path = work_dir / "minion.db"
+    db_path.touch()
+
+    # Build a mock connection that returns empty result sets (happy path)
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = []
+    mock_conn.execute.return_value = mock_cursor
+
+    with patch("minion.db.connect", return_value=mock_conn):
+        result = multi_project_poll("nonexistent-agent", project_paths=[str(proj_dir)])
+
+    projects = result["projects"]
+    assert len(projects) == 1
+    assert "error" not in projects[0], (
+        f"Happy path must not produce an error field, got: {projects[0].get('error')!r}"
+    )
+    assert projects[0]["messages"] == []
+    assert isinstance(projects[0]["tasks"], list)
