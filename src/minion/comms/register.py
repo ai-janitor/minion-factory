@@ -71,6 +71,23 @@ def register(
     cursor = conn.cursor()
     now = now_iso()
     try:
+        # Guard: reject re-registration with a different class (backlog #273)
+        # Prevents leads from re-registering as coder/builder/etc to bypass DAG gates.
+        # An agent that needs a different class must deregister first, which creates
+        # an auditable gap in the timeline and releases all file claims.
+        existing_row = cursor.execute(
+            "SELECT agent_class FROM agents WHERE name = ?", (agent_name,)
+        ).fetchone()
+        if existing_row and existing_row["agent_class"] != agent_class:
+            return {
+                "error": (
+                    f"BLOCKED: Agent '{agent_name}' is already registered as class "
+                    f"'{existing_row['agent_class']}'. Cannot re-register as '{agent_class}'. "
+                    f"Deregister first if class change is intentional: "
+                    f"minion agent deregister --name {agent_name}"
+                )
+            }
+
         # Auto-mark old broadcasts as read cutoff computed before transaction
         cutoff = (datetime.datetime.now() - datetime.timedelta(hours=1)).isoformat()
         with conn:
