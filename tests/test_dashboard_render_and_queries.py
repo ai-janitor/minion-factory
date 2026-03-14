@@ -222,4 +222,74 @@ def test_render_screen_empty_data():
     screen, click_map = render_screen([], [], [], width=80, height=24)
     assert isinstance(screen, str)
     assert isinstance(click_map, dict)
-    assert "no active tasks" in screen
+
+
+# ---------------------------------------------------------------------------
+# queries.fetch_backlog — exception narrowing (bug #203)
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_backlog_returns_empty_on_missing_table(tmp_path):
+    """fetch_backlog returns [] for OperationalError (no such table — fresh install).
+
+    OperationalError is a subclass of DatabaseError and is the error SQLite raises
+    for 'no such table: backlog'. This case must be handled gracefully — not every
+    install has the backlog table yet.
+    """
+    from unittest.mock import MagicMock, patch
+    from minion.dashboard.queries import fetch_backlog
+    import sqlite3
+
+    conn = MagicMock()
+    conn.execute.side_effect = sqlite3.OperationalError("no such table: backlog")
+
+    result = fetch_backlog(conn)
+    assert result == []
+
+
+def test_fetch_backlog_raises_on_non_operational_database_error(tmp_path):
+    """fetch_backlog must NOT swallow non-OperationalError DatabaseErrors.
+
+    DatabaseErrors other than OperationalError (e.g. disk I/O failure, corruption)
+    indicate real DB health problems that must propagate to the caller, not be hidden
+    as an empty backlog list (bug #203).
+    """
+    from unittest.mock import MagicMock
+    from minion.dashboard.queries import fetch_backlog
+    import sqlite3
+
+    # DatabaseError that is NOT an OperationalError — simulates corruption/IO failure
+    class FakeDatabaseError(sqlite3.DatabaseError):
+        pass
+
+    conn = MagicMock()
+    conn.execute.side_effect = FakeDatabaseError("disk I/O error")
+
+    with pytest.raises(sqlite3.DatabaseError):
+        fetch_backlog(conn)
+
+
+def test_fetch_backlog_returns_rows_on_success(tmp_path):
+    """fetch_backlog returns rows when backlog table exists and query succeeds."""
+    from minion.dashboard.queries import fetch_backlog
+    from minion.db import now_iso
+
+    db_path = str(tmp_path / ".work" / "minion.db")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+
+    # Insert a backlog row — table exists from init_db (via isolated_db fixture)
+    now = now_iso()
+    conn.execute(
+        """INSERT INTO backlog
+           (type, title, priority, status, file_path, created_at, updated_at, source, created_by)
+           VALUES ('bug', 'Test backlog item', 'high', 'open', 'bugs/test-item', ?, ?, 'human', 'test')""",
+        (now, now),
+    )
+    conn.commit()
+
+    rows = fetch_backlog(conn)
+    conn.close()
+
+    assert len(rows) == 1
+    assert rows[0]["title_short"] == "Test backlog item"

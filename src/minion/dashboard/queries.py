@@ -240,7 +240,9 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     O(B) with PK lookup on tasks.id. CASE-based ORDER BY + LIMIT 20. Hot path —
     called every 2s by dashboard.
     """
-    # The backlog table may not exist in older DBs — fail gracefully
+    # The backlog table may not exist in older DBs (fresh install) — fail gracefully
+    # for that case only. All other DatabaseErrors (disk I/O, corruption) must
+    # propagate so callers and the dashboard can surface real DB health failures.
     try:
         cursor = conn.execute("""
             SELECT
@@ -268,8 +270,10 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             LIMIT 20
         """)
         return cursor.fetchall()
-    except sqlite3.DatabaseError:
+    except sqlite3.OperationalError:
+        # "no such table: backlog" on fresh install — not a real failure
         return []
+    # Other DatabaseErrors (corruption, disk I/O failures) propagate to caller
 
 
 def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "") -> dict:
