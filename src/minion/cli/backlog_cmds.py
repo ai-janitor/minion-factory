@@ -215,3 +215,44 @@ def register_commands(cli: click.Group) -> None:
         except ValueError as e:
             _echo_error({"error": str(e)})
         click.echo(json.dumps(result, indent=2))
+
+    @backlog_group.command("fast-track")
+    @click.option("--agent", "-a", required=True, help="Agent performing the fast-track (must be lead class)")
+    @click.option("--type", "-t", "item_type", required=True, type=click.Choice(["idea", "bug", "request", "smell", "debt"]))
+    @click.option("--title", "-T", required=True, help="Short descriptive title")
+    @click.option("--description", "-d", required=True, help="Longer description of the item")
+    @click.option("--priority", "-p", default="medium", type=click.Choice(["unset", "low", "medium", "high", "critical"]))
+    @click.option("--task-type", "-k", "task_type", default="feature", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]), help="DAG flow type for the created task")
+    @click.option("--flow-hint", "-f", default="", help="Flow hint for the backlog item (defaults to task-type if omitted)")
+    @click.option("--req-flow", default="requirement-lite", type=click.Choice(["requirement", "requirement-lite"]), help="Requirement lifecycle flow (default: requirement-lite)")
+    @click.option("--slug", "-s", default=None, help="Override the auto-derived requirement slug")
+    @click.pass_context
+    def backlog_fast_track(ctx: click.Context, agent: str, item_type: str, title: str,
+                           description: str, priority: str, task_type: str, flow_hint: str,
+                           req_flow: str, slug: str | None) -> None:
+        """Composite add+promote+define in one shot. Requires lead class.
+
+        Creates a backlog item, promotes it to a requirement, and defines a task
+        — all in one command. Eliminates the 3-step chain that causes flag-mismatch errors.
+
+        Returns a combined JSON with backlog_id, requirement_id, requirement_path, task_id.
+        """
+        from minion.backlog import fast_track as _fast_track
+        try:
+            result = _fast_track(
+                agent_name=agent,
+                item_type=item_type,
+                title=title,
+                description=description,
+                priority=priority,
+                task_type=task_type,
+                flow_hint=flow_hint,
+                req_flow=req_flow,
+                slug=slug,
+            )
+        except Exception as e:
+            _echo_error({"error": str(e)})
+        if "warnings" in result:
+            for w in result["warnings"]:
+                click.echo(f"\n⚠ {w}", err=True)
+        click.echo(json.dumps(result, indent=2))

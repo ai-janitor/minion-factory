@@ -241,6 +241,22 @@ def promote(
         if origin is None:
             origin = "bug" if backlog_type in _BUG_TYPES else "feature"
 
+        # --- Early-warning: check for active battle plan (fails at task define time if missing) ---
+        warnings: list[str] = []
+        try:
+            from minion.intel.war_plan import _war_plan_path
+            no_battle_plan = cursor.execute(
+                "SELECT COUNT(*) FROM battle_plan WHERE status = 'active'"
+            ).fetchone()[0] == 0
+            no_war_plan = not os.path.exists(_war_plan_path())
+            if no_battle_plan and no_war_plan:
+                warnings.append(
+                    "No active battle plan found. Creating tasks after this promote will fail unless "
+                    "you set one first: minion war set-plan --agent <name> --plan '<objective>'"
+                )
+        except Exception:
+            pass  # Never let the warning check block promote
+
         # --- Build the list of slugs to create ---
         if count == 1:
             # Single promote: existing behavior
@@ -396,6 +412,8 @@ def promote(
             result["required_crew"] = required_crew
         if available_characters:
             result["available_characters"] = available_characters
+        if warnings:
+            result["warnings"] = warnings
         return result
     finally:
         conn.close()
