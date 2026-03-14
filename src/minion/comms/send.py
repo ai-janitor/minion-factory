@@ -32,6 +32,11 @@ from minion.fs import (
 # Valid message types — backlog #66: typed message taxonomy
 VALID_MSG_TYPES = {"order", "sitrep", "query", "response", "alert", "system"}
 
+# Control-plane senders bypass inbox discipline and staleness checks.
+# These are not real agents — they don't participate in the message protocol.
+# backlog #282: dashboard commands blocked by inbox discipline
+CONTROL_PLANE_SENDERS = {"dashboard", "system"}
+
 
 def send(
     from_agent: str,
@@ -65,38 +70,44 @@ def send(
     cursor = conn.cursor()
     now = now_iso()
     try:
-        # Inbox discipline: must read before sending
-        cursor.execute(
-            "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
-            (from_agent,),
-        )
-        unread_direct = cursor.fetchone()[0]
+        # Control-plane senders bypass inbox discipline and staleness checks
+        # (backlog #282: dashboard commands blocked by inbox discipline)
+        if from_agent not in CONTROL_PLANE_SENDERS:
+            # Inbox discipline: must read before sending
+            cursor.execute(
+                "SELECT COUNT(*) FROM messages WHERE to_agent = ? AND read_flag = 0",
+                (from_agent,),
+            )
+            unread_direct = cursor.fetchone()[0]
 
-        cursor.execute(
-            """SELECT COUNT(*) FROM messages
-               WHERE to_agent = 'all' AND from_agent != ?
-               AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
-            (from_agent, from_agent),
-        )
-        unread_broadcast = cursor.fetchone()[0]
+            cursor.execute(
+                """SELECT COUNT(*) FROM messages
+                   WHERE to_agent = 'all' AND from_agent != ?
+                   AND id NOT IN (SELECT message_id FROM broadcast_reads WHERE agent_name = ?)""",
+                (from_agent, from_agent),
+            )
+            unread_broadcast = cursor.fetchone()[0]
 
-        unread = unread_direct + unread_broadcast
-        if unread > 0:
-            return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
+            unread = unread_direct + unread_broadcast
+            if unread > 0:
+                return {"error": f"BLOCKED: You have {unread} unread message(s). Call check-inbox first."}
 
-        # Context freshness
-        is_stale, stale_msg = staleness_check(cursor, from_agent)
-        if is_stale:
-            return {"error": stale_msg}
+            # Context freshness
+            is_stale, stale_msg = staleness_check(cursor, from_agent)
+            if is_stale:
+                return {"error": stale_msg}
 
         # Verify sender is registered (no auto-register — prevents -C flag
-        # leaking agent presence into foreign project DBs)
-        cursor.execute("SELECT name FROM agents WHERE name = ?", (from_agent,))
-        if not cursor.fetchone():
-            return {
-                "error": f"Agent '{from_agent}' not registered in this project. "
-                f"Register first: minion agent register --name {from_agent} --class <role>"
-            }
+        # leaking agent presence into foreign project DBs).
+        # Control-plane senders (dashboard, system) skip this check — they are
+        # not real agents and should never be registered.
+        if from_agent not in CONTROL_PLANE_SENDERS:
+            cursor.execute("SELECT name FROM agents WHERE name = ?", (from_agent,))
+            if not cursor.fetchone():
+                return {
+                    "error": f"Agent '{from_agent}' not registered in this project. "
+                    f"Register first: minion agent register --name {from_agent} --class <role>"
+                }
 
         # Local-only: target must exist in this repo's DB AND belong to this project
         if to_agent != "all":

@@ -327,3 +327,85 @@ def test_is_cross_project_unset(monkeypatch):
     from minion.auth import is_cross_project
     monkeypatch.delenv("MINION_PROJECT_DIR", raising=False)
     assert is_cross_project() is False
+
+
+# ---------------------------------------------------------------------------
+# Backlog #282: Control-plane senders bypass inbox discipline
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_send_bypasses_inbox_discipline():
+    """backlog #282: dashboard sender bypasses inbox discipline and registration check.
+
+    The dashboard is a control plane, not an agent. It should be able to send
+    trigger commands (halt, sitrep, rally) even when it has unread messages
+    and is not registered as an agent.
+    """
+    from minion.comms import register, send
+
+    # Register target agent only — dashboard is NOT registered
+    register(agent_name="target-agent", agent_class="coder")
+
+    # Send a message TO dashboard so it has unread messages
+    # (simulates CC'd messages accumulating)
+    from minion.db import get_db, now_iso
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag) "
+        "VALUES (?, ?, ?, ?, 0)",
+        ("someone", "dashboard", "/dev/null", now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+    # Dashboard sends a halt command — should succeed despite unread messages
+    result = send(
+        from_agent="dashboard",
+        to_agent="target-agent",
+        message="!!halt!!",
+    )
+    assert "error" not in result, f"Dashboard send blocked: {result.get('error')}"
+    assert result.get("status") == "sent"
+
+
+def test_system_sender_bypasses_inbox_discipline():
+    """backlog #282: 'system' sender also bypasses inbox discipline."""
+    from minion.comms import register, send
+
+    register(agent_name="target-agent-2", agent_class="coder")
+
+    result = send(
+        from_agent="system",
+        to_agent="target-agent-2",
+        message="system notification",
+    )
+    assert "error" not in result, f"System send blocked: {result.get('error')}"
+    assert result.get("status") == "sent"
+
+
+def test_normal_agent_still_blocked_by_inbox_discipline():
+    """backlog #282: normal agents are still subject to inbox discipline."""
+    from minion.comms import register, send
+
+    register(agent_name="normal-sender", agent_class="coder")
+    register(agent_name="normal-target", agent_class="coder")
+
+    # Give normal-sender an unread message
+    from minion.db import get_db, now_iso
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO messages (from_agent, to_agent, content_file, timestamp, read_flag) "
+        "VALUES (?, ?, ?, ?, 0)",
+        ("someone", "normal-sender", "/dev/null", now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+    # Normal agent should still be blocked
+    result = send(
+        from_agent="normal-sender",
+        to_agent="normal-target",
+        message="hello",
+    )
+    assert "error" in result
+    assert "BLOCKED" in result["error"]
