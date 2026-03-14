@@ -649,6 +649,7 @@
           <th style="width:80px">last seen</th>
           <th style="width:180px">tokens</th>
           <th style="width:80px">checklist</th>
+          <th style="width:200px">activity</th>
         </tr>
       </thead>
       <tbody id="agents-body"></tbody>
@@ -885,6 +886,13 @@ function truncate(text, maxLen) {
   return text.length > maxLen ? text.slice(0, maxLen - 1) + '\u2026' : text;
 }
 
+function escapeHtml(text) {
+  if (!text) return '';
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(text));
+  return div.innerHTML;
+}
+
 // --- Dashboard rendering ---
 
 function renderDashboard(snapshot) {
@@ -906,8 +914,10 @@ function renderDashboard(snapshot) {
   document.getElementById('stat-backlog').textContent = backlog.length;
   document.getElementById('stat-events').textContent = activity.length;
 
+  var agentActivity = snapshot.agent_activity || {};
+
   renderTasks(tasks);
-  renderAgents(agents);
+  renderAgents(agents, agentActivity);
   renderBacklog(backlog);
   renderActivity(activity);
 }
@@ -939,12 +949,12 @@ function renderTasks(tasks) {
   });
 }
 
-function renderAgents(agents) {
+function renderAgents(agents, agentActivity) {
   document.getElementById('agent-count').textContent = agents.length + ' registered';
   var tbody = document.getElementById('agents-body');
   tbody.innerHTML = '';
   if (!agents.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:1rem">(no agents)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:var(--text-dim);text-align:center;padding:1rem">(no agents)</td></tr>';
     return;
   }
   agents.forEach(function(a) {
@@ -964,6 +974,20 @@ function renderAgents(agents) {
     } else {
       checklistCell = '<span style="color:var(--text-dim);font-size:0.7rem">\u2014</span>';
     }
+
+    // --- Agent activity cell: show last tool call or "idle" ---
+    var activityCell = '';
+    var events = (agentActivity || {})[a.name] || [];
+    if (events.length > 0) {
+      var latest = events[0];
+      activityCell = '<span class="badge" style="background:var(--cyan);color:var(--bg);font-size:0.65rem;margin-right:4px">' +
+        escapeHtml(latest.tool) + '</span>' +
+        '<span style="font-family:JetBrains Mono,monospace;font-size:0.65rem;color:var(--text-dim)">' +
+        escapeHtml(truncate(latest.input_summary, 40)) + '</span>';
+    } else {
+      activityCell = '<span style="color:var(--text-dim);font-size:0.7rem;font-style:italic">idle</span>';
+    }
+
     tr.innerHTML =
       '<td style="font-family:JetBrains Mono,monospace;font-size:0.8rem">' + a.name + '</td>' +
       '<td>' + agentBadge(a.agent_class) + '</td>' +
@@ -971,7 +995,8 @@ function renderAgents(agents) {
       '<td>' + statusBadge(a.status) + '</td>' +
       '<td style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:' + (seenCritical ? 'var(--rose)' : 'var(--text-dim)') + '">' + lastSeen + '</td>' +
       '<td>' + tokenBar(a.tokens_used || 0, a.tokens_limit || 0) + '</td>' +
-      '<td>' + checklistCell + '</td>';
+      '<td>' + checklistCell + '</td>' +
+      '<td>' + activityCell + '</td>';
     tbody.appendChild(tr);
   });
 }
