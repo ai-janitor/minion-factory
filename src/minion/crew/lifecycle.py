@@ -28,15 +28,28 @@ def _kill_all_daemons(project_dir: str = "") -> None:
     if not state_dir.is_dir():
         return
     for state_file in state_dir.glob("*.json"):
+        # Scope 1: file parsing — OSError (can't read) or bad JSON
         try:
             state = json.loads(state_file.read_text())
-            pid = state.get("pid")
-            if pid and isinstance(pid, int):
-                os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            log.error("Daemon PID in %s already gone", state_file)
         except (OSError, json.JSONDecodeError) as e:
             log.error("Failed to read/parse daemon state %s: %s", state_file, e)
+            continue
+
+        pid = state.get("pid")
+        if not (pid and isinstance(pid, int)):
+            continue
+
+        # Scope 2: kill — separate from file-parsing so PermissionError is visible
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            log.error("Daemon PID %d in %s already gone", pid, state_file)
+        except PermissionError:
+            log.warning(
+                "PermissionError killing PID %d (from %s) — daemon may still be running",
+                pid,
+                state_file,
+            )
 
 
 def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
