@@ -28,11 +28,12 @@ log = logging.getLogger(__name__)
 INBOX_DIR = os.path.join(RUNTIME_DIR, "inbox")
 BATTLE_PLAN_DIR = os.path.join(RUNTIME_DIR, "battle-plans")
 RAID_LOG_DIR = os.path.join(RUNTIME_DIR, "raid-log")
+AGENT_ACTIVITY_DIR = os.path.join(RUNTIME_DIR, "agent-activity")
 
 
 def ensure_dirs() -> None:
     """Create all required filesystem directories."""
-    for d in (INBOX_DIR, BATTLE_PLAN_DIR, RAID_LOG_DIR):
+    for d in (INBOX_DIR, BATTLE_PLAN_DIR, RAID_LOG_DIR, AGENT_ACTIVITY_DIR):
         os.makedirs(d, exist_ok=True)
 
 

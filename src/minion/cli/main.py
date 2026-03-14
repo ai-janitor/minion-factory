@@ -202,6 +202,52 @@ def cli(ctx: click.Context, use_json: bool, human: bool, compact: bool, project_
 
     ctx.call_on_close(_piggyback_inbox_on_close)
 
+    # ---------------------------------------------------------------------------
+    # CLI activity logger: append a JSONL line to .work/agent-activity/<agent>.jsonl
+    # on every CLI invocation. Makes terminal agent activity visible to the
+    # dashboard stream tailer — same visibility that daemon agents get via
+    # .minion-swarm/logs/.stream.jsonl. Best-effort: failures silently ignored.
+    # ---------------------------------------------------------------------------
+    def _log_activity_on_close() -> None:
+        agent = ctx.obj.get("_heartbeat_agent") or os.environ.get("MINION_AGENT_NAME")
+        if not agent:
+            return
+        try:
+            import json as _json
+            import sys as _sys
+            from datetime import datetime as _dt, timezone as _tz
+            from minion.fs import AGENT_ACTIVITY_DIR
+
+            # Build the command and args from sys.argv.
+            # argv[0] is the program name ("minion"); argv[1:] are command + flags.
+            argv = _sys.argv[1:]  # drop program name
+            # Reconstruct the command name (first non-flag tokens) and remaining args.
+            command_parts: list[str] = []
+            args_parts: list[str] = []
+            past_command = False
+            for token in argv:
+                if not past_command and not token.startswith("-"):
+                    command_parts.append(token)
+                else:
+                    past_command = True
+                    args_parts.append(token)
+
+            record = {
+                "command": " ".join(command_parts),
+                "args": args_parts,
+                "timestamp": _dt.now(_tz.utc).isoformat(),
+                "agent": agent,
+            }
+
+            os.makedirs(AGENT_ACTIVITY_DIR, exist_ok=True)
+            activity_file = os.path.join(AGENT_ACTIVITY_DIR, f"{agent}.jsonl")
+            with open(activity_file, "a", encoding="utf-8") as f:
+                f.write(_json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            pass  # best-effort — must never break the primary CLI command
+
+    ctx.call_on_close(_log_activity_on_close)
+
 
 # ---------------------------------------------------------------------------
 # Register all command groups/commands onto cli
