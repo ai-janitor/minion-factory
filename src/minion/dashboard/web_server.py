@@ -307,19 +307,41 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
         project_root = os.path.dirname(os.path.dirname(db_path))
         project_name = os.path.basename(project_root) or db_path
 
-        # --- Agent tool-call activity from stream.jsonl files ---
-        # Resolve logs directory: sibling .minion-swarm/logs/ relative to project root.
-        # Call stream tailer to extract recent tool_use events per agent.
+        # --- Agent tool-call activity from stream.jsonl AND CLI activity JSONL ---
+        # Two sources:
+        # 1. Daemon stream: .minion-swarm/logs/<agent>.stream.jsonl (tool_use events)
+        # 2. CLI activity: .work/agent-activity/<agent>.jsonl (CLI invocations)
+        # Merge both sources per agent, sort by timestamp desc, cap at max_events.
         # Gracefully returns empty dict on any error (missing dir, no files, etc.).
         agent_activity: dict[str, list] = {}
         try:
-            from minion.dashboard.stream_tailer import tail_agent_activity
+            from minion.dashboard.stream_tailer import tail_agent_activity, tail_cli_activity
+            agent_names = [a.get("name", "") for a in agents if a.get("name")]
+            _max_activity = 20
+
+            # Source 1: daemon stream.jsonl
+            daemon_activity: dict[str, list] = {}
             logs_dir = os.path.join(project_root, ".minion-swarm", "logs")
             if os.path.isdir(logs_dir):
-                agent_names = [a.get("name", "") for a in agents if a.get("name")]
-                agent_activity = tail_agent_activity(logs_dir, agent_names, max_events=20)
+                daemon_activity = tail_agent_activity(logs_dir, agent_names, max_events=_max_activity)
+
+            # Source 2: CLI activity JSONL
+            cli_activity: dict[str, list] = {}
+            cli_activity_dir = os.path.join(project_root, ".work", "agent-activity")
+            if os.path.isdir(cli_activity_dir):
+                cli_activity = tail_cli_activity(cli_activity_dir, agent_names, max_events=_max_activity)
+
+            # Merge: combine both sources per agent, sort by timestamp desc, cap
+            for name in agent_names:
+                daemon_events = daemon_activity.get(name, [])
+                cli_events = cli_activity.get(name, [])
+                merged = daemon_events + cli_events
+                # Sort by timestamp descending (newest first); events without timestamp sort last
+                merged.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+                if merged:
+                    agent_activity[name] = merged[:_max_activity]
         except Exception:
-            logger.debug("Failed to read agent activity from stream.jsonl", exc_info=True)
+            logger.debug("Failed to read agent activity", exc_info=True)
 
         snapshot = {
             "type": "snapshot",
