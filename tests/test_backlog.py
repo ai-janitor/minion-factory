@@ -1079,3 +1079,129 @@ class TestMultiPromote:
         assert res.exit_code == 0
         data = _parse_json(res.output)
         assert data.get("status") == "closed"
+
+
+# ---------------------------------------------------------------------------
+# Batch promote tests — --ids flag for promoting multiple independent items
+# ---------------------------------------------------------------------------
+
+
+class TestBatchPromote:
+    """Tests for the --ids flag on backlog promote.
+
+    --ids accepts comma-separated backlog IDs and promotes each independently.
+    Returns a JSON object with status, count, results array, and optional errors.
+    """
+
+    def test_batch_promotes_multiple_items(self, runner, project_dir):
+        """--ids with two valid IDs promotes both and returns batch result."""
+        res1 = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Batch Bug A")
+        assert res1.exit_code == 0, res1.output
+        id_a = _parse_json(res1.output)["id"]
+
+        res2 = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Batch Bug B")
+        assert res2.exit_code == 0, res2.output
+        id_b = _parse_json(res2.output)["id"]
+
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", f"{id_a},{id_b}",
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["status"] == "batch_promoted"
+        assert data["count"] == 2
+        assert len(data["results"]) == 2
+
+    def test_batch_single_id_works(self, runner, project_dir):
+        """--ids with a single ID still works (degenerate batch)."""
+        res1 = _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Solo Batch")
+        assert res1.exit_code == 0, res1.output
+        item_id = _parse_json(res1.output)["id"]
+
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", str(item_id),
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["status"] == "batch_promoted"
+        assert data["count"] == 1
+
+    def test_batch_with_invalid_id_reports_error(self, runner, project_dir):
+        """--ids with one valid and one nonexistent ID: valid succeeds, invalid in errors."""
+        res1 = _run(runner, project_dir, "backlog", "add", "--type", "bug", "--title", "Good Batch Item")
+        assert res1.exit_code == 0, res1.output
+        good_id = _parse_json(res1.output)["id"]
+
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", f"{good_id},99999",
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["count"] == 1  # Only the good one promoted
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["id"] == 99999
+
+    def test_batch_cannot_combine_with_path(self, runner, project_dir):
+        """--ids cannot be used with a positional PATH argument."""
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", "1,2", "bugs/some-path",
+        )
+        assert res.exit_code == 2
+
+    def test_batch_cannot_combine_with_single_id(self, runner, project_dir):
+        """--ids cannot be combined with --id."""
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", "1,2", "--id", "1",
+        )
+        assert res.exit_code == 2
+
+    def test_batch_cannot_combine_with_count(self, runner, project_dir):
+        """--ids cannot be combined with --count."""
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", "1,2", "--count", "2", "--slugs", "a,b",
+        )
+        assert res.exit_code == 2
+
+    def test_batch_non_integer_id_exits_nonzero(self, runner, project_dir):
+        """--ids with a non-integer value exits with error."""
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", "abc,def",
+        )
+        assert res.exit_code == 2
+
+    def test_batch_respects_flow_flag(self, runner, project_dir, db_path):
+        """--ids with --flow passes the flow to each promotion."""
+        res1 = _run(runner, project_dir, "backlog", "add", "--type", "idea", "--title", "Flow Batch A")
+        assert res1.exit_code == 0, res1.output
+        id_a = _parse_json(res1.output)["id"]
+
+        res = _run(
+            runner, project_dir,
+            "backlog", "promote", "--agent", "test-lead",
+            "--ids", str(id_a), "--flow", "requirement-lite",
+        )
+        assert res.exit_code == 0, res.output
+        data = _parse_json(res.output)
+        assert data["count"] == 1
+        # Verify the requirement was created with requirement-lite flow
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        req_path = data["results"][0]["requirement"]["file_path"]
+        row = conn.execute("SELECT flow_type FROM requirements WHERE file_path = ?", (req_path,)).fetchone()
+        conn.close()
+        assert row is not None
+        assert row["flow_type"] == "requirement-lite"

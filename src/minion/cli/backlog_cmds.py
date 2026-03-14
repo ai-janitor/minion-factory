@@ -114,6 +114,9 @@ def register_commands(cli: click.Group) -> None:
     @click.argument("path", required=False, default=None)
     @click.option("--agent", "-a", required=True, help="Agent performing the promotion (must be lead class)")
     @click.option("--id", "-i", "item_id", default=None, type=int, help="Backlog item ID (alternative to path)")
+    @click.option("--ids", "item_ids", default=None,
+                  help="Comma-separated backlog IDs for batch promotion (e.g. --ids 275,276,277). "
+                       "Each item promoted independently with its own requirement. Cannot combine with PATH, --id, --count, or --slugs.")
     @click.option("--origin", "-o", default=None, type=click.Choice(["bug", "feature"]), help="Requirement origin override")
     @click.option("--slug", "-s", default=None, help="Override the auto-derived requirement slug (single promote)")
     @click.option("--flow", "-f", default="requirement", type=click.Choice(["requirement", "requirement-lite"]),
@@ -123,12 +126,16 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--slugs", default=None,
                   help="Comma-separated list of N slug names. MANDATORY when --count > 1. Example: --slugs 'auth-api,auth-ui,auth-tests'")
     @click.pass_context
-    def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, origin: str | None, slug: str | None, flow: str, count: int, slugs: str | None) -> None:
-        """Promote a backlog item into the requirement pipeline.
+    def backlog_promote(ctx: click.Context, path: str | None, agent: str, item_id: int | None, item_ids: str | None, origin: str | None, slug: str | None, flow: str, count: int, slugs: str | None) -> None:
+        """Promote backlog item(s) into the requirement pipeline.
 
         Creates one or more requirements from a single backlog item. By default,
         creates exactly 1 requirement (existing behavior). Use --count N with
         --slugs to decompose a complex backlog item into N independent requirements.
+
+        Use --ids for batch promotion of multiple independent backlog items.
+        Each item is promoted independently with its own requirement.
+        Returns a JSON object with status, count, results array, and optional errors array.
 
         A backlog item that has already been promoted can be re-promoted with --count
         to add additional requirements (the 'already promoted' guard is lifted for
@@ -136,8 +143,54 @@ def register_commands(cli: click.Group) -> None:
 
         Requires lead class.
         """
+        # --- Batch mode: --ids promotes multiple independent backlog items ---
+        if item_ids:
+            if path or item_id:
+                _echo_error({"error": "--ids cannot be combined with PATH or --id. Use --ids alone for batch."}, exit_code=2)
+            if count > 1 or slugs:
+                _echo_error({"error": "--ids cannot be combined with --count/--slugs. Each batch item creates exactly 1 requirement."}, exit_code=2)
+
+            id_list = [s.strip() for s in item_ids.split(",") if s.strip()]
+            if not id_list:
+                _echo_error({"error": "--ids requires at least one ID."}, exit_code=2)
+
+            # Validate all IDs are integers before starting any promotions
+            parsed_ids: list[int] = []
+            for raw_id in id_list:
+                try:
+                    parsed_ids.append(int(raw_id))
+                except ValueError:
+                    _echo_error({"error": f"Invalid backlog ID in --ids: '{raw_id}'. All values must be integers."}, exit_code=2)
+
+            from minion.backlog import get_item as _get_item
+            from minion.backlog import promote as _promote
+
+            results: list[dict] = []
+            errors: list[dict] = []
+            for bid in parsed_ids:
+                try:
+                    item = _get_item(item_id=bid)
+                    if item is None:
+                        errors.append({"id": bid, "error": f"Backlog item #{bid} not found."})
+                        continue
+                    if "error" in item:
+                        errors.append({"id": bid, "error": item["error"]})
+                        continue
+                    result = _promote(item["file_path"], origin, slug=slug, flow=flow, agent_name=agent)
+                    result["backlog_id"] = bid
+                    results.append(result)
+                except (ValueError, RuntimeError) as e:
+                    errors.append({"id": bid, "error": str(e)})
+
+            batch_output: dict = {"status": "batch_promoted", "count": len(results), "results": results}
+            if errors:
+                batch_output["errors"] = errors
+            click.echo(json.dumps(batch_output, indent=2))
+            return
+
+        # --- Single mode: existing behavior ---
         if not path and not item_id:
-            _echo_error({"error": "Provide a path argument or --id <N>."}, exit_code=2)
+            _echo_error({"error": "Provide a path argument, --id <N>, or --ids <N,N,...>."}, exit_code=2)
         # Validate --count / --slugs consistency
         if count < 1:
             _echo_error({"error": "--count must be >= 1."}, exit_code=2)
