@@ -213,19 +213,27 @@ def register_commands(cli: click.Group) -> None:
     @_agent_option(required=True)
     @click.option("--title", "-t", required=True)
     @click.option("--description", "-d", required=True)
-    @click.option("--task-type", "-T", default="feature", type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]))
+    @click.option("--task-type", "-T", "task_type", default=None, type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]), help="DAG flow type for this task (alias: --flow)")
+    @click.option("--flow", "-F", "flow", default=None, type=click.Choice(["bugfix", "build", "chore", "feature", "hotfix", "implementation", "investigation", "requirement", "research"]), help="DAG flow type for this task (alias: --task-type)")
     @click.option("--project", "-p", default="")
     @click.option("--zone", "-z", default="")
     @click.option("--blocked-by", "-b", default="", help="Comma-separated task IDs")
     @click.option("--class-required", "-c", default="")
     @click.option("--intel", "-i", default="", help="Comma-separated intel slugs to link")
-    @click.option("--requirement", "-r", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking")
+    @click.option("--requirement", "-r", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking (alias: --requirement-id)")
+    @click.option("--requirement-id", "requirement_id_alias", default=None, type=int, help="Link to requirement ID for lineage tracking (alias: --requirement)")
     @click.pass_context
     def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
-                        task_type: str, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None) -> None:
-        """Create a task spec file and task record in one command."""
+                        task_type: str | None, flow: str | None, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None, requirement_id_alias: int | None) -> None:
+        """Create a task spec file and task record in one command.
+
+        Accepts --task-type or --flow (synonyms). Accepts --requirement or --requirement-id (synonyms).
+        """
+        # Merge alias pairs — --flow is an alias for --task-type; --requirement-id is an alias for --requirement
+        resolved_type = task_type or flow or "feature"
+        resolved_req_id = requirement_id if requirement_id is not None else requirement_id_alias
         from minion.tasks.define import define_task
-        _output(define_task(agent, title, description, task_type, project, zone, blocked_by, class_required, intel, requirement_id=requirement_id), ctx.obj["human"])
+        _output(define_task(agent, title, description, resolved_type, project, zone, blocked_by, class_required, intel, requirement_id=resolved_req_id), ctx.obj["human"])
 
     @task_group.command("result")
     @_agent_option(required=True)

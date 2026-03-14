@@ -9,6 +9,7 @@ Organization: Re-exports public API symbols. Imports only, no logic."""
 
 from .add_item import add
 from .close_item import kill, defer, reopen
+from .fast_track import fast_track
 from .get_item import get_item
 from .lineage import lineage
 from .list_items import list_items
@@ -19,6 +20,7 @@ from .update_item import update_item
 __all__: list[str] = [
     "add",
     "defer",
+    "fast_track",
     "get_item",
     "kill",
     "lineage",
