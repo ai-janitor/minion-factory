@@ -67,6 +67,9 @@ def _write_pidfile(agent: str) -> None:
 def _remove_pidfile(agent: str) -> None:
     try:
         os.remove(_poll_pidfile(agent))
+    except FileNotFoundError:
+        # Expected race: another process already removed the pidfile — not an error
+        logger.debug("Pidfile already gone for %s (expected race)", agent)
     except OSError as e:
         logger.error("Failed to remove pidfile for %s: %s", agent, e)
 
@@ -90,6 +93,9 @@ def _kill_existing_poll(agent: str) -> int | None:
     finally:
         try:
             os.remove(pidfile)
+        except FileNotFoundError:
+            # Expected race: stale pidfile already gone — not an error
+            logger.debug("Stale pidfile already gone %s (expected race)", pidfile)
         except OSError as e:
             logger.error("Failed to remove stale pidfile %s: %s", pidfile, e)
 
