@@ -58,11 +58,34 @@ def register_commands(cli: click.Group) -> None:
         _output(_install_docs(), ctx.obj["human"])
 
     @cli.command("dashboard")
+    @click.option("--web", is_flag=True, default=False,
+                  help="Launch web dashboard (browser) instead of terminal TUI")
+    @click.option("--port", default=8765, type=int,
+                  help="Port for web dashboard (default: 8765)")
+    @click.option("--host", default="0.0.0.0",
+                  help="Host to bind web dashboard (default: 0.0.0.0)")
+    @click.option("--db", "db_path", default="",
+                  help="Path to minion.db (auto-detected if omitted)")
     @click.pass_context
-    def dashboard_cmd(ctx: click.Context) -> None:
-        """Live task board. Run in a tmux pane — no DB registration."""
-        from minion.dashboard import run
-        run()
+    def dashboard_cmd(ctx: click.Context, web: bool, port: int, host: str, db_path: str) -> None:
+        """Live task board — terminal TUI or browser web dashboard.
+
+        Default: terminal TUI (ANSI). Use --web for browser-based dashboard
+        served via WebSocket on the specified port.
+
+        \b
+        Examples:
+          minion dashboard              # Terminal TUI
+          minion dashboard --web        # Web dashboard on http://0.0.0.0:8765
+          minion dashboard --web --port 9000
+          minion dashboard --web --db /path/to/minion.db
+        """
+        if web:
+            from minion.dashboard.web_server import serve
+            serve(host=host, port=port, db_path=db_path)
+        else:
+            from minion.dashboard import run
+            run()
 
     @cli.command("end-session")
     @_agent_option(required=True)

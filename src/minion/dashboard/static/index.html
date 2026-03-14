@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minion Dashboard</title>
+<!--
+  Purpose: Web frontend for minion dashboard — live project state via WebSocket.
+  Rationale: Browser-accessible complement to the terminal TUI dashboard.
+    Consumes the same query data as the TUI (via queries.py on the server side).
+  Responsibility: Render Tasks, Agents, Backlog, Activity, Lineage from WebSocket JSON.
+    NOT responsible for: SQL queries, data serialization, server lifecycle.
+  Organization: Single HTML file with embedded CSS and JS. No build step.
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2332;
+    --border: #2a3a4e;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --accent: #f97316;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #ef4444;
+    --cyan: #22d3ee;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 1rem 1.5rem;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--yellow));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header .meta { color: var(--text-dim); font-size: 0.85rem; }
+  .header .meta.right { margin-left: auto; }
+  .ws-status {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 0.3rem;
+  }
+  .ws-status.connected { background: var(--green); }
+  .ws-status.disconnected { background: var(--red); }
+  .ws-status.connecting { background: var(--yellow); }
+
+  /* Navigation tabs */
+  .nav-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+  .nav-tab {
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+  }
+  .nav-tab:hover { border-color: var(--accent); color: var(--text); }
+  .nav-tab.active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+
+  /* Sections */
+  .section {
+    margin-bottom: 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 0.6rem 1rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--cyan);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .section-header .badge {
+    background: var(--border);
+    color: var(--text-dim);
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    position: sticky;
+    top: 0;
+  }
+  td {
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid rgba(42, 58, 78, 0.4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  tr:hover td { background: rgba(42, 58, 78, 0.3); }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: rgba(249, 115, 22, 0.08); }
+
+  /* Status colors */
+  .status-open { color: var(--text); }
+  .status-in_progress, .status-working { color: var(--green); }
+  .status-assigned { color: var(--cyan); }
+  .status-fixed, .status-verified { color: var(--yellow); }
+  .status-closed, .status-done, .status-shipped { color: var(--text-dim); }
+  .status-blocked { color: var(--red); }
+  .status-promoted { color: var(--yellow); }
+  .status-ready { color: var(--green); }
+  .status-deregistered { color: var(--text-dim); text-decoration: line-through; }
+
+  /* Priority */
+  .pri-critical { color: var(--red); font-weight: 700; }
+  .pri-high { color: var(--yellow); }
+  .pri-medium { color: var(--text); }
+  .pri-low { color: var(--text-dim); }
+
+  /* Token bar */
+  .token-bar { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .token-bar-track {
+    width: 80px; height: 10px;
+    background: #1e293b;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .token-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .token-bar-fill.low { background: var(--green); }
+  .token-bar-fill.mid { background: var(--yellow); }
+  .token-bar-fill.high { background: var(--red); }
+  .token-bar-label { color: var(--text-dim); font-size: 0.75rem; }
+
+  /* Activity feed */
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid rgba(42, 58, 78, 0.4);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .activity-row:hover { background: rgba(42, 58, 78, 0.3); }
+  .activity-time { color: var(--text-dim); min-width: 60px; font-size: 0.8rem; }
+  .activity-id { color: var(--cyan); min-width: 40px; }
+  .activity-title { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .activity-arrow { color: var(--text-dim); }
+  .activity-to { color: var(--green); }
+  .activity-agent { color: var(--text-dim); font-size: 0.8rem; }
+
+  /* Lineage overlay */
+  .lineage-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 3rem 2rem;
+  }
+  .lineage-overlay.active { display: flex; }
+  .lineage-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    width: 100%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  }
+  .lineage-panel h2 { color: var(--cyan); font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .lineage-panel .meta { color: var(--text-dim); margin-bottom: 1rem; font-size: 0.85rem; }
+  .lineage-panel .meta span { margin-right: 1.5rem; }
+  .lineage-close {
+    float: right;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .lineage-close:hover { border-color: var(--red); color: var(--red); }
+  .tree-node {
+    padding: 0.3rem 0;
+    padding-left: 1.5rem;
+    border-left: 2px solid var(--border);
+    margin-left: 0.75rem;
+  }
+  .tree-node:last-child { border-left-color: transparent; }
+  .tree-label { font-weight: 600; color: var(--text); }
+  .dag-line { color: var(--text-dim); padding-left: 1.5rem; font-size: 0.8rem; margin: 0.2rem 0; }
+  .dag-line .dag-current { color: var(--green); font-weight: 700; }
+  .dag-line .dag-done { color: var(--text-dim); }
+  .dag-line .dag-future { color: var(--border); }
+  .history-line { color: var(--text-dim); padding-left: 1.5rem; font-size: 0.75rem; }
+
+  /* Views */
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Sortable headers */
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--accent); }
+  th.sorted { color: var(--accent); }
+
+  /* Hint bar */
+  .hint {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    padding: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  kbd {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>MINION DASHBOARD</h1>
+  <span class="meta"><span class="ws-status connecting" id="ws-indicator"></span><span id="ws-label">connecting...</span></span>
+  <span class="meta right" id="clock"></span>
+</div>
+
+<!-- Navigation -->
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="switchView('dashboard')">Dashboard</button>
+  <button class="nav-tab" onclick="switchView('browser')">Browse All</button>
+</div>
+
+<!-- ==================== DASHBOARD VIEW ==================== -->
+<div id="view-dashboard" class="view active">
+  <div class="section">
+    <div class="section-header">TASKS <span class="badge" id="task-count">0 active</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:50px">ID</th>
+          <th style="width:100px">Status</th>
+          <th style="width:110px">Assignee</th>
+          <th>Title</th>
+          <th style="width:50px">Act</th>
+        </tr>
+      </thead>
+      <tbody id="tasks-body"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">AGENTS <span class="badge" id="agent-count">0 registered</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Class</th>
+          <th>Model</th>
+          <th>Status</th>
+          <th>Last Seen</th>
+          <th style="width:180px">Tokens</th>
+        </tr>
+      </thead>
+      <tbody id="agents-body"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">BACKLOG <span class="badge" id="backlog-count">0 items</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px">#</th>
+          <th style="width:50px">ID</th>
+          <th style="width:80px">Type</th>
+          <th style="width:80px">Priority</th>
+          <th style="width:100px">Status</th>
+          <th style="width:120px">Task</th>
+          <th>Title</th>
+        </tr>
+      </thead>
+      <tbody id="backlog-body"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">RECENT ACTIVITY <span class="badge" id="activity-count">0 events</span></div>
+    <div id="activity-feed"></div>
+  </div>
+</div>
+
+<!-- ==================== BROWSER VIEW ==================== -->
+<div id="view-browser" class="view">
+  <div class="section">
+    <div class="section-header">BACKLOG LINEAGE BROWSER <span class="badge" id="browser-count">0 items</span></div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px">#</th>
+          <th class="sortable sorted" style="width:50px" data-sort="id" onclick="sortBrowser('id')">ID</th>
+          <th class="sortable" style="width:80px" data-sort="type" onclick="sortBrowser('type')">TYPE</th>
+          <th class="sortable" style="width:80px" data-sort="priority" onclick="sortBrowser('priority')">PRI</th>
+          <th style="width:100px">Status</th>
+          <th>Title</th>
+        </tr>
+      </thead>
+      <tbody id="browser-body"></tbody>
+    </table>
+    <div class="hint" id="browser-pagination"></div>
+  </div>
+</div>
+
+<!-- ==================== LINEAGE OVERLAY ==================== -->
+<div class="lineage-overlay" id="lineage-overlay" onclick="if(event.target===this)closeLineage()">
+  <div class="lineage-panel" id="lineage-panel"></div>
+</div>
+
+<div class="hint">
+  Click backlog/activity row for lineage &nbsp;|&nbsp; <kbd>L</kbd> browse all &nbsp;|&nbsp; <kbd>ESC</kbd> close lineage
+</div>
+
+<script>
+/* ==========================================================================
+   WebSocket Dashboard Client
+
+   Purpose: Connect to the minion web dashboard WebSocket server, receive
+            live snapshots, and render all dashboard sections.
+   Pseudo-logic:
+   1. Connect to ws://host:port (same host as page, path "/")
+   2. On "snapshot" message: update Tasks, Agents, Backlog, Activity
+   3. On "lineage" message: render lineage overlay
+   4. On disconnect: show status, auto-reconnect after 3s
+   5. User interactions: click backlog/activity for lineage request
+   ========================================================================== */
+
+// --- State ---
+let ws = null;
+let currentSnapshot = null;
+let allBacklogItems = [];   // from snapshot — used for browser view
+let taskToBacklog = {};     // task_id -> backlog_id map from snapshot
+let browserSort = 'id';
+let browserPage = 0;
+const PAGE_SIZE = 9;
+
+// --- WebSocket connection ---
+
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = protocol + '//' + location.host;
+
+  setWsStatus('connecting');
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = function() {
+    setWsStatus('connected');
+  };
+
+  ws.onmessage = function(event) {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'snapshot') {
+        currentSnapshot = msg;
+        taskToBacklog = msg.task_to_backlog || {};
+        allBacklogItems = msg.backlog || [];
+        renderDashboard(msg);
+        // Re-render browser if visible
+        if (document.getElementById('view-browser').classList.contains('active')) {
+          renderBrowser();
+        }
+      } else if (msg.type === 'lineage') {
+        renderLineage(msg.data);
+      } else if (msg.type === 'error') {
+        console.warn('Server error:', msg.message);
+      }
+    } catch (e) {
+      console.error('Failed to parse message:', e);
+    }
+  };
+
+  ws.onclose = function() {
+    setWsStatus('disconnected');
+    // Auto-reconnect after 3 seconds
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = function() {
+    setWsStatus('disconnected');
+  };
+}
+
+function setWsStatus(status) {
+  const indicator = document.getElementById('ws-indicator');
+  const label = document.getElementById('ws-label');
+  indicator.className = 'ws-status ' + status;
+  const labels = { connected: 'live', disconnected: 'disconnected', connecting: 'connecting...' };
+  label.textContent = labels[status] || status;
+}
+
+function requestLineage(backlogId) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'lineage_request', backlog_id: backlogId }));
+  }
+}
+
+// --- Rendering helpers ---
+
+function relativeTime(isoTs) {
+  if (!isoTs) return 'never';
+  try {
+    const dt = new Date(isoTs);
+    const secs = Math.floor((Date.now() - dt.getTime()) / 1000);
+    if (secs < 0) return 'now';
+    if (secs < 60) return secs + 's ago';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+    return Math.floor(secs / 86400) + 'd ago';
+  } catch (e) { return '?'; }
+}
+
+function statusClass(status) {
+  return 'status-' + (status || 'unknown').replace(/\s+/g, '-');
+}
+
+function tokenBar(used, limit) {
+  if (!limit || limit <= 100) {
+    return '<div class="token-bar"><div class="token-bar-track"><div class="token-bar-fill" style="width:0"></div></div><span class="token-bar-label">---</span></div>';
+  }
+  const pct = Math.min(used / limit, 1.0);
+  const cls = pct > 0.75 ? 'high' : pct > 0.5 ? 'mid' : 'low';
+  const usedK = used >= 1000 ? Math.floor(used / 1000) + 'k' : used;
+  const limitK = limit >= 1000 ? Math.floor(limit / 1000) + 'k' : limit;
+  return '<div class="token-bar">' +
+    '<div class="token-bar-track"><div class="token-bar-fill ' + cls + '" style="width:' + (pct * 100) + '%"></div></div>' +
+    '<span class="token-bar-label">' + usedK + '/' + limitK + '</span></div>';
+}
+
+function shortModel(model) {
+  if (!model) return '';
+  for (const f of ['opus', 'sonnet', 'haiku']) {
+    if (model.includes(f)) return f;
+  }
+  return model.length > 8 ? model.slice(0, 8) : model;
+}
+
+function truncate(text, maxLen) {
+  if (!text) return '';
+  return text.length > maxLen ? text.slice(0, maxLen - 1) + '\u2026' : text;
+}
+
+// --- Dashboard rendering ---
+
+function renderDashboard(snapshot) {
+  renderTasks(snapshot.tasks || []);
+  renderAgents(snapshot.agents || []);
+  renderBacklog(snapshot.backlog || []);
+  renderActivity(snapshot.activity || []);
+}
+
+function renderTasks(tasks) {
+  document.getElementById('task-count').textContent = tasks.length + ' active';
+  const tbody = document.getElementById('tasks-body');
+  tbody.innerHTML = '';
+  if (!tasks.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center">(no active tasks)</td></tr>';
+    return;
+  }
+  tasks.forEach(function(t) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="text-align:right">' + t.id + '</td>' +
+      '<td><span class="' + statusClass(t.status) + '">' + t.status + '</span></td>' +
+      '<td>' + (t.assignee || '\u2014') + '</td>' +
+      '<td>' + truncate(t.title_short, 50) + '</td>' +
+      '<td style="text-align:right">' + (t.activity_count || 0) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAgents(agents) {
+  document.getElementById('agent-count').textContent = agents.length + ' registered';
+  const tbody = document.getElementById('agents-body');
+  tbody.innerHTML = '';
+  if (!agents.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center">(no agents)</td></tr>';
+    return;
+  }
+  agents.forEach(function(a) {
+    const tr = document.createElement('tr');
+    const lastSeen = relativeTime(a.effective_last_seen);
+    const seenStyle = (lastSeen.includes('h ago') || lastSeen.includes('d ago') || lastSeen === 'never')
+      ? 'color:var(--red)' : 'color:var(--text-dim)';
+    tr.innerHTML =
+      '<td>' + a.name + '</td>' +
+      '<td>' + (a.agent_class || '') + '</td>' +
+      '<td style="color:var(--text-dim)">' + shortModel(a.model) + '</td>' +
+      '<td><span class="' + statusClass(a.status) + '">' + (a.status || '') + '</span></td>' +
+      '<td style="' + seenStyle + '">' + lastSeen + '</td>' +
+      '<td>' + tokenBar(a.tokens_used || 0, a.tokens_limit || 0) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderBacklog(items) {
+  document.getElementById('backlog-count').textContent = items.length + ' items';
+  const tbody = document.getElementById('backlog-body');
+  tbody.innerHTML = '';
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center">(no active backlog items)</td></tr>';
+    return;
+  }
+  items.forEach(function(item, idx) {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.onclick = function() { requestLineage(item.id); };
+    const taskInfo = item.promoted_to
+      ? '#' + item.promoted_to + ' ' + (item.task_status || '')
+      : item.status;
+    tr.innerHTML =
+      '<td style="text-align:center;color:var(--cyan)">' + (idx < 9 ? idx + 1 : '') + '</td>' +
+      '<td style="text-align:right">' + item.id + '</td>' +
+      '<td>' + (item.type || '') + '</td>' +
+      '<td><span class="pri-' + (item.priority || 'medium') + '">' + (item.priority || '') + '</span></td>' +
+      '<td><span class="' + statusClass(item.status) + '">' + (item.status || '') + '</span></td>' +
+      '<td>' + truncate(taskInfo, 16) + '</td>' +
+      '<td>' + truncate(item.title_short, 50) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderActivity(events) {
+  document.getElementById('activity-count').textContent = events.length + ' events';
+  const feed = document.getElementById('activity-feed');
+  feed.innerHTML = '';
+  if (!events.length) {
+    feed.innerHTML = '<div class="activity-row" style="color:var(--text-dim)">(no recent transitions)</div>';
+    return;
+  }
+  events.forEach(function(ev) {
+    const row = document.createElement('div');
+    row.className = 'activity-row';
+    const backlogId = taskToBacklog[String(ev.task_id)];
+    if (backlogId) {
+      row.onclick = function() { requestLineage(backlogId); };
+    }
+    row.innerHTML =
+      '<span class="activity-time">' + relativeTime(ev.timestamp) + '</span>' +
+      '<span class="activity-id">#' + ev.task_id + '</span>' +
+      '<span class="activity-title">' + truncate(ev.title, 30) + '</span>' +
+      '<span class="activity-arrow">' + (ev.from_status || '\u2014') + '</span>' +
+      '<span class="activity-arrow">\u2192</span>' +
+      '<span class="activity-to">' + (ev.to_status || '\u2014') + '</span>' +
+      '<span class="activity-agent">[' + (ev.agent || '\u2014') + ']</span>';
+    feed.appendChild(row);
+  });
+}
+
+// --- Browser view ---
+
+function sortBrowser(field) {
+  browserSort = field;
+  browserPage = 0;
+  renderBrowser();
+  document.querySelectorAll('#view-browser th.sortable').forEach(function(th) {
+    th.classList.toggle('sorted', th.dataset.sort === field);
+    const base = th.dataset.sort.toUpperCase();
+    th.textContent = th.dataset.sort === field ? base + ' \u25BC' : base;
+  });
+}
+
+function renderBrowser() {
+  let items = allBacklogItems.slice();
+  if (browserSort === 'id') items.sort(function(a, b) { return b.id - a.id; });
+  else if (browserSort === 'type') items.sort(function(a, b) { return (a.type || '').localeCompare(b.type || '') || b.id - a.id; });
+  else if (browserSort === 'priority') {
+    const order = { critical: 0, high: 1, medium: 2, low: 3, unset: 4 };
+    items.sort(function(a, b) { return (order[a.priority] || 5) - (order[b.priority] || 5) || b.id - a.id; });
+  }
+
+  const totalPages = Math.ceil(items.length / PAGE_SIZE) || 1;
+  browserPage = Math.max(0, Math.min(browserPage, totalPages - 1));
+  const start = browserPage * PAGE_SIZE;
+  const page = items.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('browser-count').textContent = items.length + ' items';
+
+  const tbody = document.getElementById('browser-body');
+  tbody.innerHTML = '';
+  page.forEach(function(item, idx) {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.onclick = function() { requestLineage(item.id); };
+    tr.innerHTML =
+      '<td style="text-align:center;color:var(--cyan)">' + (idx + 1) + '</td>' +
+      '<td style="text-align:right">' + item.id + '</td>' +
+      '<td>' + (item.type || '') + '</td>' +
+      '<td><span class="pri-' + (item.priority || 'medium') + '">' + (item.priority || '') + '</span></td>' +
+      '<td><span class="' + statusClass(item.status) + '">' + (item.status || '') + '</span></td>' +
+      '<td>' + truncate(item.title_short, 55) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  const pag = document.getElementById('browser-pagination');
+  let nav = 'Page ' + (browserPage + 1) + '/' + totalPages;
+  if (browserPage > 0) nav += ' | <a href="#" onclick="browserPage--;renderBrowser();return false" style="color:var(--cyan)">\u2190 Prev</a>';
+  if (browserPage < totalPages - 1) nav += ' | <a href="#" onclick="browserPage++;renderBrowser();return false" style="color:var(--cyan)">Next \u2192</a>';
+  pag.innerHTML = nav;
+}
+
+// --- Lineage rendering ---
+
+function renderLineage(data) {
+  const panel = document.getElementById('lineage-panel');
+  const bk = data.backlog;
+  if (!bk) {
+    panel.innerHTML = '<div style="color:var(--text-dim);padding:1rem">(backlog item not found)</div>';
+    document.getElementById('lineage-overlay').classList.add('active');
+    return;
+  }
+
+  let html = '<button class="lineage-close" onclick="closeLineage()">x Close</button>';
+  html += '<h2>LINEAGE: Backlog #' + bk.id + '</h2>';
+  html += '<div style="font-weight:600;margin-bottom:0.4rem">' + (bk.title || '') + '</div>';
+  html += '<div class="meta">';
+  html += '<span>Status: <span class="' + statusClass(bk.status) + '">' + (bk.status || '') + '</span></span>';
+  html += '<span>Type: ' + (bk.type || '') + '</span>';
+  html += '<span>Priority: <span class="pri-' + (bk.priority || 'medium') + '">' + (bk.priority || '') + '</span></span>';
+  html += '</div>';
+
+  if (bk.promoted_to) {
+    html += '<div style="color:var(--text-dim);margin-bottom:1rem;font-size:0.85rem">Path: ' + bk.promoted_to + '</div>';
+  }
+
+  const reqs = data.requirements || [];
+  if (!reqs.length) {
+    html += '<div style="color:var(--text-dim);padding:1rem">(no requirements linked)</div>';
+  } else {
+    reqs.forEach(function(reqEntry, ri) {
+      const req = reqEntry.req;
+      const isLast = ri === reqs.length - 1;
+      const branch = isLast ? '\u2514' : '\u251C';
+      const stageColor = (req.stage === 'completed' || req.stage === 'done') ? 'var(--green)' : 'var(--yellow)';
+
+      // Extract short slug from file_path
+      const reqPath = req.file_path || '';
+      const parts = reqPath.split('/');
+      const slug = parts[parts.length - 1] || reqPath;
+
+      html += '<div class="tree-node">';
+      html += '<div><span class="tree-label">' + branch + '\u2500\u2500 Req #' + req.id + ':</span> ' + slug + ' <span style="color:' + stageColor + '">[' + (req.stage || '') + ']</span></div>';
+
+      const tasks = reqEntry.tasks || [];
+      if (!tasks.length) {
+        html += '<div style="color:var(--text-dim);padding-left:1.5rem">(no tasks)</div>';
+      } else {
+        tasks.forEach(function(taskEntry) {
+          const task = taskEntry.task;
+          const transitions = taskEntry.transitions || [];
+          const sColor = task.status === 'closed' ? 'var(--text-dim)' : task.status === 'in_progress' ? 'var(--green)' : 'var(--text)';
+
+          html += '<div class="tree-node">';
+          html += '<div><span class="tree-label">\u2514\u2500\u2500 Task #' + task.id + ':</span> ' + (task.title || '') + ' <span style="color:' + sColor + '">[' + (task.status || '') + ']</span> <span style="color:var(--text-dim)">' + (task.assigned_to || '\u2014') + '</span></div>';
+
+          // Transition history
+          if (transitions.length) {
+            const parts = transitions.map(function(t) {
+              return (t.from_status || '\u00B7') + '\u2192' + t.to_status + '(' + (t.triggered_by || '?') + ')';
+            });
+            html += '<div class="history-line">History: ' + parts.join('  ') + '</div>';
+          }
+          html += '</div>';
+        });
+      }
+      html += '</div>';
+    });
+  }
+
+  panel.innerHTML = html;
+  document.getElementById('lineage-overlay').classList.add('active');
+}
+
+function closeLineage() {
+  document.getElementById('lineage-overlay').classList.remove('active');
+}
+
+// --- View switching ---
+
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
+  document.getElementById('view-' + name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  if (name === 'browser') renderBrowser();
+}
+
+// --- Keyboard shortcuts ---
+
+document.addEventListener('keydown', function(e) {
+  if (document.getElementById('lineage-overlay').classList.contains('active')) {
+    if (e.key === 'Escape' || e.key === 'q') closeLineage();
+    return;
+  }
+  if (e.key === 'l' || e.key === 'L') {
+    document.querySelectorAll('.nav-tab')[1].click();
+  }
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.nav-tab')[0].click();
+  }
+  if (e.key >= '1' && e.key <= '9') {
+    const idx = parseInt(e.key) - 1;
+    const items = allBacklogItems;
+    if (idx < items.length) {
+      requestLineage(items[idx].id);
+    }
+  }
+});
+
+// --- Clock ---
+
+function updateClock() {
+  const now = new Date();
+  const pad = function(n) { return String(n).padStart(2, '0'); };
+  document.getElementById('clock').textContent =
+    now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' +
+    pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// --- Start ---
+connectWS();
+
+</script>
+</body>
+</html>
