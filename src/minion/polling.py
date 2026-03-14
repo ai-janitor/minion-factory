@@ -553,8 +553,17 @@ def multi_project_poll(agent_name: str, project_paths: list[str] | None = None) 
             ).fetchall()
             proj_data["tasks"] = [dict(r) for r in rows]
             conn.close()
-        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
-            proj_data["error"] = "DB unavailable"
+        except sqlite3.OperationalError as e:
+            # Expected: DB missing, table missing (fresh install or project not initialized)
+            proj_data["error"] = f"{type(e).__name__}: {e}"
+        except OSError as e:
+            # Expected: file not found, permission denied on DB file
+            proj_data["error"] = f"{type(e).__name__}: {e}"
+        except sqlite3.DatabaseError as e:
+            # Unexpected: DB corruption, disk I/O failure — log at error level, include detail
+            # so operators can distinguish from "no tasks available" (GLOBAL-152: no silent failures)
+            logger.error("DB failure polling project %s: %s: %s", path, type(e).__name__, e)
+            proj_data["error"] = f"{type(e).__name__}: {e}"
 
         projects_result.append(proj_data)
 
