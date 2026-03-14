@@ -191,8 +191,9 @@ def _lineage_to_dict(lineage: dict) -> dict:
         - "flow_stages": list[str] — ordered stage names from flow definition (#247)
     - Recursively convert all Row objects to dicts
     """
-    result: dict[str, Any] = {"backlog": None, "readme_content": None, "requirements": [], "checklists": []}
+    result: dict[str, Any] = {"backlog": None, "readme_content": None, "artifacts": [], "requirements": [], "checklists": []}
     result["readme_content"] = lineage.get("readme_content")
+    result["artifacts"] = lineage.get("artifacts", [])
     result["checklists"] = lineage.get("checklists", [])
     if lineage.get("backlog") is not None:
         bk = lineage["backlog"]
