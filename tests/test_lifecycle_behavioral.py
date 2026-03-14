@@ -6,8 +6,11 @@ Purpose: Verify cold_start blocks on unregistered agents, returns expected
 
 from __future__ import annotations
 
+import json
 import os
+import signal
 import sqlite3
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -161,3 +164,75 @@ def test_fenix_down_registered_creates_dump(tmp_path):
     # Should succeed or return structured result — not crash
     assert isinstance(result, dict)
     assert "error" not in result or "not registered" not in result.get("error", "")
+
+
+# ---------------------------------------------------------------------------
+# _kill_all_daemons — PermissionError path
+# ---------------------------------------------------------------------------
+
+
+def test_kill_all_daemons_permission_error_logs_warning(tmp_path):
+    """PermissionError from os.kill logs a WARNING with the PID — daemon is not silently passed."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    pid = 99999
+    state_file = state_dir / "test-daemon.json"
+    state_file.write_text(json.dumps({"pid": pid, "name": "test-daemon"}))
+
+    from minion.crew.lifecycle import _kill_all_daemons
+
+    with (
+        patch("minion.crew.lifecycle.resolve_swarm_runtime_dir", return_value=tmp_path),
+        patch("minion.crew.lifecycle.os.kill", side_effect=PermissionError("operation not permitted")),
+        patch("minion.crew.lifecycle.log") as mock_log,
+    ):
+        _kill_all_daemons()
+
+    # Must log a WARNING (not silently pass)
+    mock_log.warning.assert_called_once()
+    warning_args = mock_log.warning.call_args
+    # The PID must appear in the warning message args
+    assert pid in warning_args.args, f"PID {pid} not found in warning args: {warning_args.args}"
+
+
+def test_kill_all_daemons_process_lookup_error_logs_error(tmp_path):
+    """ProcessLookupError from os.kill logs an ERROR (PID already gone)."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    pid = 99998
+    state_file = state_dir / "test-daemon.json"
+    state_file.write_text(json.dumps({"pid": pid, "name": "test-daemon"}))
+
+    from minion.crew.lifecycle import _kill_all_daemons
+
+    with (
+        patch("minion.crew.lifecycle.resolve_swarm_runtime_dir", return_value=tmp_path),
+        patch("minion.crew.lifecycle.os.kill", side_effect=ProcessLookupError("no such process")),
+        patch("minion.crew.lifecycle.log") as mock_log,
+    ):
+        _kill_all_daemons()
+
+    mock_log.error.assert_called_once()
+    error_args = mock_log.error.call_args
+    assert pid in error_args.args, f"PID {pid} not found in error args: {error_args.args}"
+
+
+def test_kill_all_daemons_json_parse_error_logs_error(tmp_path):
+    """Invalid JSON in state file logs an ERROR and skips the kill."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    state_file = state_dir / "corrupt-daemon.json"
+    state_file.write_text("not valid json {{{")
+
+    from minion.crew.lifecycle import _kill_all_daemons
+
+    with (
+        patch("minion.crew.lifecycle.resolve_swarm_runtime_dir", return_value=tmp_path),
+        patch("minion.crew.lifecycle.os.kill") as mock_kill,
+        patch("minion.crew.lifecycle.log") as mock_log,
+    ):
+        _kill_all_daemons()
+
+    # os.kill must NOT be called when JSON is bad
+    mock_kill.assert_not_called()
+    mock_log.error.assert_called_once()
