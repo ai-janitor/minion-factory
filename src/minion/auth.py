@@ -193,6 +193,7 @@ TOOL_CATALOG: dict[str, tuple[set[str], str]] = {
     "task done":             (VALID_CLASSES, "Fast-close a task completed outside the DAG"),
     "task spec":             (VALID_CLASSES, "Read the spec file contents for a task"),
     "task define":           ({"lead"}, "Create a task spec file and task record in one command"),
+    "task order":            ({"lead"}, "Generate a deterministic work order file for a worker"),
     "task close":            ({"lead"}, "Close a completed task"),
     "task lineage":          (VALID_CLASSES, "Show task DAG history and who worked each stage"),
     "task reopen":           ({"lead"}, "Reopen a terminal task back to an earlier phase"),

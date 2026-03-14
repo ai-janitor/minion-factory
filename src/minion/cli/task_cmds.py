@@ -281,3 +281,20 @@ def register_commands(cli: click.Group) -> None:
         """Block a task with a reason and transition to blocked status."""
         from minion.tasks.block import block_task
         _output(block_task(agent, task_id, reason), ctx.obj["human"])
+
+    @task_group.command("order")
+    @_agent_option(required=True)
+    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--worker", "-w", required=True, help="Worker agent name")
+    @click.option("--files", "-f", default="", help="Comma-separated files to modify")
+    @click.option("--fix", "-d", default="", help="Exact fix description")
+    @click.option("--test-cmd", "-T", default="", help="Exact test command (default: uv run pytest)")
+    @click.option("--commit-msg", "-m", default="", help="Exact commit message format")
+    @click.pass_context
+    def task_order_cmd(ctx: click.Context, agent: str, task_id: int, worker: str,
+                       files: str, fix: str, test_cmd: str, commit_msg: str) -> None:
+        """Generate a deterministic work order file for a worker. Lead only."""
+        from minion.auth import require_class
+        require_class("lead")(lambda: None)()
+        from minion.tasks.work_order import generate_work_order
+        _output(generate_work_order(agent, task_id, worker, files, fix, test_cmd, commit_msg), ctx.obj["human"])
