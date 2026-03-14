@@ -9,7 +9,8 @@ Rationale: The daemon runner writes raw stream-json to .minion-swarm/logs/<agent
 Responsibility: JSONL tailing, tool_use extraction, error-tolerant parsing.
     NOT responsible for: WebSocket broadcast (web_server.py), stream writing (daemon runner),
     HTML rendering (static/index.html).
-Organization: Single public function `tail_agent_activity()` plus internal helpers.
+Organization: Two public functions — `tail_agent_activity()` for daemon stream.jsonl
+    and `tail_cli_activity()` for CLI invocation JSONL — plus internal helpers.
 """
 
 from __future__ import annotations
@@ -245,3 +246,125 @@ def _truncate(text: str, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
+
+
+# ---------------------------------------------------------------------------
+# CLI activity reader — parse .work/agent-activity/<agent>.jsonl
+# Written by CLI close handler (cli/main.py _log_activity_on_close).
+# Format: {"command": str, "args": list, "timestamp": str, "agent": str}
+# Converts to same {"tool": str, "input_summary": str, "timestamp": str}
+# format as daemon tool events for unified dashboard rendering.
+# ---------------------------------------------------------------------------
+
+def tail_cli_activity(
+    activity_dir: str | Path,
+    agent_names: list[str],
+    *,
+    max_events: int = _DEFAULT_MAX_EVENTS,
+    tail_bytes: int = _DEFAULT_TAIL_BYTES,
+) -> dict[str, list[dict[str, Any]]]:
+    """Tail CLI activity JSONL files and return recent invocations per agent.
+
+    Pseudo-logic:
+    1. For each agent name, resolve <activity_dir>/<agent>.jsonl
+    2. If file missing or empty, return empty list for that agent
+    3. Read the last tail_bytes from the file (seek from end)
+    4. Parse each line as JSON — skip malformed lines
+    5. Convert CLI record format to dashboard event format
+    6. Return last max_events per agent, newest first
+
+    Args:
+        activity_dir: Path to .work/agent-activity/ directory
+        agent_names: List of agent names to look up
+        max_events: Max events per agent (default 5)
+        tail_bytes: How many bytes to read from tail (default 64KB)
+
+    Returns:
+        dict mapping agent name -> list of event dicts, each with:
+            {"tool": str, "input_summary": str, "timestamp": str}
+    """
+    activity_path = Path(activity_dir)
+    result: dict[str, list[dict[str, Any]]] = {}
+
+    if not activity_path.is_dir():
+        return result
+
+    for name in agent_names:
+        jsonl_file = activity_path / f"{name}.jsonl"
+        events = _extract_cli_events(jsonl_file, tail_bytes)
+        # Keep only the last max_events, newest first
+        result[name] = events[-max_events:][::-1]
+
+    return result
+
+
+def _extract_cli_events(
+    jsonl_file: Path, tail_bytes: int
+) -> list[dict[str, Any]]:
+    """Extract CLI invocation events from a single agent JSONL file.
+
+    Pseudo-logic:
+    1. If file doesn't exist or is empty, return []
+    2. Seek to near the end for efficiency
+    3. Parse each line as JSON
+    4. Convert {"command", "args", "timestamp", "agent"} to
+       {"tool": command, "input_summary": joined args, "timestamp": ts}
+    5. Return events in chronological order (oldest first)
+
+    Returns:
+        List of event dicts in chronological order.
+    """
+    if not jsonl_file.exists():
+        return []
+
+    try:
+        file_size = jsonl_file.stat().st_size
+        if file_size == 0:
+            return []
+
+        with open(jsonl_file, "r", encoding="utf-8", errors="replace") as f:
+            seek_pos = max(0, file_size - tail_bytes)
+            if seek_pos > 0:
+                f.seek(seek_pos)
+            lines = f.readlines()
+
+        # If we seeked past the start, first line is likely partial — discard
+        if seek_pos > 0 and lines:
+            lines = lines[1:]
+
+        events: list[dict[str, Any]] = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if not isinstance(record, dict):
+                continue
+
+            # Convert CLI record to dashboard event format
+            command = record.get("command", "")
+            args = record.get("args", [])
+            timestamp = record.get("timestamp", "")
+
+            # Build input_summary from args list
+            if isinstance(args, list):
+                input_summary = " ".join(str(a) for a in args)
+            else:
+                input_summary = str(args)
+
+            events.append({
+                "tool": f"minion {command}" if command else "minion",
+                "input_summary": _truncate(input_summary, 120),
+                "timestamp": timestamp,
+            })
+
+    except OSError as e:
+        logger.debug("Failed to read CLI activity file %s: %s", jsonl_file, e)
+        return []
+
+    return events
