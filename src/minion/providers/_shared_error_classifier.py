@@ -65,7 +65,12 @@ def extract_error_summary(line: str, max_normal: int = 500) -> Optional[str]:
             msg = data.get("error", {}).get("message") or data.get("message") or ""
             if code or msg:
                 return f"{code or 'ERROR'}: {str(msg)[:120]}"
-    except (json.JSONDecodeError, TypeError, AttributeError) as e:
+    except json.JSONDecodeError:
+        # Non-JSON lines are the normal case in provider output (log lines, stack
+        # traces, plain text) — DEBUG only, not an error.
+        logger.debug("extract_error_summary: line is not JSON, trying regex fallback")
+    except (TypeError, AttributeError) as e:
+        # These indicate a bug in the extractor logic, not normal input.
         logger.error("JSON error extraction failed: %s", e)
 
     # Try HTTP status code pattern
@@ -137,7 +142,11 @@ def classify_provider_error(
                 result = config.json_extractor(data)
                 if result is not None:
                     return result
-        except (json.JSONDecodeError, TypeError, AttributeError) as e:
+        except json.JSONDecodeError:
+            # Non-JSON lines are the normal case in provider output — DEBUG only.
+            logger.debug("classify_provider_error: line is not JSON, skipping JSON phase")
+        except (TypeError, AttributeError) as e:
+            # These indicate a bug in the extractor logic, not normal input.
             logger.error("Provider error JSON extraction failed: %s", e)
 
     # Phase 2: Regex pattern matching
