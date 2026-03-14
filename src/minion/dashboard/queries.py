@@ -292,7 +292,7 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "")
     L = transition log entries per task. Typically small (single-digit R and T).
     NOT on the hot path — called only when user selects a backlog item.
     """
-    result: dict = {"backlog": None, "readme_content": None, "requirements": [], "checklists": []}
+    result: dict = {"backlog": None, "readme_content": None, "artifacts": [], "requirements": [], "checklists": []}
 
     # Fetch backlog item
     bk_row = conn.execute(
@@ -306,6 +306,9 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "")
 
     # Read the backlog item's README.md from the filesystem (#246)
     result["readme_content"] = fetch_backlog_readme(work_dir, bk_row["file_path"])
+
+    # Read additional backlog artifacts (findings.md, decomposition.md, etc.) — #279
+    result["artifacts"] = fetch_backlog_artifacts(work_dir, bk_row["file_path"])
 
     promoted_to = bk_row["promoted_to"]
     if not promoted_to:

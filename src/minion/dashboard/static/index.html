@@ -1311,6 +1311,16 @@ function renderLineage(data) {
     html += '<div class="expandable-body" id="' + descId + '">' + esc(readmeContent) + '</div>';
   }
 
+  // Backlog artifacts panel (findings.md, decomposition.md, etc.) — #279
+  var artifacts = data.artifacts || [];
+  artifacts.forEach(function(art) {
+    var artId = 'art-' + bk.id + '-' + art.name.replace(/[^a-zA-Z0-9]/g, '-');
+    html += '<div class="expandable-header" onclick="toggleExpand(\'' + artId + '\',this)">';
+    html += '<span class="chevron">\u25B6</span> ' + esc(art.name);
+    html += '</div>';
+    html += '<div class="expandable-body" id="' + artId + '">' + esc(art.content || '') + '</div>';
+  });
+
   // Requirements + Tasks tree
   var reqs = data.requirements || [];
   if (!reqs.length) {
