@@ -236,3 +236,78 @@ def test_kill_all_daemons_json_parse_error_logs_error(tmp_path):
     # os.kill must NOT be called when JSON is bad
     mock_kill.assert_not_called()
     mock_log.error.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# DAG render failure — explicit error string in dag_position
+# ---------------------------------------------------------------------------
+
+
+def test_dag_render_failure_sets_explicit_dag_position_not_missing():
+    """When render_dag() raises, open_tasks entries must have dag_position set to an explicit error string.
+
+    Regression test for lifecycle.py _gather_operational_state() — the except block
+    previously logged the error but left dag_position unset on the task dict. Agents
+    bootstrapping via cold_start/refresh received tasks with no phase visibility.
+    Per GLOBAL-152 (no-silent-failures), the failure must be visible to the caller.
+    After the fix, dag_position contains an explicit error string, not a missing field.
+    """
+    import sqlite3
+    import unittest.mock as mock
+    from minion.db import get_db, now_iso
+
+    _register_agent("dag-lifecycle-coder", "coder")
+
+    now = now_iso()
+    db = get_db()
+    db.execute(
+        "INSERT INTO tasks (title, task_file, created_by, status, assigned_to, "
+        "created_at, updated_at, flow_type, class_required) "
+        "VALUES (?, ?, ?, 'open', 'dag-lifecycle-coder', ?, ?, 'bugfix', 'coder')",
+        (
+            "DAG render failure lifecycle test task",
+            "tasks/dag-lifecycle-test.md",
+            "dag-lifecycle-coder",
+            now,
+            now,
+        ),
+    )
+    db.commit()
+    db.close()
+
+    # Patch load_flow inside lifecycle.py to return a mock flow whose render_dag raises.
+    import minion.tasks as _mt
+    _real_load_flow = _mt.load_flow
+
+    def _broken_render_load_flow(flow_type):
+        real_flow = _real_load_flow(flow_type)
+        broken = mock.MagicMock(wraps=real_flow)
+        broken.render_dag.side_effect = ValueError("bad flow YAML")
+        return broken
+
+    import minion.flow_bridge as _fb
+    _fb._flow_cache.clear()
+
+    with mock.patch("minion.tasks.loader.load_flow", side_effect=_broken_render_load_flow):
+        from minion.lifecycle import cold_start
+        result = cold_start("dag-lifecycle-coder")
+
+    _fb._flow_cache.clear()
+
+    assert "error" not in result, f"cold_start returned error: {result.get('error')}"
+    open_tasks = result.get("open_tasks", [])
+    matching = [t for t in open_tasks if t.get("title") == "DAG render failure lifecycle test task"]
+    assert matching, "Task was not returned after DAG render failure — render failure should not skip the task."
+
+    dag_val = matching[0].get("dag_position")
+    assert dag_val is not None, (
+        "dag_position field is missing after render failure — agent has no phase visibility. "
+        "Set dag_position to an explicit error message when render fails (GLOBAL-152)."
+    )
+    assert dag_val != "", (
+        "dag_position is empty string after render failure — agent has no phase visibility."
+    )
+    assert "unavailable" in dag_val.lower() or "failed" in dag_val.lower(), (
+        f"dag_position does not indicate failure: {dag_val!r}. "
+        "Expected an explicit error message so agent knows DAG render failed."
+    )

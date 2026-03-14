@@ -60,8 +60,8 @@ def _get_first_project_db(network_db_path: str):
             if conn:
                 db_path = os.path.join(proj["path"], ".work", "minion.db")
                 return conn, db_path
-    except (ImportError, OSError, Exception) as e:
-        logger.error("Failed to discover project DB: %s", e)
+    except (ImportError, OSError, sqlite3.Error) as e:
+        logger.warning("Failed to discover project DB: %s: %s", type(e).__name__, e)
     return None, None
 
 

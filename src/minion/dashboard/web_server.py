@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -393,9 +394,20 @@ async def _ws_handler(websocket: Any, db_path: str) -> None:
                     lineage = _build_lineage(db_path, backlog_id)
                     await websocket.send(json.dumps(lineage))
             except Exception as e:
-                logger.error("Lineage request failed: %s: %s", type(e).__name__, e)
+                # Generate a short error ID for correlation — log full details server-side only.
+                # Client receives only the generic message + error_id (no stack trace, no file paths).
+                error_id = uuid.uuid4().hex[:8]
+                logger.error(
+                    "Lineage request failed [error_id=%s]: %s: %s",
+                    error_id, type(e).__name__, e,
+                    exc_info=True,
+                )
                 try:
-                    await websocket.send(json.dumps({"type": "error", "message": str(e)}))
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Lineage request failed",
+                        "error_id": error_id,
+                    }))
                 except Exception as e2:
                     logger.error("Failed to send error response to client: %s", e2)
     except Exception as e:

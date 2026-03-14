@@ -13,6 +13,7 @@ Implementation order: 8th (depends on project_db + discovery — needs all proje
 from __future__ import annotations
 
 import logging
+import sqlite3
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def handle_overview(handler, db_path: str, **kwargs) -> None:
         "requirements": {},
         "tasks": {},
         "agents": {"total": 0, "by_class": {}, "by_hp_tier": {"healthy": 0, "wounded": 0, "critical": 0, "unknown": 0}},
+        "projects_with_errors": [],
     }
 
     for proj in projects:
@@ -98,8 +100,10 @@ def handle_overview(handler, db_path: str, **kwargs) -> None:
                         result["agents"]["by_hp_tier"]["critical"] += 1
                 else:
                     result["agents"]["by_hp_tier"]["unknown"] += 1
-        except Exception as e:
-            logger.error("Failed to aggregate overview for project %s: %s", proj.get("name"), e)
+        except (sqlite3.Error, AttributeError) as e:
+            proj_name = proj.get("name", "unknown")
+            logger.warning("Failed to aggregate overview for project %s: %s: %s", proj_name, type(e).__name__, e)
+            result["projects_with_errors"].append(proj_name)
 
     handler._json_response(200, result)
 
@@ -135,6 +139,7 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
     # PSEUDO: return {"alerts": [...]}
     projects = discover_projects(db_path, _DB_LOCK)
     alerts = []
+    projects_with_errors = []
     now = datetime.now()
     terminal_stages = {"completed", "killed", "deferred"}
 
@@ -203,13 +208,15 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                         })
                 except (ValueError, TypeError) as e:
                     logger.error("Failed to parse timestamp for alert: %s", e)
-        except Exception as e:
-            logger.error("Failed to collect alerts for project %s: %s", proj.get("name"), e)
+        except (sqlite3.Error, AttributeError) as e:
+            proj_name = proj.get("name", "unknown")
+            logger.warning("Failed to collect alerts for project %s: %s: %s", proj_name, type(e).__name__, e)
+            projects_with_errors.append(proj_name)
 
     # Sort: critical first, then warning
     severity_order = {"critical": 0, "warning": 1, "info": 2}
     alerts.sort(key=lambda a: severity_order.get(a.get("severity", "info"), 2))
-    handler._json_response(200, {"alerts": alerts})
+    handler._json_response(200, {"alerts": alerts, "projects_with_errors": projects_with_errors})
 
 
 def handle_task_lineage(handler, db_path: str, task_id: str = "", **kwargs) -> None:
@@ -253,7 +260,7 @@ def handle_task_lineage(handler, db_path: str, task_id: str = "", **kwargs) -> N
                     "agent": row["triggered_by"],
                     "timestamp": row["created_at"],
                 })
-        except Exception as e:
-            logger.error("Failed to query transition_log for task %s in project %s: %s", tid, proj.get("name"), e)
+        except (sqlite3.Error, AttributeError) as e:
+            logger.warning("Failed to query transition_log for task %s in project %s: %s: %s", tid, proj.get("name"), type(e).__name__, e)
 
     handler._json_response(200, {"task_id": tid, "transitions": transitions})
