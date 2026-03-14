@@ -55,6 +55,39 @@ def test_register_invalid_class_returns_error():
     assert "error" in result
 
 
+def test_register_rejects_class_change():
+    """Re-registering with a different class is blocked (backlog #273).
+
+    Prevents leads from re-registering as coder/builder to bypass DAG gates.
+    Agent must deregister first to change class, creating an auditable gap."""
+    from minion.comms import register
+    result1 = register(agent_name="shifty", agent_class="lead")
+    assert "error" not in result1
+    # Attempt to re-register same name as coder — should be blocked
+    result2 = register(agent_name="shifty", agent_class="coder")
+    assert "error" in result2
+    assert "BLOCKED" in result2["error"]
+    assert "already registered as class 'lead'" in result2["error"]
+
+
+def test_register_same_class_after_deregister_allowed():
+    """After deregistering, re-registering with a different class is allowed."""
+    from minion.comms import register, deregister
+    register(agent_name="reformed", agent_class="lead")
+    deregister("reformed")
+    result = register(agent_name="reformed", agent_class="coder")
+    assert "error" not in result
+    assert result.get("status") in ("registered", "re_registered")
+
+
+def test_register_same_class_re_registration_allowed():
+    """Re-registering with the SAME class is allowed (idempotent refresh)."""
+    from minion.comms import register
+    register(agent_name="steady", agent_class="coder")
+    result = register(agent_name="steady", agent_class="coder")
+    assert "error" not in result
+
+
 # ---------------------------------------------------------------------------
 # deregister — happy path
 # ---------------------------------------------------------------------------
