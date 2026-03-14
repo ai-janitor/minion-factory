@@ -112,9 +112,11 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
         backlog = _rows_to_dicts(fetch_backlog(conn))
         activity = _rows_to_dicts(fetch_activity(conn))
 
-        # Map activity task IDs to backlog IDs for click-to-lineage
-        task_ids = [row["task_id"] for row in activity]
-        task_to_backlog = fetch_task_to_backlog_map(conn, task_ids)
+        # Map all active task IDs + activity task IDs to backlog IDs.
+        # Union both sets so the task table and activity feed both resolve backlog origins (#193).
+        # Single DB call — no extra round-trip vs the previous activity-only approach.
+        all_task_ids = list({row["id"] for row in tasks} | {row["task_id"] for row in activity})
+        task_to_backlog = fetch_task_to_backlog_map(conn, all_task_ids)
 
         # These already return dicts — pass through
         agent_summary = get_agent_summary(conn)

@@ -24,6 +24,8 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Active tasks ordered by status priority then ID.
 
     Excludes terminal states. Includes blocked_by for tree rendering.
+    Includes requirement_id so web_server can map tasks back to originating
+    backlog items via fetch_task_to_backlog_map (#193).
 
     Big-O: O(T * log(T)) where T = active (non-terminal) tasks. Full table scan
     with NOT IN filter + CASE-based ORDER BY. LIMIT 50 caps output. Hot path —
@@ -39,7 +41,8 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             t.flow_type,
             t.blocked_by,
             t.activity_count,
-            t.result_file IS NOT NULL       AS has_result
+            t.result_file IS NOT NULL       AS has_result,
+            t.requirement_id
         FROM tasks t
         WHERE t.status NOT IN (""" + _TERMINAL_SQL + """)
         ORDER BY
@@ -145,7 +148,8 @@ def get_task_pipeline(conn: sqlite3.Connection) -> dict[str, list[dict]]:
     """
     pipeline: dict[str, list[dict]] = {}
     for row in conn.execute(
-        "SELECT id, title, status, assigned_to, flow_type, updated_at "
+        # requirement_id included so frontend can resolve originating backlog ID (#193)
+        "SELECT id, title, status, assigned_to, flow_type, updated_at, requirement_id "
         "FROM tasks ORDER BY updated_at DESC"
     ).fetchall():
         task = dict(row)

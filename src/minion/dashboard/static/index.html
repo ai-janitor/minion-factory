@@ -187,6 +187,19 @@
   .activity-arrow { color: var(--text-dim); }
   .activity-to { color: var(--green); }
   .activity-agent { color: var(--text-dim); font-size: 0.8rem; }
+  /* Backlog origin badge — shown in activity feed and task table (#193) */
+  .bkl-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--amber);
+    background: rgba(251,191,36,0.08);
+    border: 1px solid rgba(251,191,36,0.25);
+    border-radius: 3px;
+    padding: 0 4px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .bkl-badge:hover { background: rgba(251,191,36,0.18); border-color: rgba(251,191,36,0.5); }
 
   /* Lineage overlay */
   .lineage-overlay {
@@ -293,6 +306,7 @@
       <thead>
         <tr>
           <th style="width:50px">ID</th>
+          <th style="width:60px">BKL</th>
           <th style="width:100px">Status</th>
           <th style="width:110px">Assignee</th>
           <th>Title</th>
@@ -516,13 +530,19 @@ function renderTasks(tasks) {
   const tbody = document.getElementById('tasks-body');
   tbody.innerHTML = '';
   if (!tasks.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center">(no active tasks)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center">(no active tasks)</td></tr>';
     return;
   }
   tasks.forEach(function(t) {
+    // BKL column: show originating backlog ID if traceable, else em-dash (#193)
+    const bklId = taskToBacklog[String(t.id)];
+    const bklCell = bklId
+      ? '<span class="bkl-badge" onclick="event.stopPropagation();requestLineage(' + bklId + ')">bkl-' + bklId + '</span>'
+      : '<span style="color:var(--text-dim)">—</span>';
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td style="text-align:right">' + t.id + '</td>' +
+      '<td>' + bklCell + '</td>' +
       '<td><span class="' + statusClass(t.status) + '">' + t.status + '</span></td>' +
       '<td>' + (t.assignee || '\u2014') + '</td>' +
       '<td>' + truncate(t.title_short, 50) + '</td>' +
@@ -597,9 +617,14 @@ function renderActivity(events) {
     if (backlogId) {
       row.onclick = function() { requestLineage(backlogId); };
     }
+    // Show bkl-#N tag inline when task traces back to a backlog item (#193)
+    const bklTag = backlogId
+      ? ' <span class="bkl-badge">bkl-' + backlogId + '</span>'
+      : '';
     row.innerHTML =
       '<span class="activity-time">' + relativeTime(ev.timestamp) + '</span>' +
       '<span class="activity-id">#' + ev.task_id + '</span>' +
+      bklTag +
       '<span class="activity-title">' + truncate(ev.title, 30) + '</span>' +
       '<span class="activity-arrow">' + (ev.from_status || '\u2014') + '</span>' +
       '<span class="activity-arrow">\u2192</span>' +
