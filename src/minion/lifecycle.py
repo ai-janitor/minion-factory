@@ -43,6 +43,9 @@ def _gather_operational_state(agent_name: str, cursor: sqlite3.Cursor) -> dict[s
             task["dag_position"] = flow.render_dag(task["status"])
         except (ImportError, FileNotFoundError, KeyError, ValueError) as e:
             logger.error("Failed to render DAG for task %s: %s", task.get("id"), e)
+            # Per GLOBAL-152: explicit error state — agent must see the failure, not receive missing dag_position.
+            # Do NOT re-raise (task still returned) but mark dag_position as unavailable so agent has visibility.
+            task["dag_position"] = f"(DAG unavailable — render failed: check flow YAML for '{flow_type}')"
         open_tasks.append(task)
     result["open_tasks"] = open_tasks
 
@@ -189,7 +192,7 @@ def cold_start(agent_name: str) -> dict[str, object]:
             doc_paths = [d["doc_path"] for d in class_docs.get("docs", [])]
             if doc_paths:
                 result["suggested_reading"] = doc_paths
-        except (ImportError, KeyError, TypeError) as e:
+        except (ImportError, KeyError, TypeError, sqlite3.OperationalError) as e:
             logger.error("Failed to suggest reading for agent %s: %s", agent_name, e)
 
         # Operational state (tasks, claims, HP, inbox, flags)
