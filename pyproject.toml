@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "minion-factory"
-version = "0.5.1"
+version = "0.6.0"
 description = "Unified multi-agent coordination framework — CLI, daemon, task DAG"
 requires-python = ">=3.10"
 dependencies = [
@@ -31,7 +31,7 @@ packages = ["src/minion"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--junitxml=.work/test-reports/junit.xml -q"
+addopts = "--testmon --junitxml=.work/test-reports/junit.xml -q"
 markers = [
     "unit: Pure logic tests — no DB, no filesystem, no network. Fast.",
     "integration: Tests that touch DB, filesystem, or CLI runner. Medium speed.",
@@ -47,4 +47,5 @@ typeCheckingMode = "strict"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-testmon>=2.2.0",
 ]

@@ -13,7 +13,10 @@ Lead.
    minion backlog update --id <backlog-id> --status closed
    ```
 4. Deregister all workers, then deregister yourself
-5. Report completion to your superior via `minion comms send local`
+5. Report completion to your superior:
+   ```bash
+   minion comms send local --from <your-name> --to <superior-name> --message "Backlog #<id> complete. All tasks closed, tests pass."
+   ```
 
 ## No exit
 Terminal stage. No further transitions.

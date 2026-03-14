@@ -60,8 +60,20 @@ def add(
     """Capture a new backlog item as a README.md folder and index it in the DB.
 
     Validates type/priority, stamps the template, writes the folder, then
-    inserts a row into the backlog table. file_path stored in DB is relative
-    to .work/backlog/ so it survives directory moves.
+    inserts a row into the backlog table.
+
+    file_path is the universal key linking DB row ↔ filesystem folder:
+      DB:  backlog.file_path = "<type>/<slug>"  (e.g. "bugs/auth-regression")
+      FS:  .work/backlog/<file_path>/           (folder with all artifacts)
+
+    All artifacts for a backlog item live in its folder:
+      README.md         — description, origin, acceptance criteria (always present)
+      findings.md       — research results from /decompose-backlog
+      decomposition.md  — task breakdown from /decompose-backlog
+
+    file_path is immutable after creation. The slug is derived from the title
+    via _slugify() and stored relative to .work/backlog/ so it survives
+    directory moves. To read artifacts: os.path.join(work_dir, "backlog", file_path, "<name>.md")
     """
     if type not in VALID_TYPES:
         return {"error": f"Invalid type '{type}'. Valid: {', '.join(sorted(VALID_TYPES))}"}

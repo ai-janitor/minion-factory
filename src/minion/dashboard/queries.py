@@ -383,16 +383,14 @@ def fetch_backlog_readme(work_dir: str, file_path: str | None) -> str | None:
     """Read the README.md content for a backlog item from the filesystem.
 
     Backlog #246: Show backlog description in lineage view.
-    Resolves the README path from the backlog's file_path field:
-      {work_dir}/backlog/{file_path}/README.md
 
-    file_path already includes the type prefix (e.g. "requests/foo", "bugs/bar").
+    Backlog artifacts live in .work/backlog/{file_path}/ — the file_path field
+    (DB column) is the universal key linking the DB row to the filesystem folder.
+    Known artifacts: README.md, findings.md, decomposition.md.
+    See also: fetch_backlog_artifacts() for listing all artifacts in a folder.
 
     Returns the file content as a string, or None if the file doesn't exist
     or is unreadable. Never raises — graceful degradation for missing files.
-
-    Big-O: O(F) where F = file size. Single filesystem read. NOT on hot path —
-    called only when user selects a backlog item for lineage view.
     """
     import os
     if not work_dir or not file_path:
@@ -403,6 +401,30 @@ def fetch_backlog_readme(work_dir: str, file_path: str | None) -> str | None:
             return f.read()
     except (OSError, UnicodeDecodeError):
         return None
+
+
+def fetch_backlog_artifacts(work_dir: str, file_path: str | None) -> list[dict]:
+    """List all .md artifacts in a backlog item's folder.
+
+    Returns a list of dicts: [{"name": "findings.md", "content": "..."}, ...]
+    Excludes README.md (fetched separately by fetch_backlog_readme).
+    """
+    import os
+    if not work_dir or not file_path:
+        return []
+    folder = os.path.join(work_dir, "backlog", file_path)
+    if not os.path.isdir(folder):
+        return []
+    artifacts = []
+    for fname in sorted(os.listdir(folder)):
+        if fname.endswith(".md") and fname != "README.md":
+            fpath = os.path.join(folder, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    artifacts.append({"name": fname, "content": f.read()})
+            except (OSError, UnicodeDecodeError):
+                continue
+    return artifacts
 
 
 def fetch_checklists_for_task(work_dir: str, task_id: int, conn: sqlite3.Connection) -> list[dict]:

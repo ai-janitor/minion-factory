@@ -57,6 +57,21 @@ deterministic — follow it exactly. Do not improvise. Do not reinterpret.
 15. Advance requirement stage if all tasks closed
 ```
 
+## COMMS — exact syntax, no guessing
+
+Send a message:
+```bash
+minion comms send local --from <your-name> --to <target-name> --message "<text>"
+```
+
+Check your inbox (reads and clears unread messages):
+```bash
+minion comms check-inbox --agent <your-name>
+```
+
+Note: if backlog #283 is implemented, unread messages are piggybacked on every CLI
+command output automatically — no manual check-inbox needed.
+
 ## WHAT HAPPENS IF YOU VIOLATE THESE RULES
 
 - Re-registration with a different class: the system will reject it with an error
