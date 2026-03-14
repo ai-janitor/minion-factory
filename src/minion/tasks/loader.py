@@ -55,6 +55,46 @@ def _find_flows_dir() -> Path:
 
 _DEFAULT_FLOWS_DIR = _find_flows_dir()
 
+
+def _bundled_protocols_dir() -> Path:
+    """Return the bundled protocols directory from the installed package."""
+    bundled = Path(__file__).resolve().parent.parent / "task-flows" / "protocols"
+    if bundled.exists():
+        return bundled
+    # Dev fallback
+    return Path(__file__).resolve().parent.parent.parent.parent / "task-flows" / "protocols"
+
+
+def get_protocols_dir() -> Path:
+    """Return the resolved protocols directory.
+
+    Search order:
+    1. .work/protocols/ in project root (project-local, editable)
+    2. Bundled package (seed source — copied to .work/protocols/ on first access)
+
+    If .work/protocols/ doesn't exist, seed it from the bundled package so the
+    project has its own editable copy.
+    """
+    import shutil
+    from minion.defaults import resolve_db_path
+
+    # Resolve project .work/ dir from DB path
+    db_path = resolve_db_path()
+    work_dir = Path(db_path).parent  # .work/
+    local_protocols = work_dir / "protocols"
+
+    if local_protocols.exists():
+        return local_protocols
+
+    # Seed from bundled package
+    bundled = _bundled_protocols_dir()
+    if bundled.exists():
+        shutil.copytree(bundled, local_protocols)
+        return local_protocols
+
+    # Fallback to bundled if copy failed
+    return _DEFAULT_FLOWS_DIR / "protocols"
+
 # Runtime cache — loaded once, kept in memory
 _FLOW_CACHE: dict[str, TaskFlow] = {}
 _FLOWS_LOADED = False

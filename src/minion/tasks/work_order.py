@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 
 from minion.db import get_db, get_runtime_dir
+from minion.tasks.loader import get_protocols_dir
 
 
 def generate_work_order(
@@ -132,6 +133,14 @@ def generate_work_order(
         lines.append("")
         lines.append(req_content)
         lines.append("")
+
+    # Protocol paths — resolved from installed package, not hardcoded to project root
+    protocols_dir = get_protocols_dir()
+    lines.append("## Protocols")
+    lines.append("")
+    lines.append(f"- Lead execution: `{protocols_dir / 'lead' / 'execution.md'}`")
+    lines.append(f"- Task stage protocols: `{protocols_dir / '_base' / '<stage>.md'}`")
+    lines.append("")
 
     lines.append("---")
     lines.append("**INSTRUCTIONS:** Read this file. Do exactly what it says. Write CHECKLIST.md first. Do not improvise.")

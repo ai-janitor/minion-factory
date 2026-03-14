@@ -592,6 +592,7 @@
 <!-- Header -->
 <div class="header">
   <h1>Minion dashboard</h1>
+  <span class="meta" id="project-info" style="opacity:0.7; font-size:0.85em;"></span>
   <span class="meta">
     <span class="ws-status connecting" id="ws-indicator"></span>
     <span id="ws-label">connecting...</span>
@@ -891,6 +892,13 @@ function renderDashboard(snapshot) {
   var agents = snapshot.agents || [];
   var backlog = snapshot.backlog || [];
   var activity = snapshot.activity || [];
+
+  // Project identity
+  if (snapshot.project_name) {
+    var info = snapshot.project_name;
+    if (snapshot.db_path) info += ' \u2014 ' + snapshot.db_path;
+    document.getElementById('project-info').textContent = info;
+  }
 
   // Stats row
   document.getElementById('stat-tasks').textContent = tasks.length;

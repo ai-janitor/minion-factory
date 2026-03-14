@@ -7,7 +7,7 @@ Organization: Re-exports public API symbols. Imports only, no logic.
 """
 from .dag import Stage, TaskFlow, Transition
 from .db import TaskDB
-from .loader import load_flow, list_flows
+from .loader import load_flow, list_flows, get_protocols_dir
 from .query_task import get_tasks, get_task, get_task_lineage
 from .pull_task import pull_task
 from .submit_result import submit_result
@@ -21,7 +21,7 @@ from .work_order import generate_work_order
 __all__ = [
     "Stage", "TaskFlow", "Transition",
     "TaskDB",
-    "load_flow", "list_flows",
+    "load_flow", "list_flows", "get_protocols_dir",
     "create_task", "assign_task", "update_task",
     "get_tasks", "get_task", "submit_result",
     "close_task", "reopen_task", "done_task", "pull_task", "complete_phase",

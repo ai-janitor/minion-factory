@@ -77,6 +77,13 @@ def register_commands(cli: click.Group) -> None:
         result = flow.next_status(current, passed=not failed)
         _output({"type": type_name, "current": current, "next": result}, ctx.obj["human"], ctx.obj["compact"])
 
+    @flow_group.command("protocols-dir")
+    @click.pass_context
+    def protocols_dir(ctx: click.Context) -> None:
+        """Print the resolved protocols directory path."""
+        from minion.tasks.loader import get_protocols_dir
+        _output({"protocols_dir": str(get_protocols_dir())}, ctx.obj["human"], ctx.obj["compact"])
+
     @flow_group.command("transition")
     @click.argument("task_id", type=int)
     @click.argument("to_status")

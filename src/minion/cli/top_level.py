@@ -57,6 +57,45 @@ def register_commands(cli: click.Group) -> None:
         from minion.crew.spawn import install_docs as _install_docs
         _output(_install_docs(), ctx.obj["human"])
 
+    @cli.command("refresh")
+    @click.pass_context
+    def refresh(ctx: click.Context) -> None:
+        """Re-seed .work/ with latest bundled protocols, flows, and configs from the installed package.
+
+        Overwrites local copies with the package defaults. Use after upgrading
+        the CLI to pick up new protocol versions. Project-specific customizations
+        will be lost — commit or back up first.
+        """
+        import shutil
+        from minion.defaults import resolve_db_path
+        from minion.tasks.loader import _bundled_protocols_dir, _find_flows_dir
+
+        db_path = resolve_db_path()
+        work_dir = os.path.dirname(db_path)
+
+        refreshed = []
+
+        # Protocols
+        bundled_protocols = _bundled_protocols_dir()
+        local_protocols = os.path.join(work_dir, "protocols")
+        if bundled_protocols.exists():
+            if os.path.exists(local_protocols):
+                shutil.rmtree(local_protocols)
+            shutil.copytree(str(bundled_protocols), local_protocols)
+            refreshed.append(f"protocols → {local_protocols}")
+
+        # Flow YAMLs
+        bundled_flows = _find_flows_dir()
+        local_flows = os.path.join(work_dir, "flows")
+        flow_yamls = list(bundled_flows.glob("*.yaml"))
+        if flow_yamls:
+            os.makedirs(local_flows, exist_ok=True)
+            for f in flow_yamls:
+                shutil.copy2(str(f), os.path.join(local_flows, f.name))
+            refreshed.append(f"flows ({len(flow_yamls)} yamls) → {local_flows}")
+
+        _output({"status": "refreshed", "items": refreshed}, ctx.obj["human"])
+
     @cli.command("dashboard")
     @click.option("--web", is_flag=True, default=False,
                   help="Launch web dashboard (browser) instead of terminal TUI")

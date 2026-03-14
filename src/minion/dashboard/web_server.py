@@ -301,8 +301,15 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
         for agent in agents:
             agent["checklist_tally"] = _agent_checklist_tally(agent.get("name", ""), work_dir)
 
+        # Derive project name from the DB path:
+        # db_path is typically <project-root>/.work/minion.db
+        project_root = os.path.dirname(os.path.dirname(db_path))
+        project_name = os.path.basename(project_root) or db_path
+
         snapshot = {
             "type": "snapshot",
+            "project_name": project_name,
+            "db_path": db_path,
             "tasks": tasks,
             "agents": agents,
             "backlog": backlog,
