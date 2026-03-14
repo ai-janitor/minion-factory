@@ -34,6 +34,7 @@ ASSUMPTIONS:
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any
@@ -41,6 +42,8 @@ from typing import Any
 from minion.auth import CAP_REVIEW, classes_with
 from minion.db import get_db, now_iso, touch_coordinator_activity
 from minion.defaults import MAX_DOC_SIZE
+
+logger = logging.getLogger(__name__)
 
 _reviewers = classes_with(CAP_REVIEW)
 
@@ -252,8 +255,9 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 eligible = _workers_for(task["status"], task.get("class_required") or "", task.get("flow_type") or "bugfix")
                 if eligible is not None and agent_class not in eligible:
                     continue
-            except (ImportError, KeyError, ValueError):
-                pass
+            except (ImportError, KeyError, ValueError) as e:
+                logger.error("Failed to check DAG eligibility for task %s: %s", task.get("id"), e)
+                continue
             # Render DAG so agent sees where they are in the flow
             task_type = task.get("flow_type") or "bugfix"
             dag_str = ""

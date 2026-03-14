@@ -192,3 +192,47 @@ def test_complete_phase_includes_poll_reminder():
     result = complete_phase("coder-pr", task_id, passed=True)
     if "error" not in result:
         assert "poll_reminder" in result
+
+
+# ---------------------------------------------------------------------------
+# DAG eligibility check failure — task must be skipped (not returned eligible)
+# ---------------------------------------------------------------------------
+
+
+def test_dag_eligibility_exception_skips_task():
+    """When workers_for() raises, the task must NOT be returned as eligible.
+
+    Regression test for polling.py:259 — the except block previously had no
+    'continue', so a task fell through to the result set even when eligibility
+    could not be confirmed. After the fix, any exception from the DAG eligibility
+    check causes the task to be treated as ineligible and skipped.
+    """
+    import sqlite3
+    import unittest.mock as mock
+    from minion.db import get_db, now_iso
+
+    _register_agent("elig-coder", "coder")
+
+    now = now_iso()
+    db = get_db()
+    # Insert an open, unassigned task with a known flow_type
+    db.execute(
+        "INSERT INTO tasks (title, task_file, created_by, status, assigned_to, "
+        "created_at, updated_at, flow_type, class_required) "
+        "VALUES (?, ?, ?, 'open', NULL, ?, ?, 'bugfix', 'coder')",
+        ("Eligibility skip test task", "tasks/elig-test.md", "elig-coder", now, now),
+    )
+    db.commit()
+    db.close()
+
+    # Patch workers_for to raise KeyError — simulates malformed flow YAML / unknown stage
+    with mock.patch("minion.flow_bridge.workers_for", side_effect=KeyError("unknown_stage")):
+        from minion.polling import _find_available_tasks
+        tasks = _find_available_tasks("elig-coder")
+
+    # Task must NOT appear in results — eligibility check failure means skip
+    task_titles = [t.get("title") for t in tasks]
+    assert "Eligibility skip test task" not in task_titles, (
+        "Task was returned as eligible even though the DAG eligibility check raised. "
+        "Add 'continue' after logger.error in the except block at polling.py:259."
+    )
