@@ -263,11 +263,12 @@ def fetch_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         return []
 
 
-def fetch_lineage(conn: sqlite3.Connection, backlog_id: int) -> dict:
+def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "") -> dict:
     """Fetch full lineage for a backlog item: backlog → requirements → tasks → transitions.
 
     Returns a dict with:
       - backlog: the backlog row (id, title, status, type, priority, promoted_to, ...)
+      - readme_content: string content of the backlog's README.md, or None
       - requirements: list of dicts, each with:
           - req: requirement row (id, file_path, origin, stage)
           - tasks: list of dicts, each with:
@@ -278,17 +279,20 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int) -> dict:
     L = transition log entries per task. Typically small (single-digit R and T).
     NOT on the hot path — called only when user selects a backlog item.
     """
-    result: dict = {"backlog": None, "requirements": []}
+    result: dict = {"backlog": None, "readme_content": None, "requirements": []}
 
     # Fetch backlog item
     bk_row = conn.execute(
-        "SELECT id, title, status, type, priority, promoted_to, created_at, updated_at "
+        "SELECT id, title, status, type, priority, promoted_to, file_path, created_at, updated_at "
         "FROM backlog WHERE id = ?",
         (backlog_id,),
     ).fetchone()
     if not bk_row:
         return result
     result["backlog"] = bk_row
+
+    # Read the backlog item's README.md from the filesystem (#246)
+    result["readme_content"] = fetch_backlog_readme(work_dir, bk_row["file_path"])
 
     promoted_to = bk_row["promoted_to"]
     if not promoted_to:
@@ -326,6 +330,30 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int) -> dict:
         result["requirements"].append(req_entry)
 
     return result
+
+
+def fetch_backlog_readme(work_dir: str, file_path: str | None) -> str | None:
+    """Read the README.md content for a backlog item from the filesystem.
+
+    Backlog #246: Show backlog description in lineage view.
+    Resolves the README path from the backlog's file_path field:
+      {work_dir}/backlog/requests/{file_path}/README.md
+
+    Returns the file content as a string, or None if the file doesn't exist
+    or is unreadable. Never raises — graceful degradation for missing files.
+
+    Big-O: O(F) where F = file size. Single filesystem read. NOT on hot path —
+    called only when user selects a backlog item for lineage view.
+    """
+    import os
+    if not work_dir or not file_path:
+        return None
+    readme_path = os.path.join(work_dir, "backlog", "requests", file_path, "README.md")
+    try:
+        with open(readme_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
 
 
 def fetch_all_backlog(conn: sqlite3.Connection) -> list[sqlite3.Row]:

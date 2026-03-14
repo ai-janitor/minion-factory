@@ -599,6 +599,24 @@ def _render_lineage(lineage: dict, width: int, height: int) -> list[str]:
         lines.append(f"  {_DIM}Path: {bk['promoted_to']}{_RESET}")
     lines.append("")
 
+    # Backlog description from README.md (#246: show backlog description in lineage view)
+    readme_content = lineage.get("readme_content")
+    if readme_content:
+        lines.append(f"  {_BOLD}DESCRIPTION{_RESET}")
+        lines.append("  " + "─" * min(width - 4, 60))
+        # Render README content, truncated to fit available height
+        # Reserve space for requirements tree below (at least 20 lines)
+        max_readme_lines = max(5, height - len(lines) - 20)
+        readme_lines = readme_content.splitlines()
+        for i, rline in enumerate(readme_lines[:max_readme_lines]):
+            lines.append(f"  {_DIM}{rline}{_RESET}")
+        if len(readme_lines) > max_readme_lines:
+            lines.append(f"  {_DIM}... ({len(readme_lines) - max_readme_lines} more lines){_RESET}")
+        lines.append("")
+    else:
+        lines.append(f"  {_DIM}(no description available){_RESET}")
+        lines.append("")
+
     reqs = lineage["requirements"]
     if not reqs:
         lines.append(f"  {_DIM}(no requirements linked — not yet promoted or path mismatch){_RESET}")

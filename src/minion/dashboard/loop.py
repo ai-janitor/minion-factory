@@ -190,7 +190,7 @@ def run() -> None:
 
                 elif isinstance(view, tuple) and view[0] == "lineage":
                     backlog_id = view[1]
-                    lineage = fetch_lineage(conn, backlog_id)
+                    lineage = fetch_lineage(conn, backlog_id, work_dir=work_dir)
                     conn.close()
                     click_map = {}
                     screen = render_lineage_screen(lineage, width, height)

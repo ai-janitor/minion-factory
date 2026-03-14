@@ -51,7 +51,8 @@ def _lineage_to_dict(lineage: dict) -> dict:
         - "transitions": list of sqlite3.Row → [dict()]
     - Recursively convert all Row objects to dicts
     """
-    result: dict[str, Any] = {"backlog": None, "requirements": []}
+    result: dict[str, Any] = {"backlog": None, "readme_content": None, "requirements": []}
+    result["readme_content"] = lineage.get("readme_content")
     if lineage.get("backlog") is not None:
         bk = lineage["backlog"]
         result["backlog"] = dict(bk) if hasattr(bk, "keys") else bk
@@ -144,7 +145,7 @@ def _build_lineage(db_path: str, backlog_id: int) -> dict[str, Any]:
 
     Pseudo-logic:
     1. Open read-only connection
-    2. Call fetch_lineage(conn, backlog_id)
+    2. Call fetch_lineage(conn, backlog_id, work_dir) — work_dir enables README reading (#246)
     3. Convert sqlite3.Row objects to dicts via _lineage_to_dict
     4. Return JSON-safe lineage dict
     """
@@ -154,8 +155,11 @@ def _build_lineage(db_path: str, backlog_id: int) -> dict[str, Any]:
     conn = connect(db_path, timeout=2)
     conn.execute("PRAGMA query_only = ON")
 
+    # Derive work_dir from db_path — the .work/ directory containing minion.db
+    work_dir = os.path.dirname(db_path)
+
     try:
-        lineage = fetch_lineage(conn, backlog_id)
+        lineage = fetch_lineage(conn, backlog_id, work_dir=work_dir)
     finally:
         conn.close()
 
