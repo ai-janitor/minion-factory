@@ -306,6 +306,20 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
         project_root = os.path.dirname(os.path.dirname(db_path))
         project_name = os.path.basename(project_root) or db_path
 
+        # --- Agent tool-call activity from stream.jsonl files ---
+        # Resolve logs directory: sibling .minion-swarm/logs/ relative to project root.
+        # Call stream tailer to extract recent tool_use events per agent.
+        # Gracefully returns empty dict on any error (missing dir, no files, etc.).
+        agent_activity: dict[str, list] = {}
+        try:
+            from minion.dashboard.stream_tailer import tail_agent_activity
+            logs_dir = os.path.join(project_root, ".minion-swarm", "logs")
+            if os.path.isdir(logs_dir):
+                agent_names = [a.get("name", "") for a in agents if a.get("name")]
+                agent_activity = tail_agent_activity(logs_dir, agent_names, max_events=5)
+        except Exception:
+            logger.debug("Failed to read agent activity from stream.jsonl", exc_info=True)
+
         snapshot = {
             "type": "snapshot",
             "project_name": project_name,
@@ -319,6 +333,7 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
             "task_pipeline": task_pipeline,
             "system_stats": system_stats,
             "recent_messages": recent_messages,
+            "agent_activity": agent_activity,
         }
     finally:
         conn.close()
