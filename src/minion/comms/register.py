@@ -292,10 +292,22 @@ def deregister(agent_name: str) -> dict[str, object]:
             waiter = cursor.fetchone()
             if waiter:
                 waitlist_notes.append(f"{fp} -> {waiter['agent_name']} waiting")
+
+        # Backlog #284 — collect unread message info before cleanup
+        cursor.execute(
+            "SELECT from_agent FROM messages WHERE to_agent = ? AND read_flag = 0",
+            (agent_name,),
+        )
+        unread_rows = cursor.fetchall()
+        unread_count = len(unread_rows)
+        unread_senders = sorted(set(row["from_agent"] for row in unread_rows))
+
         with conn:
             for fp in claimed_files:
                 cursor.execute("DELETE FROM file_claims WHERE file_path = ?", (fp,))
             cursor.execute("DELETE FROM file_waitlist WHERE agent_name = ?", (agent_name,))
+            # Backlog #284 — purge all messages targeted at this agent (stale + read)
+            cursor.execute("DELETE FROM messages WHERE to_agent = ?", (agent_name,))
             cursor.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
 
         # Remove from global coordinator DB
@@ -329,6 +341,12 @@ def deregister(agent_name: str) -> dict[str, object]:
         }
         if waitlist_notes:
             result["waitlist_notify"] = waitlist_notes
+        # Backlog #284 — warn if unread messages were purged (surface for pattern analysis)
+        if unread_count:
+            result["stale_messages_warning"] = (
+                f"{unread_count} unread message(s) from {', '.join(unread_senders)} "
+                f"purged on deregister"
+            )
         return result
     finally:
         conn.close()

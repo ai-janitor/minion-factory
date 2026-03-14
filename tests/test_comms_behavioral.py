@@ -109,6 +109,68 @@ def test_deregister_unregistered_agent_returns_error():
 
 
 # ---------------------------------------------------------------------------
+# deregister — message cleanup (backlog #284)
+# ---------------------------------------------------------------------------
+
+
+def test_deregister_purges_messages_from_db():
+    """deregister() deletes all messages where to_agent = agent from SQLite (backlog #284)."""
+    from minion.comms import register, deregister, send, set_context
+    from minion.db import get_db
+
+    register(agent_name="sender1", agent_class="lead")
+    register(agent_name="target1", agent_class="coder")
+    set_context("sender1", context="sending test messages")
+    send(from_agent="sender1", to_agent="target1", message="msg1")
+    send(from_agent="sender1", to_agent="target1", message="msg2")
+
+    # Verify messages exist before deregister
+    conn = get_db()
+    count_before = conn.execute(
+        "SELECT COUNT(*) FROM messages WHERE to_agent = ?", ("target1",)
+    ).fetchone()[0]
+    conn.close()
+    assert count_before >= 2
+
+    result = deregister("target1")
+    assert "error" not in result
+
+    # Verify messages are gone after deregister
+    conn = get_db()
+    count_after = conn.execute(
+        "SELECT COUNT(*) FROM messages WHERE to_agent = ?", ("target1",)
+    ).fetchone()[0]
+    conn.close()
+    assert count_after == 0
+
+
+def test_deregister_warns_on_unread_messages():
+    """deregister() includes stale_messages_warning when unread messages exist (backlog #284)."""
+    from minion.comms import register, deregister, send, set_context
+
+    register(agent_name="sender2", agent_class="lead")
+    register(agent_name="target2", agent_class="coder")
+    set_context("sender2", context="sending test messages")
+    send(from_agent="sender2", to_agent="target2", message="unread msg")
+
+    result = deregister("target2")
+    assert "error" not in result
+    assert "stale_messages_warning" in result
+    assert "sender2" in result["stale_messages_warning"]
+    assert "1 unread" in result["stale_messages_warning"]
+
+
+def test_deregister_no_warning_when_no_unread():
+    """deregister() omits stale_messages_warning when no unread messages exist (backlog #284)."""
+    from minion.comms import register, deregister
+
+    register(agent_name="clean_agent", agent_class="coder")
+    result = deregister("clean_agent")
+    assert "error" not in result
+    assert "stale_messages_warning" not in result
+
+
+# ---------------------------------------------------------------------------
 # who — list agents
 # ---------------------------------------------------------------------------
 
