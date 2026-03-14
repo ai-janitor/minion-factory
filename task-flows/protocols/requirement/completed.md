@@ -8,6 +8,12 @@ Lead.
 ## What to do
 1. Verify the full context chain is complete across all tasks
 2. If this requirement has a parent, the engine handles rollup automatically
+3. Close the originating backlog item:
+   ```bash
+   minion backlog update --id <backlog-id> --status closed
+   ```
+4. Deregister all workers, then deregister yourself
+5. Report completion to your superior via `minion comms send local`
 
 ## No exit
 Terminal stage. No further transitions.

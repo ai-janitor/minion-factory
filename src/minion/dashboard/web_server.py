@@ -256,15 +256,25 @@ def _get_static_dir() -> Path:
     return Path(__file__).parent / "static"
 
 
-async def _http_handler(path: str, request_headers: Any) -> Any:
-    """Serve static files via HTTP (process_request hook for websockets).
+def _http_handler(connection: Any, request: Any) -> Any:
+    """Serve static files via HTTP (process_request hook for websockets v16+).
 
     Pseudo-logic:
-    1. If path is "/" or "/index.html", serve static/index.html
-    2. Return (status, headers, body) tuple for HTTP response
-    3. Return None for WebSocket upgrade requests (path == "/ws" or others)
+    1. If path is "/" or "/index.html", serve static/index.html as Response
+    2. Return Response object for HTTP requests
+    3. Return None for WebSocket upgrade requests (proceed with WS handshake)
+
+    websockets v16 signature: process_request(connection, request) -> Response | None
     """
-    from http import HTTPStatus
+    from websockets.http11 import Response
+    from websockets.datastructures import Headers
+
+    path = request.path
+
+    # If this is a WebSocket upgrade request, let it through regardless of path
+    upgrade = request.headers.get("Upgrade", "").lower()
+    if upgrade == "websocket":
+        return None
 
     static_dir = _get_static_dir()
 
@@ -272,14 +282,14 @@ async def _http_handler(path: str, request_headers: Any) -> Any:
         index_path = static_dir / "index.html"
         if index_path.exists():
             body = index_path.read_bytes()
-            return (
-                HTTPStatus.OK,
-                [("Content-Type", "text/html; charset=utf-8")],
+            return Response(
+                200, "OK",
+                Headers([("Content-Type", "text/html; charset=utf-8")]),
                 body,
             )
-        return (
-            HTTPStatus.NOT_FOUND,
-            [("Content-Type", "text/plain")],
+        return Response(
+            404, "Not Found",
+            Headers([("Content-Type", "text/plain")]),
             b"index.html not found",
         )
 

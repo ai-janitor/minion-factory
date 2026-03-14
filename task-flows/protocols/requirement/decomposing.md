@@ -13,7 +13,11 @@ Lead or oracle.
    002-<slug>/README.md
    ```
 3. Each child README defines: what to change, which files, acceptance criteria
-4. Create tasks in DB linked to this requirement
+4. Create a task in DB for EACH child requirement — link to the CHILD's requirement ID, NOT the parent.
+   ```bash
+   # Use the child requirement ID from `minion req decompose` output, not the parent
+   minion task define --agent <name> --title "<child title>" --requirement-id <CHILD_REQ_ID> --flow <flow>
+   ```
 5. Set `flow_type` per task (bugfix, feature, hotfix, chore)
 6. Set `class_required` per task
 
