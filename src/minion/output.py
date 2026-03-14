@@ -1,4 +1,4 @@
-"""CLI output formatting — JSON, human-readable, and compact modes.
+"""CLI output formatting — human-readable (default), JSON (opt-in), and compact modes.
 
 Exit code convention:
   0 = success
@@ -197,8 +197,18 @@ def _add_remediation_hint(data: dict[str, object]) -> dict[str, object]:
     return data
 
 
-def output(data: dict[str, object], human: bool = False, compact: bool = False) -> None:
-    """Print result as JSON (default), human-readable, or compact text.
+def output(data: dict[str, object], human: bool = True, compact: bool = False) -> None:
+    """Print result as human-readable text (default), JSON, or compact text.
+
+    The `human` parameter controls the output mode:
+      - True (default): human-readable key: value pairs
+      - False: JSON output for scripts and programmatic consumption
+
+    The CLI layer resolves the default based on flags and environment:
+      - Default: human=True (interactive CLI)
+      - --json flag: human=False
+      - MINION_CLASS env var set: human=False (daemon agents)
+      - --human flag (legacy, hidden): human=True (overrides daemon auto-JSON)
 
     Exit codes: 0=success, 1=error. Usage errors (exit 2) are handled by Click.
     """

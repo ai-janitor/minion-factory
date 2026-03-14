@@ -1,4 +1,4 @@
-"""Root Click group, global options (-C, --human, --compact), and shared helpers.
+"""Root Click group, global options (-C, --json, --compact), and shared helpers.
 This module defines the `cli` group and the `_agent_option` / `_store_heartbeat_agent`
 helpers used across all command modules. Submodules register their commands/groups
 onto `cli` at import time via `register_*` functions called from this file's tail.
@@ -6,10 +6,16 @@ onto `cli` at import time via `register_*` functions called from this file's tai
 Includes FuzzyGroup — a Click group subclass that suggests close matches when a user
 misspells a command, using difflib.get_close_matches().
 
-Purpose: Root Click group, global options (-C, --human, --compact), and shared helpers.
+Purpose: Root Click group, global options (-C, --json, --compact), and shared helpers.
 Rationale: Extracted into own module for single-responsibility CLI command grouping.
-Responsibility: Root Click group, global options (-C, --human, --compact), and shared helpers. NOT responsible for unrelated concerns.
-Organization: Click command group with subcommands."""
+Responsibility: Root Click group, global options (-C, --json, --compact), and shared helpers. NOT responsible for unrelated concerns.
+Organization: Click command group with subcommands.
+
+Output default logic:
+  - Default output is human-readable text (what --human used to do).
+  - --json flag opts in to JSON output (for scripts and programmatic consumers).
+  - MINION_CLASS env var set => auto-JSON (daemon agents parse JSON programmatically).
+  - --human is kept as a hidden no-op for backward compatibility."""
 
 from __future__ import annotations
 
@@ -75,11 +81,12 @@ def _agent_option(**kwargs):  # noqa: ANN003
 
 @click.group(cls=FuzzyGroup, epilog="Run 'minion <group> --help' to see subcommands. Run 'minion docs' for the full reference.")
 @click.version_option(package_name="minion-factory")
-@click.option("--human", is_flag=True, help="Human-readable output instead of JSON")
+@click.option("--json", "use_json", is_flag=True, help="JSON output (default is human-readable text)")
+@click.option("--human", is_flag=True, hidden=True, help="(deprecated, now the default) Human-readable output")
 @click.option("--compact", is_flag=True, help="Concise text output for agent context injection")
 @click.option("--project-dir", "-C", default=None, help="Project directory (default: cwd)")
 @click.pass_context
-def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None) -> None:
+def cli(ctx: click.Context, use_json: bool, human: bool, compact: bool, project_dir: str | None) -> None:
     """minion — multi-agent coordination CLI.
 
     \b
@@ -93,9 +100,34 @@ def cli(ctx: click.Context, human: bool, compact: bool, project_dir: str | None)
     Communication:
       LOCAL  (comms send local)  — same-repo agents. Messages in .work/minion.db.
       GLOBAL (comms send global) — cross-repo agents. Routes via ~/.minion/coordinator.db.
-      Poll checks BOTH automatically."""
+      Poll checks BOTH automatically.
+
+    \b
+    Output (default: human-readable text):
+      --json     JSON output for scripts / programmatic consumption
+      --compact  Concise text for agent context injection
+      MINION_CLASS env var set => auto-JSON (daemon agents)"""
     ctx.ensure_object(dict)
-    ctx.obj["human"] = human
+    # Output default logic:
+    # - Human-readable is the default for interactive CLI use.
+    # - --json flag explicitly requests JSON output.
+    # - MINION_CLASS env var set => daemon agent => auto-JSON for backward compat.
+    # - --human is a hidden no-op (kept for backward compat, human is now default).
+    is_daemon = bool(os.environ.get("MINION_CLASS"))
+    # human=True means "not JSON". It's True unless --json was passed or daemon auto-JSON applies.
+    # Explicit --json always wins. Explicit --human (legacy) forces human even for daemons.
+    if use_json:
+        resolved_human = False
+    elif human:
+        # Explicit --human flag (legacy backward compat) — force human even for daemons
+        resolved_human = True
+    elif is_daemon:
+        # Daemon agents auto-get JSON for backward compat
+        resolved_human = False
+    else:
+        # Default: human-readable
+        resolved_human = True
+    ctx.obj["human"] = resolved_human
     ctx.obj["compact"] = compact
     ctx.obj["project_dir"] = os.path.abspath(project_dir) if project_dir else None
     # SU-16: Normalize -C to absolute path and add debug log for traceability.
