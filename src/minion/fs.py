@@ -130,8 +130,8 @@ def atomic_write_file(path: str, content: str) -> str:
     except BaseException:
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as e:
+            log.error("Failed to clean up temp file %s: %s", tmp, e)
         raise
     return path
 

@@ -13,6 +13,10 @@ Organization: Called by CLI (backlog_cmds.py) and API handlers.
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from typing import Any
 
 from minion.db import get_db
@@ -85,8 +89,8 @@ def lineage(
         promoted_by = None
         try:
             promoted_by = row["promoted_by"]
-        except (IndexError, KeyError):
-            pass
+        except (IndexError, KeyError) as e:
+            logger.error("Failed to read promoted_by for backlog %s: %s", backlog_id, e)
 
         if row["status"] == "promoted" and promoted_to:
             # Get promotion timestamp from transition_log if available

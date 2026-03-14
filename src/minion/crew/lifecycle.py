@@ -34,9 +34,9 @@ def _kill_all_daemons(project_dir: str = "") -> None:
             if pid and isinstance(pid, int):
                 os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
-            pass
-        except (OSError, json.JSONDecodeError):
-            pass
+            log.error("Daemon PID in %s already gone", state_file)
+        except (OSError, json.JSONDecodeError) as e:
+            log.error("Failed to read/parse daemon state %s: %s", state_file, e)
 
 
 def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
@@ -242,7 +242,7 @@ def stop_agent_process(agent: str) -> dict[str, object]:
     else:
         try:
             os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+        except OSError as e:
+            log.error("SIGKILL failed for PID %d: %s", pid, e)
     pid_file.unlink(missing_ok=True)
     return {"status": "stopped", "agent": agent, "pid": pid}

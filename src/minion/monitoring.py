@@ -11,6 +11,7 @@ import datetime
 import json
 import logging
 import os
+import sqlite3
 from typing import Any
 
 from minion.db import enrich_agent_row, get_db, get_lead, now_iso
@@ -322,18 +323,27 @@ def sitrep() -> dict[str, object]:
             wp = show_war_plan()
             content = wp.get("content", "")
             war_plan_summary = content[:500] if content else None
-        except (ImportError, OSError):
-            pass
+        except (ImportError, OSError) as e:
+            log.error("Failed to load war plan summary: %s", e)
 
-        # Intel doc count — number of registered intel docs
+        # Intel doc count — number of registered intel docs.
+        # OperationalError = table not yet created (fresh install) — normal, no noise.
+        # Any other DB error = real problem (corruption, schema mismatch) — surface to caller.
         intel_count = 0
+        intel_count_error: str | None = None
         try:
             cursor.execute("SELECT COUNT(*) FROM intel_docs")
             intel_count = cursor.fetchone()[0]
-        except Exception:
-            pass  # broad catch: intel_docs table may not exist
+        except Exception as e:
+            if isinstance(e, sqlite3.OperationalError):
+                # Expected: table doesn't exist yet on fresh installs
+                log.debug("intel_docs table not found (fresh install?): %s", e)
+            else:
+                # Unexpected: DB corruption, schema mismatch, etc. — surface to sys-lead
+                log.error("intel_docs count failed with unexpected error: %s: %s", type(e).__name__, e)
+                intel_count_error = f"{type(e).__name__}: {e}"
 
-        return {
+        result: dict[str, Any] = {
             "agents": agents,
             "active_tasks": active_tasks,
             "file_claims": claims,
@@ -343,6 +353,9 @@ def sitrep() -> dict[str, object]:
             "war_plan": war_plan_summary,
             "intel_count": intel_count,
         }
+        if intel_count_error is not None:
+            result["intel_count_error"] = intel_count_error
+        return result
     finally:
         conn.close()
 
@@ -389,8 +402,9 @@ def _fire_hp_alerts(agent_name: str, hp_pct: float) -> None:
             (json.dumps(alerts_fired) if alerts_fired else None, agent_name),
         )
         conn.commit()
-    except Exception as exc:  # broad catch: HP alert system must never crash the caller
-        log.error("_fire_hp_alerts CRASHED for %s (hp=%.0f%%): %s", agent_name, hp_pct, exc)
+    except Exception as exc:  # GLOBAL-152: log + re-raise — no silent failures on safety-critical path
+        log.error("_fire_hp_alerts CRASHED for %s (hp=%.0f%%): %s", agent_name, hp_pct, exc, exc_info=True)
+        raise
     finally:
         conn.close()
 

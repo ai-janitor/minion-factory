@@ -10,8 +10,11 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
+
+logger = logging.getLogger(__name__)
 
 import yaml
 from typing import Any
@@ -347,8 +350,8 @@ def promote(
             class_stages = flow_obj.all_required_classes()
             for cls, stages in sorted(class_stages.items()):
                 required_crew.append({"class": cls, "stages": stages})
-        except (ImportError, FileNotFoundError, ValueError):
-            pass
+        except (ImportError, FileNotFoundError, ValueError) as e:
+            logger.error("Failed to extract crew classes from flow %s: %s", flow, e)
 
         # Scan crew YAMLs for available characters matching required classes
         available_characters: list[dict[str, str]] = []
@@ -356,8 +359,8 @@ def promote(
             needed_classes = {r["class"] for r in required_crew}
             if needed_classes:
                 available_characters = _scan_crew_characters(needed_classes)
-        except (ImportError, OSError):
-            pass
+        except (ImportError, OSError) as e:
+            logger.error("Failed to scan crew characters: %s", e)
 
         # --- Build result ---
         if count == 1:

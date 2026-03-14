@@ -47,10 +47,29 @@ def update_task(
                     return {"error": f"Invalid status '{status}'. Valid: {', '.join(sorted(flow.stages.keys()))}"}
                 if flow.is_terminal(status):
                     return {"error": f"BLOCKED: Cannot set status to '{status}' via update-task. Use close-task."}
-            elif status not in {"open", "assigned", "in_progress", "fixed", "verified", "closed"}:
+            elif status not in {"open", "assigned", "in_progress", "fixed", "verified", "findings_ready", "assessed", "closed"}:
                 return {"error": f"Invalid status '{status}'."}
 
         current_status = task_row["status"]
+
+        # --- DAG transition enforcement — block stage skipping (checked first) ---
+        # Agents MUST advance through declared next: stages in order.
+        # valid_transitions() returns the set of allowed next statuses for the
+        # current stage (including dead_ends and alt_next). Any jump outside
+        # this set is a skip and must be rejected hard — not warned.
+        # This check runs BEFORE the checklist gate: a transition that's invalid
+        # for the DAG should be rejected immediately, not with a misleading
+        # "write a checklist first" message.
+        if status and flow:
+            valid_next = flow.valid_transitions(current_status)
+            if status not in valid_next:
+                return {
+                    "error": (
+                        f"BLOCKED: Cannot transition from '{current_status}' to '{status}'. "
+                        f"Valid next stages: {sorted(valid_next)}. "
+                        "Advance through each stage in order — use complete-phase to route automatically."
+                    )
+                }
 
         # --- Checklist gate: transitioning to in_progress requires --checklist ---
         # Mechanical enforcement: agents MUST register a checklist file before
@@ -76,11 +95,6 @@ def update_task(
         warnings: list[str] = []
 
         if status:
-            # Transition validation — warn but allow
-            if flow:
-                valid_next = flow.valid_transitions(current_status)
-                if status not in valid_next:
-                    warnings.append(f"Skipped steps — went from {current_status} to {status}")
 
             # Ownership warning — agent updating a task assigned to someone else
             assigned = task_row["assigned_to"]

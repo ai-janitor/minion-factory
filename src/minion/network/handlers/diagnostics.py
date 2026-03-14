@@ -20,8 +20,11 @@ Pseudo-logic:
 
 from __future__ import annotations
 
+import logging
 import os
 import traceback
+
+logger = logging.getLogger(__name__)
 
 
 def register(router) -> None:
@@ -63,8 +66,8 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
         coordinator_stats = {"path": db_path, "size_bytes": 0, "tables": {}}
         try:
             coordinator_stats["size_bytes"] = os.path.getsize(db_path)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.error("Failed to get coordinator DB size: %s", e)
 
         with _DB_LOCK:
             conn = _get_server_db(db_path)
@@ -96,8 +99,8 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
             db_file = os.path.join(proj["path"], ".work", "minion.db")
             try:
                 proj_info["db_size_bytes"] = os.path.getsize(db_file)
-            except OSError:
-                pass
+            except OSError as e:
+                logger.error("Failed to get project DB size for %s: %s", proj.get("name"), e)
 
             pconn = get_project_db(proj["path"])
             if pconn:
@@ -111,8 +114,8 @@ def handle_db_stats(handler, db_path: str, **kwargs) -> None:
                             proj_info["tables"][table_name] = count
                         except Exception:
                             proj_info["tables"][table_name] = -1  # broad catch: table may not be queryable
-                except Exception:
-                    pass  # broad catch: project DB may be in unexpected state
+                except Exception as e:
+                    logger.error("Failed to query project DB tables for %s: %s", proj.get("name"), e)
 
             project_stats.append(proj_info)
 

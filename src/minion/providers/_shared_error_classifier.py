@@ -15,9 +15,12 @@ Organization: Three public functions. No class dependencies.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def classify_error(status_code: int) -> str:
@@ -62,8 +65,8 @@ def extract_error_summary(line: str, max_normal: int = 500) -> Optional[str]:
             msg = data.get("error", {}).get("message") or data.get("message") or ""
             if code or msg:
                 return f"{code or 'ERROR'}: {str(msg)[:120]}"
-    except (json.JSONDecodeError, TypeError, AttributeError):
-        pass
+    except (json.JSONDecodeError, TypeError, AttributeError) as e:
+        logger.error("JSON error extraction failed: %s", e)
 
     # Try HTTP status code pattern
     m = re.search(r'\b([45]\d{2})\b', line[:200])
@@ -134,8 +137,8 @@ def classify_provider_error(
                 result = config.json_extractor(data)
                 if result is not None:
                     return result
-        except (json.JSONDecodeError, TypeError, AttributeError):
-            pass
+        except (json.JSONDecodeError, TypeError, AttributeError) as e:
+            logger.error("Provider error JSON extraction failed: %s", e)
 
     # Phase 2: Regex pattern matching
     for pattern, format_fn in config.regex_patterns:

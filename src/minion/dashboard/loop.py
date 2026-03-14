@@ -13,6 +13,7 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import logging
 import os
 import select
 import signal
@@ -21,6 +22,8 @@ import sys
 import termios
 import time
 import tty
+
+logger = logging.getLogger(__name__)
 
 from minion.db.connection import connect
 from minion.defaults import resolve_db_path
@@ -94,8 +97,8 @@ def _read_input() -> str | tuple[str, int, int] | None:
                         # btn 0 = left click, 1 = middle, 2 = right
                         if btn == 0:
                             return ("click", col, row)
-                    except (ValueError, IndexError):
-                        pass
+                    except (ValueError, IndexError) as e:
+                        logger.error("Failed to parse mouse event: %s", e)
                 return None  # ignore release events and parse failures
             # Other escape sequences (arrows etc) — ignore
             return None

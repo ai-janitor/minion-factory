@@ -11,182 +11,297 @@
   Responsibility: Render Tasks, Agents, Backlog, Activity, Lineage from WebSocket JSON.
     NOT responsible for: SQL queries, data serialization, server lifecycle.
   Organization: Single HTML file with embedded CSS and JS. No build step.
+  Design system: Claude Visualizer (GLOBAL-124 through GLOBAL-130).
+    Dark UI card system, 3 surface layers, Inter + JetBrains Mono typography,
+    DAG pipeline rendering with stage modifiers, interactive expandable layers,
+    animation patterns (pulse, slideIn, fadeInLine), color-coded badges.
 -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
+  /* === CSS Variables: 3 surface layers + color accents (GLOBAL-126) === */
   :root {
     --bg: #0a0e17;
     --surface: #111827;
     --surface2: #1a2332;
     --border: #2a3a4e;
     --text: #e2e8f0;
-    --text-dim: #64748b;
+    --text-dim: #8899aa;
     --accent: #f97316;
+    --accent-bg: rgba(249,115,22,0.08);
+    --accent-border: rgba(249,115,22,0.3);
     --green: #34d399;
-    --yellow: #fbbf24;
-    --red: #ef4444;
+    --green-bg: rgba(52,211,153,0.08);
+    --green-border: rgba(52,211,153,0.3);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251,191,36,0.08);
+    --amber-border: rgba(251,191,36,0.3);
+    --rose: #fb7185;
+    --rose-bg: rgba(251,113,133,0.08);
+    --rose-border: rgba(251,113,133,0.3);
     --cyan: #22d3ee;
+    --cyan-bg: rgba(34,211,238,0.08);
+    --cyan-border: rgba(34,211,238,0.3);
+    --purple: #a78bfa;
+    --purple-bg: rgba(167,139,250,0.08);
+    --purple-border: rgba(167,139,250,0.3);
+    --blue: #60a5fa;
+    --blue-bg: rgba(96,165,250,0.08);
+    --blue-border: rgba(96,165,250,0.3);
   }
 
+  /* === Reset + base (GLOBAL-124, GLOBAL-128) === */
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 14px;
     line-height: 1.5;
     padding: 1rem 1.5rem;
     min-height: 100vh;
   }
 
-  /* Header */
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* === Animations (GLOBAL-129) === */
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeInLine { from { opacity: 0; } to { opacity: 1; } }
+
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); display: inline-block;
+    animation: pulse 2s infinite; vertical-align: middle;
+  }
+
+  /* === Header === */
   .header {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.75rem;
+    display: flex; align-items: center; gap: 1rem;
+    margin-bottom: 1.5rem; padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--border);
   }
   .header h1 {
-    font-size: 1.3rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--accent), var(--yellow));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-size: 1.3rem; font-weight: 500;
+    color: var(--accent);
+    letter-spacing: -0.02em;
   }
-  .header .meta { color: var(--text-dim); font-size: 0.85rem; }
+  .header .meta {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); font-size: 0.75rem;
+  }
   .header .meta.right { margin-left: auto; }
-  .ws-status {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 0.3rem;
-  }
-  .ws-status.connected { background: var(--green); }
-  .ws-status.disconnected { background: var(--red); }
-  .ws-status.connecting { background: var(--yellow); }
 
-  /* Navigation tabs */
+  /* === WebSocket status indicator === */
+  .ws-status {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 0.3rem;
+  }
+  .ws-status.connected { background: var(--green); animation: pulse 2s infinite; }
+  .ws-status.disconnected { background: var(--rose); }
+  .ws-status.connecting { background: var(--amber); animation: pulse 1s infinite; }
+
+  /* === Navigation tabs (GLOBAL-125) === */
   .nav-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
   .nav-tab {
-    padding: 0.4rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--text-dim);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.85rem;
-    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text-dim);
+    cursor: pointer; transition: border-color 0.3s, color 0.3s;
   }
   .nav-tab:hover { border-color: var(--accent); color: var(--text); }
-  .nav-tab.active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+  .nav-tab.active {
+    background: var(--accent-bg); border-color: var(--accent);
+    color: var(--accent);
+  }
 
-  /* Sections */
+  /* === Cards (GLOBAL-126) === */
   .section {
     margin-bottom: 1.5rem;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
+    transition: border-color 0.3s;
   }
+  .section:hover { border-color: rgba(249,115,22,0.2); }
+
   .section-header {
     padding: 0.6rem 1rem;
-    font-weight: 700;
-    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500; font-size: 0.75rem;
     color: var(--cyan);
     background: var(--surface2);
     border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
   .section-header .badge {
-    background: var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
     color: var(--text-dim);
     padding: 0.1rem 0.5rem;
-    border-radius: 10px;
-    font-size: 0.75rem;
-    font-weight: 500;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    font-weight: 400;
+    border: 1px solid var(--border);
   }
 
-  /* Tables */
+  /* === Tables === */
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th {
-    text-align: left;
-    padding: 0.5rem 0.75rem;
-    color: var(--text-dim);
-    font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    text-align: left; padding: 0.5rem 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); font-weight: 500;
+    font-size: 0.65rem; text-transform: uppercase;
+    letter-spacing: 0.08em;
     border-bottom: 1px solid var(--border);
     background: var(--surface2);
-    position: sticky;
-    top: 0;
+    position: sticky; top: 0;
   }
   td {
     padding: 0.45rem 0.75rem;
-    border-bottom: 1px solid rgba(42, 58, 78, 0.4);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    border-bottom: 1px solid rgba(42, 58, 78, 0.3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  tr:hover td { background: rgba(42, 58, 78, 0.3); }
+  tr:hover td { background: rgba(42, 58, 78, 0.2); }
   tr.clickable { cursor: pointer; }
-  tr.clickable:hover td { background: rgba(249, 115, 22, 0.08); }
+  tr.clickable:hover td { background: var(--accent-bg); }
 
-  /* Status colors */
-  .status-open { color: var(--text); }
-  .status-in_progress, .status-working { color: var(--green); }
-  .status-assigned { color: var(--cyan); }
-  .status-fixed, .status-verified { color: var(--yellow); }
-  .status-closed, .status-done, .status-shipped { color: var(--text-dim); }
-  .status-blocked { color: var(--red); }
-  .status-promoted { color: var(--yellow); }
-  .status-ready { color: var(--green); }
-  .status-deregistered { color: var(--text-dim); text-decoration: line-through; }
+  /* === Status badges (GLOBAL-128) === */
+  .status-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; padding: 0.1rem 0.45rem;
+    border-radius: 3px; display: inline-block;
+  }
+  .status-open { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .status-in_progress, .status-working { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .status-assigned { background: var(--cyan-bg); color: var(--cyan); border: 1px solid var(--cyan-border); }
+  .status-fixed, .status-verified { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .status-closed, .status-done, .status-shipped { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .status-blocked { background: var(--rose-bg); color: var(--rose); border: 1px solid var(--rose-border); }
+  .status-promoted { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .status-ready { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .status-deregistered { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); text-decoration: line-through; }
 
-  /* Priority */
-  .pri-critical { color: var(--red); font-weight: 700; }
-  .pri-high { color: var(--yellow); }
-  .pri-medium { color: var(--text); }
-  .pri-low { color: var(--text-dim); }
+  /* === Priority badges === */
+  .pri-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; padding: 0.1rem 0.4rem;
+    border-radius: 3px; display: inline-block;
+  }
+  .pri-critical { background: var(--rose-bg); color: var(--rose); border: 1px solid var(--rose-border); }
+  .pri-high { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .pri-medium { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .pri-low { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); opacity: 0.6; }
 
-  /* Token bar */
+  /* === Type badges (GLOBAL-128) === */
+  .type-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; padding: 0.1rem 0.4rem;
+    border-radius: 3px; display: inline-block;
+  }
+  .type-bug, .type-bugfix { background: var(--rose-bg); color: var(--rose); border: 1px solid var(--rose-border); }
+  .type-feature, .type-request { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .type-chore { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .type-finding { background: var(--cyan-bg); color: var(--cyan); border: 1px solid var(--cyan-border); }
+  .type-research { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+  .type-improvement { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+
+  /* === Agent class badges (GLOBAL-128) === */
+  .agent-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; padding: 0.1rem 0.4rem;
+    border-radius: 3px; display: inline-block;
+  }
+  .agent-lead { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-border); }
+  .agent-coder { background: var(--rose-bg); color: var(--rose); border: 1px solid var(--rose-border); }
+  .agent-builder { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+  .agent-oracle { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .agent-recon { background: var(--cyan-bg); color: var(--cyan); border: 1px solid var(--cyan-border); }
+  .agent-planner { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+  .agent-auditor { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+  .agent-coordinator { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+
+  /* === Token/HP progress bar (GLOBAL-127) === */
+  .progress-track {
+    width: 80px; height: 4px;
+    background: var(--surface2); border-radius: 2px;
+    overflow: hidden; display: inline-block; vertical-align: middle;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 2px;
+    transition: width 0.5s;
+  }
+  .progress-fill.low { background: var(--green); }
+  .progress-fill.mid { background: var(--amber); }
+  .progress-fill.high { background: var(--rose); }
   .token-bar { display: inline-flex; align-items: center; gap: 0.4rem; }
-  .token-bar-track {
-    width: 80px; height: 10px;
-    background: #1e293b;
-    border-radius: 3px;
-    overflow: hidden;
+  .token-label {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); font-size: 0.65rem;
   }
-  .token-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
-  .token-bar-fill.low { background: var(--green); }
-  .token-bar-fill.mid { background: var(--yellow); }
-  .token-bar-fill.high { background: var(--red); }
-  .token-bar-label { color: var(--text-dim); font-size: 0.75rem; }
 
-  /* Activity feed */
-  .activity-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.4rem 0.75rem;
-    border-bottom: 1px solid rgba(42, 58, 78, 0.4);
-    font-size: 0.85rem;
-    cursor: pointer;
+  /* === DAG pipeline stages (GLOBAL-127) === */
+  .dag-pipeline { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+  .dag-stage {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; padding: 0.15rem 0.4rem;
+    border-radius: 4px; background: var(--surface2);
+    color: var(--text-dim); border: 1px solid var(--border);
+    transition: border-color 0.3s, color 0.3s;
   }
-  .activity-row:hover { background: rgba(42, 58, 78, 0.3); }
-  .activity-time { color: var(--text-dim); min-width: 60px; font-size: 0.8rem; }
-  .activity-id { color: var(--cyan); min-width: 40px; }
+  .dag-stage.completed { border-color: var(--green-border); color: var(--green); }
+  .dag-stage.active { border-color: var(--accent-border); color: var(--accent); font-weight: 500; }
+  .dag-stage.gate { border-color: var(--amber-border); color: var(--amber); }
+  .dag-stage.skip { opacity: 0.35; text-decoration: line-through; }
+  .dag-arrow { color: var(--text-dim); font-size: 0.6rem; }
+
+  /* === Stat cards (GLOBAL-127) === */
+  .stats-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.8rem 1.2rem;
+    text-align: center; min-width: 80px; flex: 1;
+    transition: border-color 0.3s;
+  }
+  .stat-card:hover { border-color: var(--accent); }
+  .stat-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem; font-weight: 700; color: var(--accent);
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+
+  /* === Activity feed === */
+  .activity-row {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(42, 58, 78, 0.3);
+    font-size: 0.85rem; cursor: pointer;
+    transition: background 0.3s;
+  }
+  .activity-row:hover { background: var(--accent-bg); }
+  .activity-time {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); min-width: 55px; font-size: 0.7rem;
+  }
+  .activity-id {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cyan); min-width: 40px; font-size: 0.75rem;
+  }
   .activity-title { color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; }
-  .activity-arrow { color: var(--text-dim); }
-  .activity-to { color: var(--green); }
-  .activity-agent { color: var(--text-dim); font-size: 0.8rem; }
+  .activity-arrow { color: var(--text-dim); font-size: 0.75rem; }
+  .activity-to { color: var(--green); font-size: 0.75rem; }
+  .activity-agent {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); font-size: 0.7rem;
+  }
   /* Backlog origin badge — shown in activity feed and task table (#193) */
   .bkl-badge {
     font-family: 'JetBrains Mono', monospace;
@@ -201,83 +316,272 @@
   }
   .bkl-badge:hover { background: rgba(251,191,36,0.18); border-color: rgba(251,191,36,0.5); }
 
-  /* Lineage overlay */
+  /* === Lineage overlay (GLOBAL-126 nested cards) === */
   .lineage-overlay {
-    display: none;
-    position: fixed;
+    display: none; position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
     background: rgba(0, 0, 0, 0.7);
-    z-index: 100;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 3rem 2rem;
+    z-index: 100; justify-content: center;
+    align-items: flex-start; padding: 3rem 2rem;
   }
   .lineage-overlay.active { display: flex; }
   .lineage-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    width: 100%;
-    max-width: 800px;
-    max-height: 80vh;
-    overflow-y: auto;
-    padding: 1.5rem;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; width: 100%; max-width: 850px;
+    max-height: 80vh; overflow-y: auto; padding: 1.5rem;
+    animation: slideIn 0.3s ease;
   }
-  .lineage-panel h2 { color: var(--cyan); font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .lineage-panel h2 {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cyan); font-size: 0.85rem; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
   .lineage-panel .meta { color: var(--text-dim); margin-bottom: 1rem; font-size: 0.85rem; }
   .lineage-panel .meta span { margin-right: 1.5rem; }
+
   .lineage-close {
-    float: right;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 0.3rem 0.7rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.85rem;
+    float: right; background: none;
+    border: 1px solid var(--border); color: var(--text-dim);
+    padding: 0.3rem 0.7rem; border-radius: 4px;
+    cursor: pointer; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem; transition: border-color 0.3s, color 0.3s;
   }
-  .lineage-close:hover { border-color: var(--red); color: var(--red); }
+  .lineage-close:hover { border-color: var(--rose); color: var(--rose); }
+
+  /* Lineage tree nodes — nested card pattern (GLOBAL-126) */
   .tree-node {
-    padding: 0.3rem 0;
-    padding-left: 1.5rem;
+    padding: 0.5rem 0; padding-left: 1.5rem;
     border-left: 2px solid var(--border);
     margin-left: 0.75rem;
   }
   .tree-node:last-child { border-left-color: transparent; }
-  .tree-label { font-weight: 600; color: var(--text); }
-  .dag-line { color: var(--text-dim); padding-left: 1.5rem; font-size: 0.8rem; margin: 0.2rem 0; }
-  .dag-line .dag-current { color: var(--green); font-weight: 700; }
-  .dag-line .dag-done { color: var(--text-dim); }
-  .dag-line .dag-future { color: var(--border); }
-  .history-line { color: var(--text-dim); padding-left: 1.5rem; font-size: 0.75rem; }
+  .tree-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500; color: var(--text); font-size: 0.85rem;
+  }
 
-  /* Views */
+  /* DAG progression line in lineage */
+  .dag-line {
+    color: var(--text-dim); padding-left: 1.5rem;
+    font-size: 0.75rem; margin: 0.3rem 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .dag-line .dag-current { color: var(--accent); font-weight: 500; }
+  .dag-line .dag-done { color: var(--green); }
+  .dag-line .dag-future { color: var(--border); }
+
+  .history-line {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim); padding-left: 1.5rem;
+    font-size: 0.7rem;
+  }
+
+  /* === Expandable panels (GLOBAL-125) === */
+  .expandable-header {
+    padding: 0.5rem 0.75rem; cursor: pointer;
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem; font-weight: 500;
+    color: var(--cyan); background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px;
+    margin: 0.5rem 0; transition: border-color 0.3s;
+  }
+  .expandable-header:hover { border-color: var(--accent); }
+  .expandable-header.expanded { border-radius: 8px 8px 0 0; border-bottom-color: transparent; }
+  .expandable-header .chevron { transition: transform 0.3s; font-size: 0.6rem; }
+  .expandable-header.expanded .chevron { transform: rotate(90deg); }
+  .expandable-body {
+    display: none; padding: 0.75rem;
+    background: var(--bg); border: 1px solid var(--border);
+    border-top: none; border-radius: 0 0 8px 8px;
+    animation: slideIn 0.3s ease;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem; color: var(--text-dim);
+    white-space: pre-wrap; word-wrap: break-word;
+    max-height: 300px; overflow-y: auto; line-height: 1.5;
+  }
+  .expandable-body.visible { display: block; }
+
+  /* === Views === */
   .view { display: none; }
   .view.active { display: block; }
 
-  /* Sortable headers */
+  /* === Sortable headers === */
   th.sortable { cursor: pointer; user-select: none; }
   th.sortable:hover { color: var(--accent); }
   th.sorted { color: var(--accent); }
 
-  /* Hint bar */
+  /* === Hint bar === */
   .hint {
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 0.8rem;
-    padding: 0.75rem;
+    text-align: center; color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; padding: 0.75rem;
     border-top: 1px solid var(--border);
   }
   kbd {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 0.1rem 0.4rem; border-radius: 3px;
+    font-size: 0.65rem; font-family: 'JetBrains Mono', monospace;
   }
 
+  /* === Description panel in lineage === */
+  .desc-panel {
+    margin: 0.75rem 0; border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  .desc-panel-header {
+    padding: 0.4rem 0.75rem; background: var(--surface2);
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--cyan); font-weight: 500; font-size: 0.7rem;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .desc-panel-body {
+    padding: 0.75rem; font-size: 0.8rem; color: var(--text-dim);
+    white-space: pre-wrap; word-wrap: break-word;
+    max-height: 300px; overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace; line-height: 1.5;
+  }
+
+  /* === Checklist progress bar (GLOBAL-127) === */
+  .checklist-progress {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--text-dim);
+    margin: 0.3rem 0;
+  }
+  .checklist-bar {
+    width: 100px; height: 4px;
+    background: var(--surface2); border-radius: 2px;
+    overflow: hidden;
+  }
+  .checklist-fill {
+    height: 100%; border-radius: 2px;
+    transition: width 0.5s;
+  }
+  .checklist-fill.done { background: var(--green); }
+  .checklist-fill.partial { background: var(--amber); }
+  .checklist-fill.none { background: var(--rose); }
+
+  /* === DAG stage tooltip (interactive stages) === */
+  .dag-stage { position: relative; cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+  .dag-stage .stage-agent { display: block; font-size: 0.55rem; color: var(--cyan); opacity: 0.8; max-width: 70px; overflow: hidden; text-overflow: ellipsis; }
+  .dag-stage-tooltip {
+    display: none; position: absolute;
+    bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.4rem 0.6rem;
+    font-size: 0.65rem; color: var(--text-dim);
+    white-space: nowrap; z-index: 200;
+    animation: slideIn 0.2s ease;
+    pointer-events: none;
+  }
+  .dag-stage:hover .dag-stage-tooltip { display: block; }
+  .dag-stage-tooltip .tt-desc { display: block; color: var(--text); margin-bottom: 0.2rem; font-weight: 500; }
+  .dag-stage-tooltip .tt-agent { color: var(--cyan); }
+  .dag-stage-tooltip .tt-time { color: var(--text-dim); }
+  .dag-stage-tooltip .tt-fail { display: block; color: var(--rose); margin-top: 0.2rem; font-size: 0.6rem; }
+  .dag-stage.has-fail::after { content: ''; position: absolute; top: -2px; right: -2px; width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
+
+  /* === Regression/attempt lines === */
+  .attempt-line {
+    display: flex; flex-wrap: wrap; gap: 0.25rem;
+    align-items: center; margin: 0.15rem 0;
+  }
+  .attempt-line.failed { opacity: 0.5; }
+  .attempt-line.failed .dag-stage.active {
+    border-color: var(--rose-border); color: var(--rose);
+  }
+  .attempt-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: var(--text-dim);
+    min-width: 65px;
+  }
+  .attempt-fail-marker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--rose); margin-left: 0.3rem;
+  }
+  .attempt-pass-marker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--green); margin-left: 0.3rem;
+  }
+
+  /* === Stage detail panel (#250 — click DAG stage to see agent work) === */
+  .stage-detail-panel {
+    background: var(--bg); border: 1px solid var(--accent-border);
+    border-radius: 8px; padding: 0.75rem;
+    margin: 0.5rem 0 0.25rem 1.2rem;
+    animation: slideIn 0.3s ease;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+  }
+  .stage-detail-panel .sdp-header {
+    display: flex; align-items: center; gap: 0.75rem;
+    margin-bottom: 0.5rem; flex-wrap: wrap;
+  }
+  .stage-detail-panel .sdp-stage-name {
+    color: var(--accent); font-weight: 700; font-size: 0.85rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .stage-detail-panel .sdp-agent {
+    color: var(--cyan); font-size: 0.75rem;
+  }
+  .stage-detail-panel .sdp-duration {
+    color: var(--green); font-size: 0.7rem;
+    padding: 0.1rem 0.4rem; background: var(--green-bg);
+    border: 1px solid var(--green-border); border-radius: 4px;
+  }
+  .stage-detail-panel .sdp-section {
+    margin-top: 0.5rem; padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+  }
+  .stage-detail-panel .sdp-section-label {
+    color: var(--cyan); font-size: 0.65rem;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 0.3rem;
+  }
+  .stage-detail-panel .sdp-checklist-item {
+    color: var(--text-dim); font-size: 0.7rem;
+    padding: 0.15rem 0; line-height: 1.4;
+  }
+  .stage-detail-panel .sdp-checklist-done { color: var(--green); }
+  .stage-detail-panel .sdp-checklist-pending { color: var(--amber); }
+  .stage-detail-panel .sdp-context {
+    color: var(--text-dim); font-size: 0.7rem;
+    white-space: pre-wrap; word-wrap: break-word;
+    line-height: 1.4;
+  }
+  .dag-stage.selected { border-color: var(--accent); box-shadow: 0 0 6px rgba(249,115,22,0.3); }
+
+  /* === Task detail card in lineage (GLOBAL-126 nested) === */
+  .task-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.75rem 1rem;
+    margin: 0.4rem 0 0.4rem 1.5rem;
+    transition: border-color 0.3s;
+  }
+  .task-card:hover { border-color: rgba(249,115,22,0.3); }
+  .task-card-header {
+    display: flex; align-items: center; gap: 0.5rem;
+    flex-wrap: wrap; cursor: pointer;
+  }
+  .task-card-title {
+    font-weight: 500; font-size: 0.85rem;
+    color: var(--text);
+  }
+  .task-card-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--text-dim);
+  }
+  .task-card-body {
+    display: none; margin-top: 0.75rem;
+    padding-top: 0.5rem; border-top: 1px solid var(--border);
+    animation: slideIn 0.3s ease;
+  }
+  .task-card-body.visible { display: block; }
+
+  /* === Scrollbar === */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -287,73 +591,91 @@
 
 <!-- Header -->
 <div class="header">
-  <h1>MINION DASHBOARD</h1>
-  <span class="meta"><span class="ws-status connecting" id="ws-indicator"></span><span id="ws-label">connecting...</span></span>
+  <h1>Minion dashboard</h1>
+  <span class="meta">
+    <span class="ws-status connecting" id="ws-indicator"></span>
+    <span id="ws-label">connecting...</span>
+  </span>
   <span class="meta right" id="clock"></span>
 </div>
 
-<!-- Navigation -->
+<!-- Navigation tabs -->
 <div class="nav-tabs">
-  <button class="nav-tab active" onclick="switchView('dashboard')">Dashboard</button>
-  <button class="nav-tab" onclick="switchView('browser')">Browse All</button>
+  <button class="nav-tab active" onclick="switchView('dashboard')">dashboard</button>
+  <button class="nav-tab" onclick="switchView('browser')">browse all</button>
 </div>
 
 <!-- ==================== DASHBOARD VIEW ==================== -->
 <div id="view-dashboard" class="view active">
+
+  <!-- Stats row -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="stat-val" id="stat-tasks">0</div><div class="stat-label">active tasks</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-agents">0</div><div class="stat-label">agents</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-backlog">0</div><div class="stat-label">backlog</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-events">0</div><div class="stat-label">events</div></div>
+  </div>
+
+  <!-- Tasks -->
   <div class="section">
-    <div class="section-header">TASKS <span class="badge" id="task-count">0 active</span></div>
+    <div class="section-header">tasks <span class="badge" id="task-count">0 active</span></div>
     <table>
       <thead>
         <tr>
-          <th style="width:50px">ID</th>
-          <th style="width:60px">BKL</th>
-          <th style="width:100px">Status</th>
-          <th style="width:110px">Assignee</th>
-          <th>Title</th>
-          <th style="width:50px">Act</th>
+          <th style="width:50px">id</th>
+          <th style="width:60px">bkl</th>
+          <th style="width:110px">status</th>
+          <th style="width:110px">assignee</th>
+          <th>title</th>
+          <th style="width:70px">flow</th>
+          <th style="width:40px">act</th>
         </tr>
       </thead>
       <tbody id="tasks-body"></tbody>
     </table>
   </div>
 
+  <!-- Agents -->
   <div class="section">
-    <div class="section-header">AGENTS <span class="badge" id="agent-count">0 registered</span></div>
+    <div class="section-header">agents <span class="badge" id="agent-count">0 registered</span></div>
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Class</th>
-          <th>Model</th>
-          <th>Status</th>
-          <th>Last Seen</th>
-          <th style="width:180px">Tokens</th>
+          <th>name</th>
+          <th style="width:80px">class</th>
+          <th style="width:70px">model</th>
+          <th style="width:100px">status</th>
+          <th style="width:80px">last seen</th>
+          <th style="width:180px">tokens</th>
+          <th style="width:80px">checklist</th>
         </tr>
       </thead>
       <tbody id="agents-body"></tbody>
     </table>
   </div>
 
+  <!-- Backlog -->
   <div class="section">
-    <div class="section-header">BACKLOG <span class="badge" id="backlog-count">0 items</span></div>
+    <div class="section-header">backlog <span class="badge" id="backlog-count">0 items</span></div>
     <table>
       <thead>
         <tr>
           <th style="width:30px">#</th>
-          <th style="width:50px">ID</th>
-          <th style="width:80px">Type</th>
-          <th style="width:80px">Priority</th>
-          <th style="width:100px">Status</th>
-          <th style="width:120px">Task</th>
-          <th>Title</th>
+          <th style="width:50px">id</th>
+          <th style="width:80px">type</th>
+          <th style="width:80px">priority</th>
+          <th style="width:100px">status</th>
+          <th style="width:120px">task</th>
+          <th>title</th>
         </tr>
       </thead>
       <tbody id="backlog-body"></tbody>
     </table>
   </div>
 
+  <!-- Recent activity -->
   <div class="section">
-    <div class="section-header">RECENT ACTIVITY <span class="badge" id="activity-count">0 events</span></div>
+    <div class="section-header">recent activity <span class="badge" id="activity-count">0 events</span></div>
     <div id="activity-feed"></div>
   </div>
 </div>
@@ -361,16 +683,16 @@
 <!-- ==================== BROWSER VIEW ==================== -->
 <div id="view-browser" class="view">
   <div class="section">
-    <div class="section-header">BACKLOG LINEAGE BROWSER <span class="badge" id="browser-count">0 items</span></div>
+    <div class="section-header">backlog lineage browser <span class="badge" id="browser-count">0 items</span></div>
     <table>
       <thead>
         <tr>
           <th style="width:30px">#</th>
-          <th class="sortable sorted" style="width:50px" data-sort="id" onclick="sortBrowser('id')">ID</th>
-          <th class="sortable" style="width:80px" data-sort="type" onclick="sortBrowser('type')">TYPE</th>
-          <th class="sortable" style="width:80px" data-sort="priority" onclick="sortBrowser('priority')">PRI</th>
-          <th style="width:100px">Status</th>
-          <th>Title</th>
+          <th class="sortable sorted" style="width:50px" data-sort="id" onclick="sortBrowser('id')">id</th>
+          <th class="sortable" style="width:80px" data-sort="type" onclick="sortBrowser('type')">type</th>
+          <th class="sortable" style="width:80px" data-sort="priority" onclick="sortBrowser('priority')">pri</th>
+          <th style="width:100px">status</th>
+          <th>title</th>
         </tr>
       </thead>
       <tbody id="browser-body"></tbody>
@@ -385,61 +707,69 @@
 </div>
 
 <div class="hint">
-  Click backlog/activity row for lineage &nbsp;|&nbsp; <kbd>L</kbd> browse all &nbsp;|&nbsp; <kbd>ESC</kbd> close lineage
+  click backlog/activity row for lineage |
+  <kbd>L</kbd> browse all |
+  <kbd>ESC</kbd> close lineage
 </div>
 
 <script>
 /* ==========================================================================
-   WebSocket Dashboard Client
+   WebSocket Dashboard Client — Claude Visualizer Design System
 
    Purpose: Connect to the minion web dashboard WebSocket server, receive
-            live snapshots, and render all dashboard sections.
+            live snapshots, and render all dashboard sections using the
+            Claude Visualizer design patterns (GLOBAL-124 through GLOBAL-130).
    Pseudo-logic:
    1. Connect to ws://host:port (same host as page, path "/")
-   2. On "snapshot" message: update Tasks, Agents, Backlog, Activity
-   3. On "lineage" message: render lineage overlay
+   2. On "snapshot" message: update Tasks, Agents, Backlog, Activity, Stats
+   3. On "lineage" message: render lineage overlay with DAG pipeline,
+      expandable description, and checklist panels
    4. On disconnect: show status, auto-reconnect after 3s
-   5. User interactions: click backlog/activity for lineage request
+   5. User interactions: click backlog/activity for lineage request,
+      expandable panels, keyboard shortcuts
    ========================================================================== */
 
 // --- State ---
-let ws = null;
-let currentSnapshot = null;
-let allBacklogItems = [];   // from snapshot — used for browser view
-let taskToBacklog = {};     // task_id -> backlog_id map from snapshot
-let browserSort = 'id';
-let browserPage = 0;
-const PAGE_SIZE = 9;
+var ws = null;
+var currentSnapshot = null;
+var allBacklogItems = [];
+var taskToBacklog = {};
+var browserSort = 'id';
+var browserPage = 0;
+var PAGE_SIZE = 9;
 
 // --- WebSocket connection ---
 
 function connectWS() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = protocol + '//' + location.host;
-
+  var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var wsUrl = protocol + '//' + location.host;
   setWsStatus('connecting');
   ws = new WebSocket(wsUrl);
 
-  ws.onopen = function() {
-    setWsStatus('connected');
-  };
+  ws.onopen = function() { setWsStatus('connected'); };
 
   ws.onmessage = function(event) {
     try {
-      const msg = JSON.parse(event.data);
+      var msg = JSON.parse(event.data);
       if (msg.type === 'snapshot') {
         currentSnapshot = msg;
         taskToBacklog = msg.task_to_backlog || {};
         allBacklogItems = msg.backlog || [];
         renderDashboard(msg);
-        // Re-render browser if visible
         if (document.getElementById('view-browser').classList.contains('active')) {
           renderBrowser();
         }
       } else if (msg.type === 'lineage') {
         renderLineage(msg.data);
       } else if (msg.type === 'error') {
-        console.warn('Server error:', msg.message);
+        console.error('Server error:', msg.message);
+        // Show error visibly in lineage panel
+        var panel = document.getElementById('lineage-panel');
+        panel.innerHTML = '<button class="lineage-close" onclick="closeLineage()">close</button>' +
+          '<div style="color:var(--rose);padding:1rem;font-family:JetBrains Mono,monospace;font-size:0.85rem">' +
+          '<div style="font-weight:500;margin-bottom:0.5rem">server error</div>' +
+          '<div>' + esc(msg.message) + '</div></div>';
+        document.getElementById('lineage-overlay').classList.add('active');
       }
     } catch (e) {
       console.error('Failed to parse message:', e);
@@ -448,20 +778,17 @@ function connectWS() {
 
   ws.onclose = function() {
     setWsStatus('disconnected');
-    // Auto-reconnect after 3 seconds
     setTimeout(connectWS, 3000);
   };
 
-  ws.onerror = function() {
-    setWsStatus('disconnected');
-  };
+  ws.onerror = function() { setWsStatus('disconnected'); };
 }
 
 function setWsStatus(status) {
-  const indicator = document.getElementById('ws-indicator');
-  const label = document.getElementById('ws-label');
+  var indicator = document.getElementById('ws-indicator');
+  var label = document.getElementById('ws-label');
   indicator.className = 'ws-status ' + status;
-  const labels = { connected: 'live', disconnected: 'disconnected', connecting: 'connecting...' };
+  var labels = { connected: 'live', disconnected: 'disconnected', connecting: 'connecting...' };
   label.textContent = labels[status] || status;
 }
 
@@ -473,11 +800,17 @@ function requestLineage(backlogId) {
 
 // --- Rendering helpers ---
 
+function esc(text) {
+  // HTML-escape a string
+  if (!text) return '';
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function relativeTime(isoTs) {
   if (!isoTs) return 'never';
   try {
-    const dt = new Date(isoTs);
-    const secs = Math.floor((Date.now() - dt.getTime()) / 1000);
+    var dt = new Date(isoTs);
+    var secs = Math.floor((Date.now() - dt.getTime()) / 1000);
     if (secs < 0) return 'now';
     if (secs < 60) return secs + 's ago';
     if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
@@ -486,27 +819,62 @@ function relativeTime(isoTs) {
   } catch (e) { return '?'; }
 }
 
-function statusClass(status) {
-  return 'status-' + (status || 'unknown').replace(/\s+/g, '-');
+function statusBadge(status) {
+  var s = (status || 'unknown').replace(/\s+/g, '_');
+  // Status icons per shadcn pattern (napoleon directive)
+  var icons = {
+    'open': '\u25CB ',       // open circle
+    'assigned': '\u25CC ',   // dotted circle
+    'in_progress': '\u25CF ',// filled circle (alive)
+    'working': '\u25CF ',
+    'qe': '\u25CF ',
+    'fixed': '\u2713 ',      // checkmark
+    'verified': '\u2713 ',
+    'closed': '\u2713 ',
+    'done': '\u2713 ',
+    'shipped': '\u2713 ',
+    'blocked': '! ',
+    'deregistered': '\u25CB ',
+    'ready': '\u25CC ',
+    'promoted': '\u25CC ',
+  };
+  var icon = icons[s] || '';
+  return '<span class="status-badge status-' + s + '">' + icon + s + '</span>';
+}
+
+function priBadge(priority) {
+  var p = priority || 'medium';
+  return '<span class="pri-badge pri-' + p + '">' + p + '</span>';
+}
+
+function typeBadge(type) {
+  var t = type || '';
+  return '<span class="type-badge type-' + t + '">' + t + '</span>';
+}
+
+function agentBadge(agentClass) {
+  var c = agentClass || '';
+  return '<span class="agent-badge agent-' + c + '">' + c + '</span>';
 }
 
 function tokenBar(used, limit) {
   if (!limit || limit <= 100) {
-    return '<div class="token-bar"><div class="token-bar-track"><div class="token-bar-fill" style="width:0"></div></div><span class="token-bar-label">---</span></div>';
+    return '<div class="token-bar"><div class="progress-track"><div class="progress-fill" style="width:0"></div></div><span class="token-label">---</span></div>';
   }
-  const pct = Math.min(used / limit, 1.0);
-  const cls = pct > 0.75 ? 'high' : pct > 0.5 ? 'mid' : 'low';
-  const usedK = used >= 1000 ? Math.floor(used / 1000) + 'k' : used;
-  const limitK = limit >= 1000 ? Math.floor(limit / 1000) + 'k' : limit;
+  var pct = Math.min(used / limit, 1.0);
+  var cls = pct > 0.75 ? 'high' : pct > 0.5 ? 'mid' : 'low';
+  var usedK = used >= 1000 ? Math.floor(used / 1000) + 'k' : used;
+  var limitK = limit >= 1000 ? Math.floor(limit / 1000) + 'k' : limit;
   return '<div class="token-bar">' +
-    '<div class="token-bar-track"><div class="token-bar-fill ' + cls + '" style="width:' + (pct * 100) + '%"></div></div>' +
-    '<span class="token-bar-label">' + usedK + '/' + limitK + '</span></div>';
+    '<div class="progress-track"><div class="progress-fill ' + cls + '" style="width:' + (pct * 100) + '%"></div></div>' +
+    '<span class="token-label">' + usedK + '/' + limitK + '</span></div>';
 }
 
 function shortModel(model) {
   if (!model) return '';
-  for (const f of ['opus', 'sonnet', 'haiku']) {
-    if (model.includes(f)) return f;
+  var flavors = ['opus', 'sonnet', 'haiku'];
+  for (var i = 0; i < flavors.length; i++) {
+    if (model.indexOf(flavors[i]) !== -1) return flavors[i];
   }
   return model.length > 8 ? model.slice(0, 8) : model;
 }
@@ -519,84 +887,109 @@ function truncate(text, maxLen) {
 // --- Dashboard rendering ---
 
 function renderDashboard(snapshot) {
-  renderTasks(snapshot.tasks || []);
-  renderAgents(snapshot.agents || []);
-  renderBacklog(snapshot.backlog || []);
-  renderActivity(snapshot.activity || []);
+  var tasks = snapshot.tasks || [];
+  var agents = snapshot.agents || [];
+  var backlog = snapshot.backlog || [];
+  var activity = snapshot.activity || [];
+
+  // Stats row
+  document.getElementById('stat-tasks').textContent = tasks.length;
+  document.getElementById('stat-agents').textContent = agents.length;
+  document.getElementById('stat-backlog').textContent = backlog.length;
+  document.getElementById('stat-events').textContent = activity.length;
+
+  renderTasks(tasks);
+  renderAgents(agents);
+  renderBacklog(backlog);
+  renderActivity(activity);
 }
 
 function renderTasks(tasks) {
   document.getElementById('task-count').textContent = tasks.length + ' active';
-  const tbody = document.getElementById('tasks-body');
+  var tbody = document.getElementById('tasks-body');
   tbody.innerHTML = '';
   if (!tasks.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center">(no active tasks)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:1rem">(no active tasks)</td></tr>';
     return;
   }
   tasks.forEach(function(t) {
     // BKL column: show originating backlog ID if traceable, else em-dash (#193)
-    const bklId = taskToBacklog[String(t.id)];
-    const bklCell = bklId
+    var bklId = taskToBacklog[String(t.id)];
+    var bklCell = bklId
       ? '<span class="bkl-badge" onclick="event.stopPropagation();requestLineage(' + bklId + ')">bkl-' + bklId + '</span>'
       : '<span style="color:var(--text-dim)">—</span>';
-    const tr = document.createElement('tr');
+    var tr = document.createElement('tr');
     tr.innerHTML =
-      '<td style="text-align:right">' + t.id + '</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--cyan)">' + t.id + '</td>' +
       '<td>' + bklCell + '</td>' +
-      '<td><span class="' + statusClass(t.status) + '">' + t.status + '</span></td>' +
-      '<td>' + (t.assignee || '\u2014') + '</td>' +
+      '<td>' + statusBadge(t.status) + '</td>' +
+      '<td style="font-family:JetBrains Mono,monospace;font-size:0.75rem">' + (t.assignee || '\u2014') + '</td>' +
       '<td>' + truncate(t.title_short, 50) + '</td>' +
-      '<td style="text-align:right">' + (t.activity_count || 0) + '</td>';
+      '<td>' + typeBadge(t.flow_type || '') + '</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--text-dim)">' + (t.activity_count || 0) + '</td>';
     tbody.appendChild(tr);
   });
 }
 
 function renderAgents(agents) {
   document.getElementById('agent-count').textContent = agents.length + ' registered';
-  const tbody = document.getElementById('agents-body');
+  var tbody = document.getElementById('agents-body');
   tbody.innerHTML = '';
   if (!agents.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim);text-align:center">(no agents)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:1rem">(no agents)</td></tr>';
     return;
   }
   agents.forEach(function(a) {
-    const tr = document.createElement('tr');
-    const lastSeen = relativeTime(a.effective_last_seen);
-    const seenStyle = (lastSeen.includes('h ago') || lastSeen.includes('d ago') || lastSeen === 'never')
-      ? 'color:var(--red)' : 'color:var(--text-dim)';
+    var tr = document.createElement('tr');
+    var lastSeen = relativeTime(a.effective_last_seen);
+    var seenCritical = lastSeen.indexOf('h ago') !== -1 || lastSeen.indexOf('d ago') !== -1 || lastSeen === 'never';
+    var checklistCell = '';
+    if (a.checklist_tally) {
+      var parts = a.checklist_tally.split('/');
+      var done = parseInt(parts[0]) || 0;
+      var total = parseInt(parts[1]) || 0;
+      var pct = total > 0 ? Math.round(done / total * 100) : 0;
+      var barCls = pct === 100 ? 'done' : pct > 0 ? 'partial' : 'none';
+      checklistCell = '<div class="checklist-progress" style="min-width:60px">' +
+        '<div class="checklist-bar"><div class="checklist-fill ' + barCls + '" style="width:' + pct + '%"></div></div>' +
+        '<span>' + done + '/' + total + '</span></div>';
+    } else {
+      checklistCell = '<span style="color:var(--text-dim);font-size:0.7rem">\u2014</span>';
+    }
     tr.innerHTML =
-      '<td>' + a.name + '</td>' +
-      '<td>' + (a.agent_class || '') + '</td>' +
-      '<td style="color:var(--text-dim)">' + shortModel(a.model) + '</td>' +
-      '<td><span class="' + statusClass(a.status) + '">' + (a.status || '') + '</span></td>' +
-      '<td style="' + seenStyle + '">' + lastSeen + '</td>' +
-      '<td>' + tokenBar(a.tokens_used || 0, a.tokens_limit || 0) + '</td>';
+      '<td style="font-family:JetBrains Mono,monospace;font-size:0.8rem">' + a.name + '</td>' +
+      '<td>' + agentBadge(a.agent_class) + '</td>' +
+      '<td style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--text-dim)">' + shortModel(a.model) + '</td>' +
+      '<td>' + statusBadge(a.status) + '</td>' +
+      '<td style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:' + (seenCritical ? 'var(--rose)' : 'var(--text-dim)') + '">' + lastSeen + '</td>' +
+      '<td>' + tokenBar(a.tokens_used || 0, a.tokens_limit || 0) + '</td>' +
+      '<td>' + checklistCell + '</td>';
     tbody.appendChild(tr);
   });
 }
 
 function renderBacklog(items) {
   document.getElementById('backlog-count').textContent = items.length + ' items';
-  const tbody = document.getElementById('backlog-body');
+  var tbody = document.getElementById('backlog-body');
   tbody.innerHTML = '';
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center">(no active backlog items)</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:1rem">(no active backlog items)</td></tr>';
     return;
   }
   items.forEach(function(item, idx) {
-    const tr = document.createElement('tr');
+    var tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.onclick = function() { requestLineage(item.id); };
-    const taskInfo = item.promoted_to
+    var taskInfo = item.promoted_to
       ? '#' + item.promoted_to + ' ' + (item.task_status || '')
       : item.status;
     tr.innerHTML =
-      '<td style="text-align:center;color:var(--cyan)">' + (idx < 9 ? idx + 1 : '') + '</td>' +
-      '<td style="text-align:right">' + item.id + '</td>' +
-      '<td>' + (item.type || '') + '</td>' +
-      '<td><span class="pri-' + (item.priority || 'medium') + '">' + (item.priority || '') + '</span></td>' +
-      '<td><span class="' + statusClass(item.status) + '">' + (item.status || '') + '</span></td>' +
-      '<td>' + truncate(taskInfo, 16) + '</td>' +
+      '<td style="text-align:center;font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--cyan)">' + (idx < 9 ? idx + 1 : '') + '</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:0.75rem">' + item.id + '</td>' +
+      '<td>' + typeBadge(item.type) + '</td>' +
+      '<td>' + priBadge(item.priority) + '</td>' +
+      '<td>' + statusBadge(item.status) + '</td>' +
+      '<td style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--text-dim)">' + truncate(taskInfo, 16) + '</td>' +
       '<td>' + truncate(item.title_short, 50) + '</td>';
     tbody.appendChild(tr);
   });
@@ -604,21 +997,22 @@ function renderBacklog(items) {
 
 function renderActivity(events) {
   document.getElementById('activity-count').textContent = events.length + ' events';
-  const feed = document.getElementById('activity-feed');
+  var feed = document.getElementById('activity-feed');
   feed.innerHTML = '';
   if (!events.length) {
     feed.innerHTML = '<div class="activity-row" style="color:var(--text-dim)">(no recent transitions)</div>';
     return;
   }
   events.forEach(function(ev) {
-    const row = document.createElement('div');
+    var row = document.createElement('div');
     row.className = 'activity-row';
-    const backlogId = taskToBacklog[String(ev.task_id)];
+    var backlogId = taskToBacklog[String(ev.task_id)];
     if (backlogId) {
+      row.style.cursor = 'pointer';
       row.onclick = function() { requestLineage(backlogId); };
     }
     // Show bkl-#N tag inline when task traces back to a backlog item (#193)
-    const bklTag = backlogId
+    var bklTag = backlogId
       ? ' <span class="bkl-badge">bkl-' + backlogId + '</span>'
       : '';
     row.innerHTML =
@@ -626,10 +1020,10 @@ function renderActivity(events) {
       '<span class="activity-id">#' + ev.task_id + '</span>' +
       bklTag +
       '<span class="activity-title">' + truncate(ev.title, 30) + '</span>' +
-      '<span class="activity-arrow">' + (ev.from_status || '\u2014') + '</span>' +
-      '<span class="activity-arrow">\u2192</span>' +
-      '<span class="activity-to">' + (ev.to_status || '\u2014') + '</span>' +
-      '<span class="activity-agent">[' + (ev.agent || '\u2014') + ']</span>';
+      '<span class="activity-arrow">' + statusBadge(ev.from_status || '\u2014') + '</span>' +
+      '<span class="dag-arrow">\u2192</span>' +
+      '<span class="activity-to">' + statusBadge(ev.to_status || '\u2014') + '</span>' +
+      '<span class="activity-agent">' + (ev.agent || '\u2014') + '</span>';
     feed.appendChild(row);
   });
 }
@@ -642,131 +1036,617 @@ function sortBrowser(field) {
   renderBrowser();
   document.querySelectorAll('#view-browser th.sortable').forEach(function(th) {
     th.classList.toggle('sorted', th.dataset.sort === field);
-    const base = th.dataset.sort.toUpperCase();
+    var base = th.dataset.sort;
     th.textContent = th.dataset.sort === field ? base + ' \u25BC' : base;
   });
 }
 
 function renderBrowser() {
-  let items = allBacklogItems.slice();
+  var items = allBacklogItems.slice();
   if (browserSort === 'id') items.sort(function(a, b) { return b.id - a.id; });
   else if (browserSort === 'type') items.sort(function(a, b) { return (a.type || '').localeCompare(b.type || '') || b.id - a.id; });
   else if (browserSort === 'priority') {
-    const order = { critical: 0, high: 1, medium: 2, low: 3, unset: 4 };
+    var order = { critical: 0, high: 1, medium: 2, low: 3, unset: 4 };
     items.sort(function(a, b) { return (order[a.priority] || 5) - (order[b.priority] || 5) || b.id - a.id; });
   }
 
-  const totalPages = Math.ceil(items.length / PAGE_SIZE) || 1;
+  var totalPages = Math.ceil(items.length / PAGE_SIZE) || 1;
   browserPage = Math.max(0, Math.min(browserPage, totalPages - 1));
-  const start = browserPage * PAGE_SIZE;
-  const page = items.slice(start, start + PAGE_SIZE);
+  var start = browserPage * PAGE_SIZE;
+  var page = items.slice(start, start + PAGE_SIZE);
 
   document.getElementById('browser-count').textContent = items.length + ' items';
 
-  const tbody = document.getElementById('browser-body');
+  var tbody = document.getElementById('browser-body');
   tbody.innerHTML = '';
   page.forEach(function(item, idx) {
-    const tr = document.createElement('tr');
+    var tr = document.createElement('tr');
     tr.className = 'clickable';
     tr.onclick = function() { requestLineage(item.id); };
     tr.innerHTML =
-      '<td style="text-align:center;color:var(--cyan)">' + (idx + 1) + '</td>' +
-      '<td style="text-align:right">' + item.id + '</td>' +
-      '<td>' + (item.type || '') + '</td>' +
-      '<td><span class="pri-' + (item.priority || 'medium') + '">' + (item.priority || '') + '</span></td>' +
-      '<td><span class="' + statusClass(item.status) + '">' + (item.status || '') + '</span></td>' +
+      '<td style="text-align:center;font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--cyan)">' + (idx + 1) + '</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:0.75rem">' + item.id + '</td>' +
+      '<td>' + typeBadge(item.type) + '</td>' +
+      '<td>' + priBadge(item.priority) + '</td>' +
+      '<td>' + statusBadge(item.status) + '</td>' +
       '<td>' + truncate(item.title_short, 55) + '</td>';
     tbody.appendChild(tr);
   });
 
-  const pag = document.getElementById('browser-pagination');
-  let nav = 'Page ' + (browserPage + 1) + '/' + totalPages;
-  if (browserPage > 0) nav += ' | <a href="#" onclick="browserPage--;renderBrowser();return false" style="color:var(--cyan)">\u2190 Prev</a>';
-  if (browserPage < totalPages - 1) nav += ' | <a href="#" onclick="browserPage++;renderBrowser();return false" style="color:var(--cyan)">Next \u2192</a>';
+  var pag = document.getElementById('browser-pagination');
+  var nav = 'page ' + (browserPage + 1) + '/' + totalPages;
+  if (browserPage > 0) nav += ' | <a href="#" onclick="browserPage--;renderBrowser();return false" style="color:var(--cyan)">prev</a>';
+  if (browserPage < totalPages - 1) nav += ' | <a href="#" onclick="browserPage++;renderBrowser();return false" style="color:var(--cyan)">next</a>';
   pag.innerHTML = nav;
 }
 
-// --- Lineage rendering ---
+// --- Checklist parsing helper ---
+
+function parseChecklistProgress(content) {
+  // Parse markdown checkbox content: count [x] vs [ ] items
+  if (!content) return null;
+  var lines = content.split('\n');
+  var total = 0, done = 0;
+  lines.forEach(function(line) {
+    var trimmed = line.trim();
+    if (trimmed.match(/^-\s*\[x\]/i) || trimmed.match(/^-\s*\[X\]/)) { total++; done++; }
+    else if (trimmed.match(/^-\s*\[\s?\]/)) { total++; }
+  });
+  if (total === 0) return null;
+  return { done: done, total: total, pct: Math.round(done / total * 100) };
+}
+
+function renderChecklistBar(progress) {
+  if (!progress) return '';
+  var cls = progress.pct === 100 ? 'done' : progress.pct > 0 ? 'partial' : 'none';
+  return '<div class="checklist-progress">' +
+    '<div class="checklist-bar"><div class="checklist-fill ' + cls + '" style="width:' + progress.pct + '%"></div></div>' +
+    '<span>' + progress.done + '/' + progress.total + '</span>' +
+    '</div>';
+}
+
+// --- DAG regression detection and interactive stage rendering ---
+
+function splitTransitionsIntoAttempts(transitions, flowStages) {
+  // Split transition history into attempt lines when backwards transitions occur.
+  // A backwards transition is when to_status appears earlier in flowStages than from_status.
+  // Returns array of attempt objects: { transitions: [...], failed: bool }
+  if (!transitions || !transitions.length) return [];
+  if (!flowStages || !flowStages.length) return [{ transitions: transitions, failed: false }];
+
+  var stageOrder = {};
+  flowStages.forEach(function(s, i) { stageOrder[typeof s === 'string' ? s : s.name] = i; });
+
+  var attempts = [];
+  var current = [];
+
+  transitions.forEach(function(t) {
+    var fromIdx = stageOrder[t.from_status];
+    var toIdx = stageOrder[t.to_status];
+    // Detect backward transition (regression)
+    if (fromIdx !== undefined && toIdx !== undefined && toIdx < fromIdx) {
+      // End current attempt as failed
+      if (current.length) {
+        attempts.push({ transitions: current, failed: true });
+      }
+      current = [t];
+    } else {
+      current.push(t);
+    }
+  });
+  if (current.length) {
+    attempts.push({ transitions: current, failed: false });
+  }
+  return attempts;
+}
+
+function buildStageTooltipMap(transitions) {
+  // Build a map: stage_name -> { agent, timestamp } for tooltip display
+  // Uses the latest transition TO that stage
+  var map = {};
+  if (!transitions) return map;
+  transitions.forEach(function(t) {
+    map[t.to_status] = {
+      agent: t.triggered_by || '?',
+      time: t.created_at || ''
+    };
+  });
+  return map;
+}
+
+// #250: Global store for stage detail data — keyed by "taskId-stageName"
+var _stageDetailData = {};
+// Currently open stage detail panel ID (for toggle behavior)
+var _openStageDetailId = null;
+
+function renderDagPipeline(flowStages, currentStatus, tooltipMap, isFailed, taskId) {
+  // Render a single DAG pipeline line with interactive tooltips
+  // flowStages: array of {name, description, fail} dicts or plain strings
+  // taskId: optional — when provided, stages become clickable for detail panel (#250)
+  var pipelineId = taskId ? ('dag-pipeline-' + taskId) : '';
+  var html = '<div class="dag-pipeline"' + (pipelineId ? ' id="' + pipelineId + '"' : '') + '>';
+  var foundCurrent = false;
+
+  flowStages.forEach(function(stageObj, si) {
+    var stageName = typeof stageObj === 'string' ? stageObj : stageObj.name;
+    var stageDesc = typeof stageObj === 'string' ? '' : (stageObj.description || '');
+    var stageFail = typeof stageObj === 'string' ? null : (stageObj.fail || null);
+
+    if (si > 0) html += '<span class="dag-arrow">\u2192</span>';
+    var cls = 'dag-stage';
+    var hasTransition = !!tooltipMap[stageName];
+    if (stageName === currentStatus) {
+      cls += ' active';
+      foundCurrent = true;
+    } else if (!foundCurrent) {
+      // Before current status — but was it actually reached or skipped?
+      if (hasTransition) {
+        cls += ' completed';
+      } else {
+        cls += ' skip';
+      }
+    }
+    // Show fail target indicator
+    if (stageFail) cls += ' has-fail';
+
+    // Tooltip with description + transition info
+    var tooltip = '<span class="dag-stage-tooltip">';
+    if (stageDesc) tooltip += '<span class="tt-desc">' + esc(stageDesc) + '</span>';
+    var info = tooltipMap[stageName];
+    if (info) {
+      tooltip += '<span class="tt-agent">' + esc(info.agent) + '</span>';
+      if (info.time) tooltip += ' <span class="tt-time">' + relativeTime(info.time) + '</span>';
+    }
+    if (stageFail) tooltip += '<span class="tt-fail">fail \u2192 ' + esc(stageFail) + '</span>';
+    tooltip += '</span>';
+
+    // Show agent name below stage
+    var agentLabel = '';
+    if (info && info.agent) {
+      agentLabel = '<span class="stage-agent">' + esc(info.agent) + '</span>';
+    }
+
+    // #250: Add click handler for stage detail panel when taskId is provided
+    var clickAttr = '';
+    if (taskId) {
+      clickAttr = ' onclick="toggleStageDetail(\'' + taskId + '\',\'' + esc(stageName) + '\',event)"';
+    }
+    html += '<span class="' + cls + '"' + clickAttr + ' data-stage="' + esc(stageName) + '" title="' + esc(stageDesc) + '">' + stageName + agentLabel + tooltip + '</span>';
+  });
+
+  html += '</div>';
+  // #250: Container for stage detail panel (inserted after pipeline via JS)
+  if (taskId) {
+    html += '<div id="stage-detail-' + taskId + '"></div>';
+  }
+  return html;
+}
+
+function renderDagWithRegressions(flowStages, transitions, currentStatus, taskId) {
+  // Render DAG with regression visualization.
+  // If no regressions, render a single pipeline line.
+  // If regressions detected, split into attempt lines.
+  // taskId: optional — passed through to renderDagPipeline for click handlers (#250)
+  var attempts = splitTransitionsIntoAttempts(transitions, flowStages);
+  var hasRegressions = attempts.length > 1;
+
+  if (!hasRegressions) {
+    // Simple case: no regressions, single pipeline
+    var tooltipMap = buildStageTooltipMap(transitions);
+    return renderDagPipeline(flowStages, currentStatus, tooltipMap, false, taskId);
+  }
+
+  // Multi-attempt rendering: each attempt gets its own line
+  var html = '';
+  attempts.forEach(function(attempt, ai) {
+    var isLast = ai === attempts.length - 1;
+    var lineCls = 'attempt-line' + (attempt.failed ? ' failed' : '');
+    html += '<div class="' + lineCls + '">';
+    html += '<span class="attempt-label">attempt ' + (ai + 1) + '</span>';
+
+    // Determine the furthest stage reached in this attempt
+    var furthestStage = currentStatus;
+    if (attempt.transitions.length) {
+      var lastT = attempt.transitions[attempt.transitions.length - 1];
+      furthestStage = lastT.to_status;
+    }
+
+    var tooltipMap = buildStageTooltipMap(attempt.transitions);
+    // #250: Only add click handlers on the last attempt line (to avoid duplicate detail containers)
+    html += renderDagPipeline(flowStages, furthestStage, tooltipMap, attempt.failed, isLast ? taskId : null);
+
+    if (attempt.failed) {
+      html += '<span class="attempt-fail-marker">\u2717</span>';
+    } else if (isLast && currentStatus === 'closed') {
+      html += '<span class="attempt-pass-marker">\u2713</span>';
+    }
+
+    html += '</div>';
+  });
+
+  return html;
+}
+
+// --- Lineage rendering with DAG pipeline, expandable task cards, checklists ---
 
 function renderLineage(data) {
-  const panel = document.getElementById('lineage-panel');
-  const bk = data.backlog;
+  var panel = document.getElementById('lineage-panel');
+  var bk = data.backlog;
   if (!bk) {
     panel.innerHTML = '<div style="color:var(--text-dim);padding:1rem">(backlog item not found)</div>';
     document.getElementById('lineage-overlay').classList.add('active');
     return;
   }
 
-  let html = '<button class="lineage-close" onclick="closeLineage()">x Close</button>';
-  html += '<h2>LINEAGE: Backlog #' + bk.id + '</h2>';
-  html += '<div style="font-weight:600;margin-bottom:0.4rem">' + (bk.title || '') + '</div>';
+  var html = '<button class="lineage-close" onclick="closeLineage()">close</button>';
+  html += '<h2>Lineage: backlog #' + bk.id + '</h2>';
+  html += '<div style="font-weight:500;margin-bottom:0.4rem;font-size:0.95rem">' + esc(bk.title || '') + '</div>';
+
+  // Meta row with badges
   html += '<div class="meta">';
-  html += '<span>Status: <span class="' + statusClass(bk.status) + '">' + (bk.status || '') + '</span></span>';
-  html += '<span>Type: ' + (bk.type || '') + '</span>';
-  html += '<span>Priority: <span class="pri-' + (bk.priority || 'medium') + '">' + (bk.priority || '') + '</span></span>';
+  html += '<span>' + statusBadge(bk.status) + '</span>';
+  html += '<span>' + typeBadge(bk.type) + '</span>';
+  html += '<span>' + priBadge(bk.priority) + '</span>';
   html += '</div>';
 
   if (bk.promoted_to) {
-    html += '<div style="color:var(--text-dim);margin-bottom:0.5rem;font-size:0.85rem">Path: ' + bk.promoted_to + '</div>';
+    html += '<div style="font-family:JetBrains Mono,monospace;color:var(--text-dim);margin-bottom:0.5rem;font-size:0.7rem">path: ' + esc(bk.promoted_to) + '</div>';
   }
 
-  // Backlog description from README.md (#246: show backlog description in lineage view)
-  const readmeContent = data.readme_content;
+  // Backlog description panel (expandable, GLOBAL-125)
+  var readmeContent = data.readme_content;
   if (readmeContent) {
-    html += '<div style="margin:0.75rem 0;border:1px solid var(--border);border-radius:6px;overflow:hidden">';
-    html += '<div style="padding:0.4rem 0.75rem;background:var(--surface2);color:var(--cyan);font-weight:600;font-size:0.8rem;border-bottom:1px solid var(--border)">DESCRIPTION</div>';
-    html += '<pre style="padding:0.75rem;font-size:0.8rem;color:var(--text-dim);white-space:pre-wrap;word-wrap:break-word;max-height:300px;overflow-y:auto;margin:0;font-family:inherit;line-height:1.5">' + readmeContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
+    var descId = 'desc-' + bk.id;
+    html += '<div class="expandable-header" onclick="toggleExpand(\'' + descId + '\',this)">';
+    html += '<span class="chevron">\u25B6</span> backlog description';
     html += '</div>';
-  } else {
-    html += '<div style="color:var(--text-dim);margin:0.75rem 0;font-size:0.85rem;font-style:italic">(no description available)</div>';
+    html += '<div class="expandable-body" id="' + descId + '">' + esc(readmeContent) + '</div>';
   }
 
-  const reqs = data.requirements || [];
+  // Requirements + Tasks tree
+  var reqs = data.requirements || [];
   if (!reqs.length) {
-    html += '<div style="color:var(--text-dim);padding:1rem">(no requirements linked)</div>';
+    html += '<div style="color:var(--text-dim);padding:1rem;font-size:0.85rem">(no requirements linked)</div>';
   } else {
     reqs.forEach(function(reqEntry, ri) {
-      const req = reqEntry.req;
-      const isLast = ri === reqs.length - 1;
-      const branch = isLast ? '\u2514' : '\u251C';
-      const stageColor = (req.stage === 'completed' || req.stage === 'done') ? 'var(--green)' : 'var(--yellow)';
+      var req = reqEntry.req;
+      var isLast = ri === reqs.length - 1;
+      var branch = isLast ? '\u2514' : '\u251C';
 
-      // Extract short slug from file_path
-      const reqPath = req.file_path || '';
-      const parts = reqPath.split('/');
-      const slug = parts[parts.length - 1] || reqPath;
+      // Requirement stage badge
+      var reqPath = req.file_path || '';
+      var parts = reqPath.split('/');
+      var slug = parts[parts.length - 1] || reqPath;
 
       html += '<div class="tree-node">';
-      html += '<div><span class="tree-label">' + branch + '\u2500\u2500 Req #' + req.id + ':</span> ' + slug + ' <span style="color:' + stageColor + '">[' + (req.stage || '') + ']</span></div>';
+      html += '<div><span class="tree-label">' + branch + '\u2500\u2500 req #' + req.id + ':</span> ' + esc(slug) + ' ' + statusBadge(req.stage || '') + '</div>';
 
-      const tasks = reqEntry.tasks || [];
+      // Requirement README (expandable, GLOBAL-125) — #249
+      var reqReadme = reqEntry.readme_content;
+      if (reqReadme) {
+        var reqDescId = 'req-readme-' + req.id;
+        html += '<div style="padding-left:1.5rem">';
+        html += '<div class="expandable-header" onclick="toggleExpand(\'' + reqDescId + '\',this)">';
+        html += '<span class="chevron">\u25B6</span> requirement readme';
+        html += '</div>';
+        html += '<div class="expandable-body" id="' + reqDescId + '">' + esc(reqReadme) + '</div>';
+        html += '</div>';
+      }
+
+      var tasks = reqEntry.tasks || [];
       if (!tasks.length) {
-        html += '<div style="color:var(--text-dim);padding-left:1.5rem">(no tasks)</div>';
+        html += '<div style="color:var(--text-dim);padding-left:1.5rem;font-size:0.8rem">(no tasks)</div>';
       } else {
-        tasks.forEach(function(taskEntry) {
-          const task = taskEntry.task;
-          const transitions = taskEntry.transitions || [];
-          const sColor = task.status === 'closed' ? 'var(--text-dim)' : task.status === 'in_progress' ? 'var(--green)' : 'var(--text)';
+        tasks.forEach(function(taskEntry, ti) {
+          var task = taskEntry.task;
+          var transitions = taskEntry.transitions || [];
+          var taskCardId = 'task-card-' + bk.id + '-' + req.id + '-' + task.id;
 
-          html += '<div class="tree-node">';
-          html += '<div><span class="tree-label">\u2514\u2500\u2500 Task #' + task.id + ':</span> ' + (task.title || '') + ' <span style="color:' + sColor + '">[' + (task.status || '') + ']</span> <span style="color:var(--text-dim)">' + (task.assigned_to || '\u2014') + '</span></div>';
+          // Task card (GLOBAL-126 nested card pattern)
+          html += '<div class="task-card">';
+
+          // Clickable header to expand/collapse
+          html += '<div class="task-card-header" onclick="toggleTaskCard(\'' + taskCardId + '\',this)">';
+          html += '<span class="chevron" style="font-size:0.6rem;color:var(--text-dim);transition:transform 0.3s">\u25B6</span>';
+          html += '<span style="font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--cyan)">#' + task.id + '</span>';
+          html += '<span class="task-card-title">' + esc(task.title || '') + '</span>';
+          html += statusBadge(task.status || '');
+          if (task.flow_type) html += ' ' + typeBadge(task.flow_type);
+          if (task.assigned_to) {
+            html += '<span class="task-card-meta">' + esc(task.assigned_to) + '</span>';
+          }
+          html += '</div>';
+
+          // DAG pipeline with regression visualization and interactive stages
+          var flowStages = taskEntry.flow_stages || [];
+          if (flowStages.length) {
+            // #250: Store per-stage detail data for click handler
+            var stageTaskId = bk.id + '-' + task.id;
+            _stageDetailData[stageTaskId] = {
+              tooltipMap: buildStageTooltipMap(transitions),
+              stageChecklists: taskEntry.stage_checklists || {},
+              phaseDurations: taskEntry.phase_durations || {},
+              agentContexts: data.agent_contexts || {},
+              transitions: transitions,
+              checklists: data.checklists || []
+            };
+            html += '<div style="margin:0.4rem 0 0 1.2rem">';
+            html += renderDagWithRegressions(flowStages, transitions, task.status || '', stageTaskId);
+            html += '</div>';
+          }
+
+          // Expandable body with spec, description, result, history
+          html += '<div class="task-card-body" id="' + taskCardId + '">';
+
+          // Task description (#249)
+          if (task.description) {
+            html += '<div class="desc-panel">';
+            html += '<div class="desc-panel-header">description</div>';
+            html += '<div class="desc-panel-body">' + esc(task.description) + '</div>';
+            html += '</div>';
+          }
+
+          // Task spec file content (#249)
+          var specContent = taskEntry.spec_content;
+          if (specContent) {
+            var specId = 'spec-' + task.id;
+            html += '<div class="expandable-header" onclick="toggleExpand(\'' + specId + '\',this);event.stopPropagation()">';
+            html += '<span class="chevron">\u25B6</span> spec file';
+            if (task.task_file) {
+              var specName = task.task_file.split('/').pop();
+              html += ' <span style="color:var(--text-dim);font-size:0.65rem">' + esc(specName) + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="expandable-body" id="' + specId + '">' + esc(specContent) + '</div>';
+          }
+
+          // Task result file content (#249)
+          var resultContent = taskEntry.result_content;
+          if (resultContent) {
+            var resultId = 'result-' + task.id;
+            html += '<div class="expandable-header" onclick="toggleExpand(\'' + resultId + '\',this);event.stopPropagation()">';
+            html += '<span class="chevron">\u25B6</span> result';
+            if (task.result_file) {
+              var resultName = task.result_file.split('/').pop();
+              html += ' <span style="color:var(--text-dim);font-size:0.65rem">' + esc(resultName) + '</span>';
+            }
+            html += '</div>';
+            html += '<div class="expandable-body" id="' + resultId + '">' + esc(resultContent) + '</div>';
+          }
 
           // Transition history
           if (transitions.length) {
-            const parts = transitions.map(function(t) {
-              return (t.from_status || '\u00B7') + '\u2192' + t.to_status + '(' + (t.triggered_by || '?') + ')';
+            html += '<div style="margin-top:0.5rem">';
+            html += '<div style="font-family:JetBrains Mono,monospace;font-size:0.65rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.3rem">transition history</div>';
+            transitions.forEach(function(t) {
+              html += '<div class="history-line" style="padding-left:0">';
+              html += '<span style="color:var(--text-dim)">' + (t.from_status || '\u00B7') + '</span>';
+              html += ' <span class="dag-arrow">\u2192</span> ';
+              html += '<span style="color:var(--green)">' + t.to_status + '</span>';
+              html += ' <span style="color:var(--text-dim)">by ' + esc(t.triggered_by || '?') + '</span>';
+              if (t.created_at) {
+                html += ' <span style="color:var(--border);font-size:0.6rem">' + relativeTime(t.created_at) + '</span>';
+              }
+              html += '</div>';
             });
-            html += '<div class="history-line">History: ' + parts.join('  ') + '</div>';
+            html += '</div>';
           }
-          html += '</div>';
+
+          html += '</div>'; // task-card-body
+          html += '</div>'; // task-card
         });
       }
-      html += '</div>';
+      html += '</div>'; // tree-node
     });
+  }
+
+  // Checklists with progress bars — expandable panels (#248 + #249)
+  var checklists = data.checklists || [];
+  if (checklists.length) {
+    html += '<div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.75rem">';
+    html += '<div style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:var(--cyan);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem">checklists (' + checklists.length + ')</div>';
+    checklists.forEach(function(cl, ci) {
+      var clId = 'cl-' + bk.id + '-' + ci;
+      var progress = parseChecklistProgress(cl.content);
+      html += '<div class="expandable-header" onclick="toggleExpand(\'' + clId + '\',this)">';
+      html += '<span class="chevron">\u25B6</span> ' + esc(cl.filename);
+      if (progress) {
+        html += ' <span style="margin-left:auto">' + renderChecklistBar(progress) + '</span>';
+      }
+      html += '</div>';
+      html += '<div class="expandable-body" id="' + clId + '">' + esc(cl.content) + '</div>';
+    });
+    html += '</div>';
   }
 
   panel.innerHTML = html;
   document.getElementById('lineage-overlay').classList.add('active');
+}
+
+// --- Stage detail panel toggle (#250) ---
+
+function toggleStageDetail(taskId, stageName, event) {
+  // Toggle the detail panel for a clicked DAG stage
+  // taskId: composite key "backlogId-taskId"
+  // stageName: the DAG stage name that was clicked
+  // event: click event — stop propagation to prevent task card toggle
+  event.stopPropagation();
+
+  var detailId = 'stage-detail-' + taskId;
+  var container = document.getElementById(detailId);
+  if (!container) return;
+
+  var panelKey = taskId + '-' + stageName;
+
+  // Toggle: if clicking the same stage, close it
+  if (_openStageDetailId === panelKey) {
+    container.innerHTML = '';
+    _openStageDetailId = null;
+    // Remove selected class from all stages in this pipeline
+    _clearSelectedStages(taskId);
+    return;
+  }
+
+  // Open new panel (or switch to different stage)
+  _openStageDetailId = panelKey;
+  _clearSelectedStages(taskId);
+
+  // Highlight the clicked stage
+  var pipeline = document.getElementById('dag-pipeline-' + taskId);
+  if (pipeline) {
+    var stages = pipeline.querySelectorAll('.dag-stage');
+    stages.forEach(function(s) {
+      if (s.getAttribute('data-stage') === stageName) {
+        s.classList.add('selected');
+      }
+    });
+  }
+
+  // Get data from the global store
+  var data = _stageDetailData[taskId] || {};
+  var tooltipMap = data.tooltipMap || {};
+  var stageChecklists = data.stageChecklists || {};
+  var phaseDurations = data.phaseDurations || {};
+  var agentContexts = data.agentContexts || {};
+  var transitions = data.transitions || [];
+  var checklists = data.checklists || [];
+
+  // Build the detail panel HTML
+  var info = tooltipMap[stageName];
+  var agentName = info ? info.agent : null;
+  var duration = phaseDurations[stageName];
+  var stageChecklist = stageChecklists[stageName] || [];
+
+  // Check if this stage was actually reached (has a transition TO it)
+  var stageReached = transitions.some(function(t) { return t.to_status === stageName; });
+  // Check if stages AFTER this one were reached (meaning this was skipped, not pending)
+  var stageSkipped = false;
+  if (!stageReached && transitions.length) {
+    var lastTransition = transitions[transitions.length - 1];
+    // If the task progressed past this stage (e.g. closed) without reaching it, it was skipped
+    stageSkipped = !!lastTransition.to_status && lastTransition.to_status !== stageName;
+  }
+
+  var html = '<div class="stage-detail-panel">';
+
+  // Header: stage name + agent + duration
+  html += '<div class="sdp-header">';
+  html += '<span class="sdp-stage-name">' + esc(stageName) + '</span>';
+  if (stageReached && agentName && agentName !== '?') {
+    html += '<span class="sdp-agent">agent: ' + esc(agentName) + '</span>';
+  }
+  if (duration) {
+    html += '<span class="sdp-duration">' + esc(duration) + '</span>';
+  }
+  html += '</div>';
+
+  if (!stageReached) {
+    if (stageSkipped) {
+      html += '<div style="color:var(--amber);font-size:0.7rem;margin-top:0.3rem">(stage skipped)</div>';
+    } else {
+      html += '<div style="color:var(--text-dim);font-size:0.7rem;margin-top:0.3rem">(stage not yet reached)</div>';
+    }
+  } else {
+    // Transition details for this stage
+    var stageTransition = null;
+    transitions.forEach(function(t) { if (t.to_status === stageName) stageTransition = t; });
+    if (stageTransition) {
+      html += '<div class="sdp-section">';
+      html += '<div class="sdp-section-label">transition</div>';
+      html += '<div class="sdp-context">';
+      if (stageTransition.from_status) {
+        html += esc(stageTransition.from_status) + ' \u2192 ' + esc(stageTransition.to_status);
+      } else {
+        html += '\u2192 ' + esc(stageTransition.to_status) + ' (initial)';
+      }
+      html += ' by <span style="color:var(--cyan)">' + esc(stageTransition.triggered_by || '?') + '</span>';
+      if (stageTransition.created_at) {
+        html += ' at ' + relativeTime(stageTransition.created_at);
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+
+    // Per-stage checklist entries (if matched by stage name)
+    if (stageChecklist.length) {
+      html += '<div class="sdp-section">';
+      html += '<div class="sdp-section-label">checklist</div>';
+      stageChecklist.forEach(function(item) {
+        var statusCls = item.status === 'done' ? 'sdp-checklist-done' : 'sdp-checklist-pending';
+        var marker = item.status === 'done' ? '\u2713' : '\u25CB';
+        html += '<div class="sdp-checklist-item ' + statusCls + '">';
+        html += marker + ' ' + esc(item.text);
+        if (item.source) {
+          html += ' <span style="color:var(--border);font-size:0.6rem">(' + esc(item.source) + ')</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    // Agent context (from currently registered agents)
+    if (agentName && agentContexts[agentName]) {
+      html += '<div class="sdp-section">';
+      html += '<div class="sdp-section-label">agent context</div>';
+      html += '<div class="sdp-context">' + esc(agentContexts[agentName]) + '</div>';
+      html += '</div>';
+    }
+
+    // If agent was deregistered, show the full checklist for this agent
+    if (!stageChecklist.length && agentName && checklists.length) {
+      // Find checklist files that match this agent name
+      var agentChecklists = checklists.filter(function(cl) {
+        return cl.filename && cl.filename.indexOf(agentName) !== -1;
+      });
+      if (agentChecklists.length) {
+        html += '<div class="sdp-section">';
+        html += '<div class="sdp-section-label">agent checklist</div>';
+        agentChecklists.forEach(function(cl) {
+          html += '<div style="color:var(--text-dim);font-size:0.6rem;margin-bottom:0.2rem">' + esc(cl.filename) + '</div>';
+          html += '<pre class="sdp-context" style="white-space:pre-wrap;font-size:0.65rem;max-height:12rem;overflow-y:auto">' + esc(cl.content || '') + '</pre>';
+        });
+        html += '</div>';
+      }
+    }
+
+    // If still no detail data at all
+    if (!stageChecklist.length && !(agentName && agentContexts[agentName]) && !duration && !stageTransition) {
+      html += '<div style="color:var(--text-dim);font-size:0.7rem;margin-top:0.3rem">(no detail data recorded)</div>';
+    }
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function _clearSelectedStages(taskId) {
+  // Remove .selected class from all dag-stage elements in the given pipeline
+  var pipeline = document.getElementById('dag-pipeline-' + taskId);
+  if (pipeline) {
+    pipeline.querySelectorAll('.dag-stage.selected').forEach(function(s) {
+      s.classList.remove('selected');
+    });
+  }
+}
+
+// --- Expandable panel toggle (GLOBAL-125) ---
+
+function toggleExpand(id, headerEl) {
+  var body = document.getElementById(id);
+  if (!body) return;
+  var isVisible = body.classList.contains('visible');
+  body.classList.toggle('visible');
+  headerEl.classList.toggle('expanded');
+}
+
+function toggleTaskCard(id, headerEl) {
+  var body = document.getElementById(id);
+  if (!body) return;
+  body.classList.toggle('visible');
+  var chevron = headerEl.querySelector('.chevron');
+  if (chevron) {
+    chevron.style.transform = body.classList.contains('visible') ? 'rotate(90deg)' : '';
+  }
 }
 
 function closeLineage() {
@@ -797,10 +1677,9 @@ document.addEventListener('keydown', function(e) {
     document.querySelectorAll('.nav-tab')[0].click();
   }
   if (e.key >= '1' && e.key <= '9') {
-    const idx = parseInt(e.key) - 1;
-    const items = allBacklogItems;
-    if (idx < items.length) {
-      requestLineage(items[idx].id);
+    var idx = parseInt(e.key) - 1;
+    if (idx < allBacklogItems.length) {
+      requestLineage(allBacklogItems[idx].id);
     }
   }
 });
@@ -808,8 +1687,8 @@ document.addEventListener('keydown', function(e) {
 // --- Clock ---
 
 function updateClock() {
-  const now = new Date();
-  const pad = function(n) { return String(n).padStart(2, '0'); };
+  var now = new Date();
+  var pad = function(n) { return String(n).padStart(2, '0'); };
   document.getElementById('clock').textContent =
     now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' +
     pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());

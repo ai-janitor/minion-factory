@@ -6,12 +6,15 @@ Responsibility: Module-level constants, helpers, and the AgentRunResult dataclas
 Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import resource
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from ..contracts import load_contract
 
@@ -41,8 +44,8 @@ def _get_rss_bytes(pid: int | None = None) -> int:
             )
             if result.returncode == 0 and result.stdout.strip():
                 return int(result.stdout.strip()) * 1024
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        pass
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        logger.error("Failed to get RSS for PID %s: %s", target, e)
     # Fallback: measure self (daemon)
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     if platform.system() == "Linux":

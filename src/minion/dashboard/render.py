@@ -86,8 +86,10 @@ def _visible_pad(text: str, width: int) -> str:
 _STATUS_COLORS: dict[str, str] = {
     "in_progress": _GREEN,
     "assigned":    _CYAN,
-    "fixed":       _YELLOW,
-    "verified":    _YELLOW,
+    "fixed":          _YELLOW,
+    "verified":       _YELLOW,
+    "findings_ready": _YELLOW,
+    "assessed":       _YELLOW,
     "open":        _WHITE,
     "blocked":     _RED,
 }
@@ -219,18 +221,33 @@ def _find_checklist(agent_name: str, work_dir: str) -> str | None:
 
 
 def _parse_checklist_tally(path: str) -> str | None:
-    """Parse the tally from the first line of a checklist file.
+    """Parse the tally from a checklist file.
 
-    Looks for a pattern like [32/33-0NA] in the first line.
-    Returns the tally string (e.g. '32/33-0NA') if found, None otherwise.
+    Strategy:
+    1. First, look for explicit [32/33-0NA] tally in the first line (lead convention)
+    2. Fallback: count [x] and [ ] checkboxes in the full content (universal)
+
+    Returns tally string (e.g. '32/33-0NA' or '3/33') if found, None otherwise.
     On any error (file not found, permission, etc), returns None.
     """
     try:
         with open(path, "r") as f:
-            first_line = f.readline()
+            content = f.read()
+        if not content:
+            return None
+        first_line = content.split("\n", 1)[0]
+        # Try explicit tally format first
         m = re.search(r"\[(\d+/\d+-\d+NA)\]", first_line)
-        return m.group(1) if m else None
-    except (OSError, UnicodeDecodeError):
+        if m:
+            return m.group(1)
+        # Fallback: count checkboxes from full content
+        done = len(re.findall(r"- \[x\]", content, re.IGNORECASE))
+        total = done + len(re.findall(r"- \[ \]", content))
+        if total > 0:
+            return f"{done}/{total}"
+        return None
+    except (OSError, UnicodeDecodeError) as e:
+        logger.error("Failed to parse checklist tally from %s: %s", path, e)
         return None
 
 

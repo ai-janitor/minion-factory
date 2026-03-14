@@ -67,7 +67,7 @@ def reindex_intel() -> dict[str, object]:
                         if cursor.rowcount:
                             links_created += 1
                     except sqlite3.IntegrityError:
-                        pass
+                        continue  # duplicate key on upsert is expected — row already exists
 
                 for req_id in fm.get("linked_reqs", []):
                     try:
@@ -78,7 +78,7 @@ def reindex_intel() -> dict[str, object]:
                         if cursor.rowcount:
                             links_created += 1
                     except sqlite3.IntegrityError:
-                        pass
+                        continue  # duplicate key on upsert is expected — row already exists
 
         conn.commit()
         return {"status": "ok", "indexed": indexed, "links_created": links_created}

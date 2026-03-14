@@ -6,19 +6,19 @@ description: Recon investigation — oracle assesses findings, lead closes
 stages:
   in_progress:
     description: Recon actively investigating
-    next: fixed
+    next: findings_ready
     requires: [submit_result]
     workers: null
 
-  fixed:
+  findings_ready:
     description: Findings submitted, awaiting oracle assessment
-    next: verified
+    next: assessed
     fail: assigned
     workers:
       default: [oracle]
       recon: [oracle]
 
-  verified:
+  assessed:
     description: Oracle approved findings, lead reviews for impl tasks
     next: closed
     fail: assigned

@@ -15,9 +15,12 @@ New endpoint — not in ui/server.js.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import sqlite3
 from urllib.parse import urlparse, parse_qs
+
+logger = logging.getLogger(__name__)
 
 from minion.network.handlers._resolve_project_or_404 import resolve_project_or_404
 
@@ -152,8 +155,8 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         stage_history = [dict(r) for r in history_rows]
-    except sqlite3.DatabaseError:
-        pass  # transition_log may not exist
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch stage history for requirement %s: %s", req_id, e)
 
     # Children
     children = []
@@ -163,8 +166,8 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         children = [dict(r) for r in child_rows]
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch children for requirement %s: %s", req_id, e)
 
     # Linked tasks
     linked_tasks = []
@@ -175,8 +178,8 @@ def handle_requirement_lineage(handler, db_path: str, name: str = "",
             (req_id,),
         ).fetchall()
         linked_tasks = [dict(r) for r in task_rows]
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch linked tasks for requirement %s: %s", req_id, e)
 
     total = len(linked_tasks)
     closed = sum(1 for t in linked_tasks if t.get("status") == "closed")

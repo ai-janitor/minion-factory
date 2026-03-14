@@ -160,8 +160,8 @@ def update_pane_task(agent_name: str, task_label: str = "") -> None:
                 capture_output=True,
             )
             return
-    except FileNotFoundError:
-        pass
+    except FileNotFoundError as e:
+        log.error("tmux not found when updating pane title: %s", e)
 
 
 def kill_all_crews() -> None:

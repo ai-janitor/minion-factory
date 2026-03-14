@@ -12,7 +12,10 @@ Implementation order: 8th (depends on project_db + discovery — needs all proje
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from minion.network.server import _DB_LOCK
 from minion.network.discovery import discover_projects
@@ -95,8 +98,8 @@ def handle_overview(handler, db_path: str, **kwargs) -> None:
                         result["agents"]["by_hp_tier"]["critical"] += 1
                 else:
                     result["agents"]["by_hp_tier"]["unknown"] += 1
-        except Exception:
-            pass  # broad catch: project DB may have missing tables
+        except Exception as e:
+            logger.error("Failed to aggregate overview for project %s: %s", proj.get("name"), e)
 
     handler._json_response(200, result)
 
@@ -160,8 +163,8 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                             "stage": row["stage"],
                             "stalled_minutes": round(age_mins),
                         })
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.error("Failed to parse timestamp for alert: %s", e)
 
             # HP critical agents
             for row in conn.execute(
@@ -198,10 +201,10 @@ def handle_alerts(handler, db_path: str, **kwargs) -> None:
                             "count": row["cnt"],
                             "oldest_minutes": round(age_mins),
                         })
-                except (ValueError, TypeError):
-                    pass
-        except Exception:
-            pass  # broad catch: project DB may have missing tables
+                except (ValueError, TypeError) as e:
+                    logger.error("Failed to parse timestamp for alert: %s", e)
+        except Exception as e:
+            logger.error("Failed to collect alerts for project %s: %s", proj.get("name"), e)
 
     # Sort: critical first, then warning
     severity_order = {"critical": 0, "warning": 1, "info": 2}
@@ -250,7 +253,7 @@ def handle_task_lineage(handler, db_path: str, task_id: str = "", **kwargs) -> N
                     "agent": row["triggered_by"],
                     "timestamp": row["created_at"],
                 })
-        except Exception:
-            pass  # broad catch: transition_log may not exist
+        except Exception as e:
+            logger.error("Failed to query transition_log for task %s in project %s: %s", tid, proj.get("name"), e)
 
     handler._json_response(200, {"task_id": tid, "transitions": transitions})

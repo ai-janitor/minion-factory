@@ -13,6 +13,9 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import signal
 import subprocess
@@ -217,7 +220,7 @@ def stop() -> dict:
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
-        pass
+        logger.error("Process %d already gone before SIGKILL", pid)
 
     _clear_state()
     return {"status": "stopped", "pid": pid, "message": "Forced shutdown (SIGKILL after 5s timeout)."}

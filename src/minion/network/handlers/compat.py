@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 import re
 from urllib.parse import urlparse, parse_qs
+
+logger = logging.getLogger(__name__)
 
 from minion.defaults import MAX_DOC_SIZE
 from minion.network.server import _DB_LOCK
@@ -205,10 +208,10 @@ def handle_api_logs(handler, db_path: str, **kwargs) -> None:
                 with open(log_path, "r") as f:
                     lines = f.read().split("\n")
                 logs[name] = "\n".join(lines[-200:])
-            except OSError:
-                pass
-    except OSError:
-        pass
+            except OSError as e:
+                logger.error("Failed to read log file %s: %s", fname, e)
+    except OSError as e:
+        logger.error("Failed to list log directory: %s", e)
     handler._json_response(200, logs)
 
 

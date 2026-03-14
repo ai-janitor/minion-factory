@@ -7,11 +7,15 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import logging
 import os
+import sqlite3
 
 from minion.db import get_db
 from minion.fs import MAX_DOC_SIZE
 from ._helpers import _get_flow
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_path(path: str) -> str:
@@ -155,12 +159,16 @@ def get_task(task_id: int) -> dict[str, object]:
                 if c.get("files_read"):
                     try:
                         c["files_read"] = _json_mod.loads(c["files_read"])
-                    except (ValueError, TypeError):
-                        pass
+                    except (ValueError, TypeError) as e:
+                        logger.error("Failed to parse files_read for comment: %s", e)
                 comments.append(c)
             result["comments"] = comments
-        except Exception:
-            result["comments"] = []  # broad catch: task_comments table may not exist
+        except sqlite3.OperationalError:
+            # task_comments table may not exist in older DBs — safe to ignore
+            result["comments"] = []
+        except Exception as e:
+            logger.error("Unexpected error fetching task_comments for task %s: %s", task_id, e)
+            raise
         return result
     finally:
         conn.close()

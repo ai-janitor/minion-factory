@@ -8,9 +8,12 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from minion.auth import CLASS_BRIEFING_FILES, get_tools_for_class
 from minion.db import get_db, now_iso
@@ -38,8 +41,8 @@ def _gather_operational_state(agent_name: str, cursor: sqlite3.Cursor) -> dict[s
             flow_type = task.get("flow_type") or task.get("task_type", "bugfix")
             flow = load_flow(flow_type)
             task["dag_position"] = flow.render_dag(task["status"])
-        except (ImportError, FileNotFoundError, KeyError, ValueError):
-            pass
+        except (ImportError, FileNotFoundError, KeyError, ValueError) as e:
+            logger.error("Failed to render DAG for task %s: %s", task.get("id"), e)
         open_tasks.append(task)
     result["open_tasks"] = open_tasks
 
@@ -186,8 +189,8 @@ def cold_start(agent_name: str) -> dict[str, object]:
             doc_paths = [d["doc_path"] for d in class_docs.get("docs", [])]
             if doc_paths:
                 result["suggested_reading"] = doc_paths
-        except (ImportError, KeyError, TypeError):
-            pass
+        except (ImportError, KeyError, TypeError) as e:
+            logger.error("Failed to suggest reading for agent %s: %s", agent_name, e)
 
         # Operational state (tasks, claims, HP, inbox, flags)
         result.update(_gather_operational_state(agent_name, cursor))

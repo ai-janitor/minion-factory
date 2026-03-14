@@ -79,7 +79,7 @@ def _agent_has_active_tasks(agent_name: str, project_path: str) -> bool:
     try:
         conn = connect(local_db, timeout=2)
         row = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status IN ('open', 'assigned', 'in_progress', 'fixed')",
+            "SELECT COUNT(*) FROM tasks WHERE assigned_to = ? AND status IN ('open', 'assigned', 'in_progress', 'fixed', 'findings_ready')",
             (agent_name,),
         ).fetchone()
         conn.close()
@@ -91,7 +91,7 @@ def _agent_has_active_tasks(agent_name: str, project_path: str) -> bool:
 def prune_global(stale_minutes: int = 30) -> dict[str, object]:
     """Remove agents from coordinator DB that haven't been active in N minutes.
 
-    Agents with active tasks (open/assigned/in_progress/fixed) in their project
+    Agents with active tasks (open/assigned/in_progress/fixed/findings_ready) in their project
     are protected from pruning regardless of staleness.
 
     Big-O: O(S * T) where S = stale agent candidates, T = task count per agent's project DB.

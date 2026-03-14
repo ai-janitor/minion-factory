@@ -10,8 +10,11 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _minion_dir() -> Path:
@@ -105,8 +108,8 @@ def get_remote(name: str | None = None) -> dict | None:
     if tf.exists():
         try:
             token = tf.read_text().strip()
-        except OSError:
-            pass
+        except OSError as e:
+            logger.error("Failed to read remote token file %s: %s", tf, e)
 
     return {
         "name": name,

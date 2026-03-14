@@ -236,3 +236,78 @@ def test_dag_eligibility_exception_skips_task():
         "Task was returned as eligible even though the DAG eligibility check raised. "
         "Add 'continue' after logger.error in the except block at polling.py:259."
     )
+
+
+# ---------------------------------------------------------------------------
+# DAG render failure — task returned with explicit error string, not empty dag
+# ---------------------------------------------------------------------------
+
+
+def test_dag_render_failure_returns_explicit_error_string_not_empty():
+    """When render_dag() raises, the returned task entry must have a non-empty dag field.
+
+    Regression test for polling.py:268 — the except block previously left dag_str=""
+    after logging the error, so the agent received a task with no phase visibility.
+    Per GLOBAL-152 (no-silent-failures), the failure must be visible to the caller.
+    After the fix, dag contains an explicit error message, not an empty string.
+    """
+    import unittest.mock as mock
+    from minion.db import get_db, now_iso
+
+    _register_agent("dag-render-coder", "coder")
+
+    now = now_iso()
+    db = get_db()
+    db.execute(
+        "INSERT INTO tasks (title, task_file, created_by, status, assigned_to, "
+        "created_at, updated_at, flow_type, class_required) "
+        "VALUES (?, ?, ?, 'open', NULL, ?, ?, 'bugfix', 'coder')",
+        ("DAG render failure test task", "tasks/dag-render-test.md", "dag-render-coder", now, now),
+    )
+    db.commit()
+    db.close()
+
+    # Patch load_flow inside polling.py to return a mock flow whose render_dag raises.
+    # This simulates a malformed/unrenderable flow while letting active_statuses() work.
+    # We use a real TaskFlow object as the pass-through for eligibility, but a mock for
+    # the render_dag block, by patching minion.tasks.load_flow to return a broken-render mock.
+    import minion.tasks as _mt
+
+    _real_load_flow = _mt.load_flow
+
+    def _broken_render_load_flow(flow_type):
+        real_flow = _real_load_flow(flow_type)
+        broken = mock.MagicMock(wraps=real_flow)
+        broken.render_dag.side_effect = ValueError("bad flow YAML")
+        return broken
+
+    # Clear flow_bridge cache so load_flow is called fresh (and our mock is hit)
+    import minion.flow_bridge as _fb
+    _fb._flow_cache.clear()
+
+    with mock.patch("minion.tasks.load_flow", side_effect=_broken_render_load_flow):
+        from minion.polling import _find_available_tasks
+        tasks = _find_available_tasks("dag-render-coder")
+
+    # Restore flow_bridge cache
+    _fb._flow_cache.clear()
+
+    # Task must still be returned (not skipped — render failure != eligibility failure)
+    task_titles = [t.get("title") for t in tasks]
+    assert "DAG render failure test task" in task_titles, (
+        "Task was not returned after DAG render failure. "
+        "Render failure should not skip the task — only eligibility failure should."
+    )
+
+    # The dag field must be a non-empty explicit error string, not ""
+    matching = [t for t in tasks if t.get("title") == "DAG render failure test task"]
+    assert matching, "Task not found in results"
+    dag_val = matching[0].get("dag", "")
+    assert dag_val != "", (
+        "dag field is empty string after render failure — agent has no phase visibility. "
+        "Set dag_str to an explicit error message when render fails (GLOBAL-152)."
+    )
+    assert "unavailable" in dag_val.lower() or "failed" in dag_val.lower(), (
+        f"dag field does not indicate failure: {dag_val!r}. "
+        "Expected an explicit error message so agent knows DAG render failed."
+    )

@@ -13,7 +13,30 @@ import os
 
 from minion.db import get_db, now_iso
 from minion.defaults import resolve_work_dir
-from ._helpers import _log_transition
+from ._helpers import _get_flow, _log_transition
+from .dag import TERMINAL_STATUSES
+
+
+def _find_final_advancing_stage(flow) -> str | None:
+    """Find the last non-terminal, non-skip, non-parked stage that leads directly to a terminal.
+
+    Walks each stage in the flow. Returns the name of the stage whose resolved
+    next_status() is a terminal. This is the "done-ready" stage — the stage a
+    task must reach before a lead can fast-close it via task done.
+
+    Returns None if the flow has no such stage (degenerate / all-terminal flow).
+
+    Time complexity: O(S) where S = number of stages.
+    """
+    for name, stage in flow.stages.items():
+        # Skip meta-stages that are not active working stages
+        if stage.skip or stage.terminal or stage.parked:
+            continue
+        # Check if the happy-path next resolves to a terminal
+        resolved_next = flow.next_status(name, passed=True)
+        if resolved_next is not None and resolved_next in TERMINAL_STATUSES:
+            return name
+    return None
 
 
 def done_task(agent_name: str, task_id: int, summary: str = "") -> dict[str, object]:
@@ -29,7 +52,7 @@ def done_task(agent_name: str, task_id: int, summary: str = "") -> dict[str, obj
             return {"error": f"BLOCKED: Only lead-class agents can force-close tasks. '{agent_name}' is '{row['agent_class']}'."}
 
         cursor.execute(
-            "SELECT id, status, title, assigned_to FROM tasks WHERE id = ?",
+            "SELECT id, status, title, assigned_to, flow_type FROM tasks WHERE id = ?",
             (task_id,),
         )
         task_row = cursor.fetchone()
@@ -39,6 +62,36 @@ def done_task(agent_name: str, task_id: int, summary: str = "") -> dict[str, obj
         old_status = task_row["status"]
         if old_status == "closed":
             return {"error": f"Task #{task_id} is already closed."}
+
+        # --- DAG gate: fast-close only allowed from the final pre-terminal stage ---
+        # task done is not a shortcut past review/QE/testing. A lead can only invoke
+        # it when the task has legitimately reached the last stage before close.
+        # Exception: 'open' tasks may be cancelled (no work was started).
+        # Exception: terminal statuses are caught above.
+        # Exception: dead_end statuses (abandoned, stale, obsolete) are terminal.
+        task_type = task_row["flow_type"] or "bugfix"
+        flow = _get_flow(task_type)
+        if flow and old_status not in TERMINAL_STATUSES and old_status != "open":
+            final_stage = _find_final_advancing_stage(flow)
+            if final_stage is not None and old_status != final_stage:
+                # Build the happy path to show what stages remain
+                stages_remaining: list[str] = []
+                cursor_stage: str | None = old_status
+                visited: set[str] = set()
+                while cursor_stage and cursor_stage not in visited and cursor_stage not in TERMINAL_STATUSES:
+                    visited.add(cursor_stage)
+                    nxt = flow.next_status(cursor_stage, passed=True)
+                    if nxt and nxt not in TERMINAL_STATUSES:
+                        stages_remaining.append(nxt)
+                    cursor_stage = nxt
+                hint = f" Remaining stages: {stages_remaining}." if stages_remaining else ""
+                return {
+                    "error": (
+                        f"BLOCKED: Task #{task_id} is at '{old_status}' but must reach "
+                        f"'{final_stage}' before fast-close. "
+                        f"Use 'minion task complete-phase' to advance through each stage.{hint}"
+                    )
+                }
 
         result_file = None
         if summary:

@@ -8,9 +8,12 @@ Organization: Standalone functions and/or a single class. See source."""
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from minion.db import get_db, now_iso
+
+logger = logging.getLogger(__name__)
 
 
 def add_comment(
@@ -70,8 +73,8 @@ def list_comments(task_id: int) -> dict[str, Any]:
             if c.get("files_read"):
                 try:
                     c["files_read"] = json.loads(c["files_read"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.error("Failed to parse files_read JSON for comment %s: %s", c.get("id"), e)
             comments.append(c)
         return {"task_id": task_id, "comments": comments, "count": len(comments)}
     finally:

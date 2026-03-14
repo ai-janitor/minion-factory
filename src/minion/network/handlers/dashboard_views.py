@@ -17,9 +17,12 @@ Pseudo-logic:
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Jinja2 template environment — initialized once on first use
 _env = None
@@ -57,8 +60,8 @@ def _get_first_project_db(network_db_path: str):
             if conn:
                 db_path = os.path.join(proj["path"], ".work", "minion.db")
                 return conn, db_path
-    except (ImportError, OSError, Exception):
-        pass  # broad catch: discovery/DB may fail in many ways
+    except (ImportError, OSError, Exception) as e:
+        logger.error("Failed to discover project DB: %s", e)
     return None, None
 
 
@@ -111,8 +114,8 @@ def _render_agents(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_agent_summary
             agents = get_agent_summary(conn)
-        except (ImportError, sqlite3.DatabaseError):
-            pass
+        except (ImportError, sqlite3.DatabaseError) as e:
+            logger.error("Failed to fetch agent summary for dashboard: %s", e)
 
     return template.render(page="agents", agents=agents)
 
@@ -128,8 +131,8 @@ def _render_tasks(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_task_pipeline
             pipeline = get_task_pipeline(conn)
-        except (ImportError, sqlite3.DatabaseError):
-            pass
+        except (ImportError, sqlite3.DatabaseError) as e:
+            logger.error("Failed to fetch task pipeline for dashboard: %s", e)
 
     return template.render(page="tasks", pipeline=pipeline)
 
@@ -145,8 +148,8 @@ def _render_health(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_system_stats
             stats = get_system_stats(conn, db_path or "")
-        except (ImportError, sqlite3.DatabaseError):
-            pass
+        except (ImportError, sqlite3.DatabaseError) as e:
+            logger.error("Failed to fetch system stats for dashboard: %s", e)
 
     return template.render(page="health", stats=stats)
 
@@ -162,7 +165,7 @@ def _render_messages(network_db_path: str) -> str:
         try:
             from minion.dashboard.queries import get_recent_messages
             messages = get_recent_messages(conn)
-        except (ImportError, sqlite3.DatabaseError):
-            pass
+        except (ImportError, sqlite3.DatabaseError) as e:
+            logger.error("Failed to fetch recent messages for dashboard: %s", e)
 
     return template.render(page="messages", messages=messages)

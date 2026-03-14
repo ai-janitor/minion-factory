@@ -36,8 +36,11 @@ from __future__ import annotations
 
 import logging
 import os
+import ssl
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from minion.auth import CAP_REVIEW, classes_with
 from minion.db import get_db, now_iso, touch_coordinator_activity
@@ -64,8 +67,8 @@ def _write_pidfile(agent: str) -> None:
 def _remove_pidfile(agent: str) -> None:
     try:
         os.remove(_poll_pidfile(agent))
-    except OSError:
-        pass
+    except OSError as e:
+        logger.error("Failed to remove pidfile for %s: %s", agent, e)
 
 
 def _kill_existing_poll(agent: str) -> int | None:
@@ -87,8 +90,8 @@ def _kill_existing_poll(agent: str) -> int | None:
     finally:
         try:
             os.remove(pidfile)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.error("Failed to remove stale pidfile %s: %s", pidfile, e)
 
 
 def is_poll_alive(agent: str, project_path: str) -> bool:
@@ -218,20 +221,20 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
             )
             candidates.extend(dict(r) for r in cursor.fetchall())
 
-        # P3: fixed tasks for reviewers
+        # P3: fixed/findings_ready tasks for reviewers
         if not candidates and agent_class in _reviewers:
             cursor.execute(
                 """SELECT id, title, task_file, status, class_required, blocked_by, flow_type
-                   FROM tasks WHERE status = 'fixed' AND assigned_to IS NULL
+                   FROM tasks WHERE status IN ('fixed', 'findings_ready') AND assigned_to IS NULL
                    ORDER BY created_at ASC LIMIT 10"""
             )
             candidates.extend(dict(r) for r in cursor.fetchall())
 
-        # P4: verified tasks for testers
+        # P4: verified/assessed tasks for testers
         if not candidates and agent_class in _reviewers:
             cursor.execute(
                 """SELECT id, title, task_file, status, class_required, blocked_by, flow_type
-                   FROM tasks WHERE status = 'verified' AND assigned_to IS NULL
+                   FROM tasks WHERE status IN ('verified', 'assessed') AND assigned_to IS NULL
                    ORDER BY created_at ASC LIMIT 10"""
             )
             candidates.extend(dict(r) for r in cursor.fetchall())
@@ -265,16 +268,19 @@ def _find_available_tasks(agent: str) -> list[dict[str, Any]]:
                 from minion.tasks import load_flow
                 flow = load_flow(task_type)
                 dag_str = flow.render_dag(task["status"])
-            except (ImportError, FileNotFoundError, KeyError, ValueError):
-                pass
+            except (ImportError, FileNotFoundError, KeyError, ValueError) as e:
+                logger.error("Failed to render DAG for task %s (flow=%s): %s", task.get("id"), task_type, e)
+                # Per GLOBAL-152: explicit error state — agent must see the failure, not receive empty dag.
+                # Do NOT re-raise (task still returned) but mark dag as unavailable so agent has visibility.
+                dag_str = f"(DAG unavailable — render failed: check flow YAML for '{task_type}')"
             # Suggest relevant docs for this task
             suggested_docs: list[str] = []
             try:
                 from minion.intel import suggest as _suggest
                 s = _suggest(topic=task["title"], limit=3)
                 suggested_docs = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
-            except (ImportError, KeyError, TypeError):
-                pass
+            except (ImportError, KeyError, TypeError) as e:
+                logger.error("Failed to suggest intel docs for task %s: %s", task.get("id"), e)
             entry: dict[str, object] = {
                 "task_id": task["id"],
                 "title": task["title"],
@@ -404,6 +410,12 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
             conn.close()
 
         # Check API GLOBAL network tier for messages + drain outbox
+        # Exception handling rationale:
+        #   - ImportError: network client not installed — debug only, not an error
+        #   - Network-specific (ssl.SSLError, ConnectionResetError, ConnectionRefusedError,
+        #     TimeoutError, OSError): expected transient failures — log error and continue
+        #   - Unexpected exceptions (KeyError, ValueError, AttributeError, etc.) propagate
+        #     so they surface instead of silently dropping cross-project messages
         network_messages: list[dict[str, Any]] = []
         try:
             from minion.network.client import get_client
@@ -421,8 +433,12 @@ def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dic
                 # Drain offline outbox
                 from minion.network.outbox import drain_outbox
                 drain_outbox(net)
-        except (ImportError, OSError, KeyError, ValueError):
-            pass
+        except ImportError:
+            # Network client not available — not an error, just skip
+            logger.debug("Network client not available — skipping network tier poll")
+        except (ssl.SSLError, ConnectionResetError, ConnectionRefusedError, TimeoutError, OSError) as e:
+            # Transient network failures — log and continue; agent will retry next poll cycle
+            logger.error("Network tier poll failed: %s", e)
 
         # Find available tasks — only surface NEW ones not yet seen this poll session
         available_tasks = _find_available_tasks(agent)
@@ -494,8 +510,8 @@ def multi_project_poll(agent_name: str, project_paths: list[str] | None = None) 
                 project_paths = [r[0] for r in rows if r[0] and r[0] != "unknown"]
             finally:
                 coord.close()
-        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError):
-            pass
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as e:
+            logger.error("Failed to query coordinator DB for project paths: %s", e)
 
     if not project_paths:
         # No projects discovered — fall back to single-project poll
@@ -566,8 +582,8 @@ def poll_status(agent_name: str) -> dict[str, Any]:
             result["pid_value"] = pid
             os.kill(pid, 0)  # signal 0 = check alive
             result["pid_alive"] = True
-        except (ValueError, ProcessLookupError, PermissionError, OSError):
-            pass
+        except (ValueError, ProcessLookupError, PermissionError, OSError) as e:
+            logger.error("Failed to check poll PID for %s: %s", agent_name, e)
 
     # 2. Check last heartbeat from coordinator DB
     try:
@@ -611,7 +627,7 @@ def poll_status(agent_name: str) -> dict[str, Any]:
                 for h in stop_hooks
                 if isinstance(h, dict)
             )
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error("Failed to check Stop hook settings for %s: %s", agent_name, e)
 
     return result

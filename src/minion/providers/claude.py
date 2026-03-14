@@ -7,7 +7,10 @@ Organization: Standalone functions and/or a single class. See source.
 """
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 from .cli_provider_protocol import BaseProvider
 
@@ -67,6 +70,6 @@ class ClaudeProvider(BaseProvider):
                 sid = data.get("session_id") or data.get("sessionId")
                 if sid and isinstance(sid, str):
                     return sid
-        except (json.JSONDecodeError, ValueError):
-            pass
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error("Failed to extract session ID from stream-json: %s", e)
         return None

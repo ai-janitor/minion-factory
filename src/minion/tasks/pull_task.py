@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from minion.db import get_db, now_iso
 from minion.crew import update_pane_task
 from ._helpers import _get_flow, _log_transition
 from .query_task import _inline_file, _inline_requirement
+
+logger = logging.getLogger(__name__)
 
 
 def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
@@ -66,7 +69,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
                 return {"error": f"BLOCKED: Task #{task_id} has unresolved blockers."}
 
         # Atomic claim
-        if task_status in ("fixed", "verified"):
+        if task_status in ("fixed", "verified", "findings_ready", "assessed"):
             cursor.execute(
                 """UPDATE tasks SET assigned_to = ?, updated_at = ?
                    WHERE id = ? AND status = ? AND (assigned_to IS NULL OR assigned_to = ?)""",
@@ -85,7 +88,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
         if cursor.rowcount == 0:
             return {"error": f"Race lost — task #{task_id} was claimed by another agent."}
 
-        new_status = "assigned" if task_status not in ("fixed", "verified") else task_status
+        new_status = "assigned" if task_status not in ("fixed", "verified", "findings_ready", "assessed") else task_status
         _log_transition(cursor, task_id, task_status, new_status, agent_name, now)
 
         cursor.execute(
@@ -158,8 +161,8 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             suggested = [d["doc_path"] for d in s.get("docs", []) if d.get("score", 0) > 0]
             if suggested:
                 result["suggested_reading"] = suggested
-        except (ImportError, KeyError):
-            pass
+        except (ImportError, KeyError) as e:
+            logger.error("Failed to suggest reading for task %s: %s", task_id, e)
 
         return result
     finally:
