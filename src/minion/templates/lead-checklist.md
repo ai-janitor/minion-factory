@@ -8,6 +8,7 @@
 ## Rules
 - Spawn workers on main — do NOT use worktrees. Workers need access to .work/ and checklists.
 - After completing each item, edit this file to mark it `[x]` and update the tally in the header `[done/total-NNA]`. The TUI parses this file.
+- **Checklist file naming:** Use `lead-<name>-task-<task-id>.md` (e.g. `lead-napoleon-task-42.md`). The task ID scopes the checklist to this specific task and prevents stale checklists from old sessions appearing in lineage views.
 
 ## Workers
 - [ ] Worker <worker-name> — items #<ids>

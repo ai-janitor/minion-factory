@@ -131,18 +131,23 @@ def get_checklist_dir(project_dir: str | Path | None = None) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def write_checklist(agent_name: str, content: str, project_dir: str | Path | None = None, template_type: str | None = None) -> Path:
+def write_checklist(agent_name: str, content: str, project_dir: str | Path | None = None, template_type: str | None = None, task_id: int | None = None) -> Path:
     """Write a checklist file for an agent.
 
-    File naming matches TUI lookup convention (_find_checklist in dashboard/render.py):
-      - template_type == "lead" → lead-<agent_name>.md
-      - everything else        → <agent_name>.md
+    File naming convention:
+      - With task_id (preferred): lead-<name>-task-<id>.md  or  <name>-task-<id>.md
+      - Without task_id (legacy):  lead-<name>.md            or  <name>.md
+
+    The task_id suffix scopes checklists to the specific task, preventing stale
+    checklists from old sessions (same agent name, different task) from appearing
+    in lineage views. Always pass task_id when available.
 
     Args:
         agent_name: The agent's registered name (e.g. 'b238-w1').
         content: The full markdown content of the checklist.
         project_dir: Optional project directory override.
         template_type: Template type used ('napoleon', 'lead', 'worker', or None).
+        task_id: Optional task ID to scope this checklist. Produces task-ID-scoped filename.
 
     Returns:
         Path to the written file.
@@ -150,11 +155,19 @@ def write_checklist(agent_name: str, content: str, project_dir: str | Path | Non
     # Ensure directory exists
     checklist_dir = get_checklist_dir(project_dir)
 
-    # Lead checklists use lead-<name>.md to match TUI lookup order
-    if template_type == "lead":
-        filename = f"lead-{agent_name}.md"
+    # Build filename — task_id suffix scopes checklist to prevent session bleed
+    # Lead checklists use lead-<name> prefix to match TUI lookup order
+    if task_id is not None:
+        if template_type == "lead":
+            filename = f"lead-{agent_name}-task-{task_id}.md"
+        else:
+            filename = f"{agent_name}-task-{task_id}.md"
     else:
-        filename = f"{agent_name}.md"
+        # Legacy fallback: no task ID (backward compat for callers that don't pass task_id)
+        if template_type == "lead":
+            filename = f"lead-{agent_name}.md"
+        else:
+            filename = f"{agent_name}.md"
 
     path = checklist_dir / filename
     path.write_text(content, encoding="utf-8")
@@ -167,28 +180,43 @@ def write_checklist(agent_name: str, content: str, project_dir: str | Path | Non
 # ---------------------------------------------------------------------------
 
 
-def read_checklist(agent_name: str, project_dir: str | Path | None = None) -> str | None:
+def read_checklist(agent_name: str, project_dir: str | Path | None = None, task_id: int | None = None) -> str | None:
     """Read a checklist file for an agent.
 
-    Search order matches TUI convention (_find_checklist in dashboard/render.py):
+    Search order (task_id provided):
+    1. lead-<agent_name>-task-<id>.md  (task-scoped lead checklist)
+    2. <agent_name>-task-<id>.md       (task-scoped worker checklist)
+    3. lead-<agent_name>.md            (legacy lead checklist)
+    4. <agent_name>.md                 (legacy worker/generic checklist)
+
+    Search order (no task_id):
     1. lead-<agent_name>.md  (lead checklist)
     2. <agent_name>.md       (worker/generic checklist)
 
-    Returns None if neither file exists.
+    Returns None if no file is found.
 
     Args:
         agent_name: The agent's registered name.
         project_dir: Optional project directory override.
+        task_id: Optional task ID to prefer task-scoped checklist filenames.
 
     Returns:
         The checklist content as a string, or None if not found.
     """
     checklist_dir = get_checklist_dir(project_dir)
 
-    # Match TUI lookup order: lead- prefix first, then plain name
-    for filename in (f"lead-{agent_name}.md", f"{agent_name}.md"):
+    # Build candidate list — task-scoped names searched first when task_id provided
+    candidates: list[str] = []
+    if task_id is not None:
+        candidates.append(f"lead-{agent_name}-task-{task_id}.md")
+        candidates.append(f"{agent_name}-task-{task_id}.md")
+    # Legacy fallback candidates (always included)
+    candidates.append(f"lead-{agent_name}.md")
+    candidates.append(f"{agent_name}.md")
+
+    for filename in candidates:
         path = checklist_dir / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8")
+        if path.exists():
+            return path.read_text(encoding="utf-8")
 
     return None

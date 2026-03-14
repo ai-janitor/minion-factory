@@ -12,7 +12,7 @@ minion -C <project-root> comms send local --from <name> --to <lead> --message "c
 The `--model` flag is MANDATORY on registration — without it the TUI MODEL column is blank.
 
 ## FIRST ACTION — before reading any code or making any changes:
-Write CHECKLIST.md in your working directory. For each item, list:
+Write your checklist to `.work/checklists/<name>-task-<task-id>.md` (e.g. `coder-napoleon-task-42.md`). The task ID in the filename scopes this checklist to the current task — preventing stale checklists from old sessions appearing in lineage views. For each item, list:
 1. What the problem is (in your own words)
 2. Which files you will modify
 3. What the fix looks like (approach, not code)

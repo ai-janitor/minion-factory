@@ -9,9 +9,12 @@ Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 
 from minion.tasks.dag import TERMINAL_STATUSES
+
+logger = logging.getLogger(__name__)
 
 # Build SQL literal from the single source of truth — safe (values are code-controlled, not user input).
 _TERMINAL_SQL = ", ".join(f"'{s}'" for s in sorted(TERMINAL_STATUSES))
@@ -43,8 +46,10 @@ def fetch_tasks(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             CASE t.status
                 WHEN 'in_progress' THEN 0
                 WHEN 'assigned'    THEN 1
-                WHEN 'fixed'       THEN 2
-                WHEN 'verified'    THEN 3
+                WHEN 'fixed'          THEN 2
+                WHEN 'findings_ready' THEN 2
+                WHEN 'verified'       THEN 3
+                WHEN 'assessed'       THEN 3
                 WHEN 'open'        THEN 4
                 ELSE 5
             END,
@@ -187,24 +192,24 @@ def get_system_stats(conn: sqlite3.Connection, db_path: str = "") -> dict:
                 stats["tables"][table_name] = count
             except sqlite3.DatabaseError:
                 stats["tables"][table_name] = -1
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch table row counts: %s", e)
 
     # Agent breakdown
     try:
         stats["agents"]["total"] = conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         for row in conn.execute("SELECT agent_class, COUNT(*) as cnt FROM agents GROUP BY agent_class").fetchall():
             stats["agents"][row["agent_class"] or "unknown"] = row["cnt"]
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch agent breakdown: %s", e)
 
     # Task breakdown
     try:
         stats["tasks"]["total"] = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         for row in conn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
             stats["tasks"][row["status"]] = row["cnt"]
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to fetch task breakdown: %s", e)
 
     return stats
 
@@ -279,7 +284,7 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "")
     L = transition log entries per task. Typically small (single-digit R and T).
     NOT on the hot path — called only when user selects a backlog item.
     """
-    result: dict = {"backlog": None, "readme_content": None, "requirements": []}
+    result: dict = {"backlog": None, "readme_content": None, "requirements": [], "checklists": []}
 
     # Fetch backlog item
     bk_row = conn.execute(
@@ -309,9 +314,14 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "")
     for req in req_rows:
         req_entry: dict = {"req": req, "tasks": []}
 
+        # Read requirement README content from filesystem (#249: surface all data)
+        req_readme = _read_requirement_readme(work_dir, req["file_path"])
+        req_entry["readme_content"] = req_readme
+
         # Fetch tasks linked to this requirement
         task_rows = conn.execute(
-            "SELECT id, title, status, flow_type, assigned_to, created_at, updated_at "
+            "SELECT id, title, status, flow_type, assigned_to, "
+            "task_file, result_file, created_at, updated_at "
             "FROM tasks WHERE requirement_id = ? ORDER BY id",
             (req["id"],),
         ).fetchall()
@@ -325,9 +335,35 @@ def fetch_lineage(conn: sqlite3.Connection, backlog_id: int, work_dir: str = "")
                 "ORDER BY created_at",
                 (task["id"],),
             ).fetchall()
-            req_entry["tasks"].append({"task": task, "transitions": transitions})
+
+            # Read task spec file content (#249: surface spec in lineage)
+            spec_content = _read_file_safe(task["task_file"])
+
+            # Read result file content (#249: surface result in lineage)
+            result_content = _read_file_safe(task["result_file"])
+
+            req_entry["tasks"].append({
+                "task": task,
+                "transitions": transitions,
+                "spec_content": spec_content,
+                "result_content": result_content,
+            })
 
         result["requirements"].append(req_entry)
+
+    # Fetch checklists for all tasks in this lineage (#248: surface checklists in lineage view)
+    all_checklists: list[dict] = []
+    seen_checklist_files: set[str] = set()
+    for req_entry in result["requirements"]:
+        for task_entry in req_entry.get("tasks", []):
+            task = task_entry["task"]
+            task_id = task["id"] if hasattr(task, "__getitem__") else task.get("id")
+            if task_id:
+                for cl in fetch_checklists_for_task(work_dir, task_id, conn):
+                    if cl["filename"] not in seen_checklist_files:
+                        seen_checklist_files.add(cl["filename"])
+                        all_checklists.append(cl)
+    result["checklists"] = all_checklists
 
     return result
 
@@ -337,7 +373,9 @@ def fetch_backlog_readme(work_dir: str, file_path: str | None) -> str | None:
 
     Backlog #246: Show backlog description in lineage view.
     Resolves the README path from the backlog's file_path field:
-      {work_dir}/backlog/requests/{file_path}/README.md
+      {work_dir}/backlog/{file_path}/README.md
+
+    file_path already includes the type prefix (e.g. "requests/foo", "bugs/bar").
 
     Returns the file content as a string, or None if the file doesn't exist
     or is unreadable. Never raises — graceful degradation for missing files.
@@ -348,7 +386,213 @@ def fetch_backlog_readme(work_dir: str, file_path: str | None) -> str | None:
     import os
     if not work_dir or not file_path:
         return None
-    readme_path = os.path.join(work_dir, "backlog", "requests", file_path, "README.md")
+    readme_path = os.path.join(work_dir, "backlog", file_path, "README.md")
+    try:
+        with open(readme_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def fetch_checklists_for_task(work_dir: str, task_id: int, conn: sqlite3.Connection) -> list[dict]:
+    """Read checklist files from .work/checklists/ associated with a task.
+
+    Purpose: Surface checklist content (lead and worker checklists) in the lineage view
+        so users can see what was done at each DAG phase.
+    Rationale: Checklists follow naming conventions that embed agent names. We find
+        agents associated with a task (assigned_to, transition_log agents) and match
+        their checklist files.
+
+    Pseudo-logic:
+    1. Collect all agent names associated with the task (assigned_to + transition_log)
+    2. Scan .work/checklists/ for files matching those agent names
+    3. Also check for files matching the task's backlog ID pattern (lead-b{id}*.md, b{id}*.md)
+    4. Read each matching file and return list of {filename, content} dicts
+    5. Graceful degradation — return empty list if checklists dir doesn't exist
+
+    Big-O: O(A * F) where A = agents associated with task, F = files in checklists/.
+    NOT on hot path — called only during lineage view.
+    """
+    import os
+    import re
+
+    if not work_dir:
+        return []
+
+    checklists_dir = os.path.join(work_dir, "checklists")
+    if not os.path.isdir(checklists_dir):
+        return []
+
+    # Collect agent names associated with this task
+    agent_names: set[str] = set()
+    try:
+        # From assigned_to
+        row = conn.execute(
+            "SELECT assigned_to FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if row and row["assigned_to"]:
+            agent_names.add(row["assigned_to"])
+
+        # From transition_log
+        tl_rows = conn.execute(
+            "SELECT DISTINCT triggered_by FROM transition_log "
+            "WHERE entity_type = 'task' AND entity_id = ? AND triggered_by IS NOT NULL",
+            (task_id,),
+        ).fetchall()
+        for r in tl_rows:
+            if r["triggered_by"]:
+                agent_names.add(r["triggered_by"])
+    except Exception as e:
+        logger.error("Failed to collect agent names for task %s: %s: %s", task_id, type(e).__name__, e)
+
+    # Scan checklists directory for matching files
+    results: list[dict] = []
+    seen_files: set[str] = set()
+    try:
+        all_files = sorted(os.listdir(checklists_dir))
+    except OSError:
+        return []
+
+    # --- Pass 1: task-ID-scoped match (preferred) ---
+    # Look for files containing "-task-<task_id>" in their name.
+    # These are correctly scoped to this specific task session — no bleed from old sessions.
+    task_id_pattern = f"-task-{task_id}"
+    id_scoped_files: list[str] = [
+        f for f in all_files
+        if f.endswith(".md") and task_id_pattern in f
+    ]
+
+    # --- Pass 2: agent-name substring match (fallback) ---
+    # Only used when no task-ID-scoped files exist. This is the legacy behavior and
+    # may surface stale checklists from old sessions when agent names repeat across sessions.
+    agent_matched_files: list[str] = []
+    if not id_scoped_files:
+        for fname in all_files:
+            if not fname.endswith(".md"):
+                continue
+            for agent in agent_names:
+                if agent in fname:
+                    agent_matched_files.append(fname)
+                    break
+
+    # Use whichever pass found results
+    candidate_files = id_scoped_files if id_scoped_files else agent_matched_files
+
+    def _read_checklist_file(fname: str) -> None:
+        if fname in seen_files:
+            return
+        seen_files.add(fname)
+        fpath = os.path.join(checklists_dir, fname)
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = f.read()
+            results.append({"filename": fname, "content": content})
+        except (OSError, UnicodeDecodeError) as e:
+            logger.error("Failed to read checklist %s: %s: %s", fname, type(e).__name__, e)
+
+    for fname in candidate_files:
+        _read_checklist_file(fname)
+
+    return results
+
+
+def parse_checklists_per_stage(checklists: list[dict]) -> dict[str, list[str]]:
+    """Parse checklist markdown content to extract per-stage entries.
+
+    Purpose: Extract what was done at each DAG stage from checklist files.
+    Rationale: Checklist files have entries like:
+        - [x] **seed** — Read README.md, decided to decompose directly
+        - [x] **decomposing** — Created child task 168
+    We parse these to build a map of stage_name → list of checklist entries.
+
+    Pseudo-logic:
+    1. For each checklist dict (filename, content), scan lines for pattern: - [x/space] **stage** — text
+    2. Extract the stage name (bold text) and the description (after the dash)
+    3. Build a dict mapping stage_name → [list of entries]
+    4. Return the map — empty dict if no matching entries found
+
+    Big-O: O(C * L) where C = checklists, L = lines per checklist. NOT on hot path.
+    """
+    import re
+    stage_map: dict[str, list[str]] = {}
+    # Pattern: - [x] **stage_name** — description  (or - [ ] for unchecked)
+    pattern = re.compile(r'^-\s+\[(.)\]\s+\*\*([^*]+)\*\*\s*[—\-]\s*(.*)', re.MULTILINE)
+    for cl in checklists:
+        content = cl.get("content", "")
+        for match in pattern.finditer(content):
+            checked = match.group(1).strip()
+            stage_name = match.group(2).strip()
+            description = match.group(3).strip()
+            status = "done" if checked.lower() == "x" else "pending"
+            entry = {"text": description, "status": status, "source": cl.get("filename", "")}
+            if stage_name not in stage_map:
+                stage_map[stage_name] = []
+            stage_map[stage_name].append(entry)
+    return stage_map
+
+
+def fetch_agent_contexts(conn: sqlite3.Connection, agent_names: set[str]) -> dict[str, str]:
+    """Fetch context_summary for a set of agent names.
+
+    Purpose: Surface the agent's context/prompt at the time they worked a stage.
+    Rationale: The agents table stores context_summary set via set-context command.
+        This gives visibility into what the agent was told/thinking when they worked a phase.
+
+    Pseudo-logic:
+    1. Query agents table for all names in the set
+    2. Return dict mapping agent_name → context_summary
+    3. Skip agents with no context_summary
+
+    Big-O: O(A) where A = number of agents queried. NOT on hot path.
+    """
+    if not agent_names:
+        return {}
+    contexts: dict[str, str] = {}
+    placeholders = ", ".join("?" for _ in agent_names)
+    try:
+        rows = conn.execute(
+            f"SELECT name, context_summary FROM agents WHERE name IN ({placeholders})",
+            list(agent_names),
+        ).fetchall()
+        for row in rows:
+            if row["context_summary"]:
+                contexts[row["name"]] = row["context_summary"]
+    except sqlite3.DatabaseError as e:
+        logger.error("fetch_agent_contexts failed: %s: %s", type(e).__name__, e)
+    return contexts
+
+
+def _read_file_safe(file_path: str | None) -> str | None:
+    """Read a file's content safely, returning None on any error.
+
+    Purpose: Generic file reader for surfacing task specs, results, etc.
+    Rationale: Multiple places need to read filesystem content for the lineage view.
+        Centralize the error handling in one place.
+
+    Big-O: O(F) where F = file size. Single read. NOT on hot path.
+    """
+    import os
+    if not file_path or not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _read_requirement_readme(work_dir: str, req_file_path: str | None) -> str | None:
+    """Read a requirement's README.md from its folder path.
+
+    Purpose: Surface requirement README content in lineage view (#249).
+    Rationale: Each requirement has a folder under .work/requirements/ with a README.md.
+
+    Big-O: O(F) where F = file size. NOT on hot path.
+    """
+    import os
+    if not work_dir or not req_file_path:
+        return None
+    readme_path = os.path.join(work_dir, "requirements", req_file_path, "README.md")
     try:
         with open(readme_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -397,8 +641,8 @@ def fetch_task_to_backlog_map(conn: sqlite3.Connection, task_ids: list[int]) -> 
         """, task_ids).fetchall()
         for row in rows:
             result[row["task_id"]] = row["backlog_id"]
-    except sqlite3.DatabaseError:
-        pass
+    except sqlite3.DatabaseError as e:
+        logger.error("Failed to map tasks to backlog: %s", e)
     return result
 
 
