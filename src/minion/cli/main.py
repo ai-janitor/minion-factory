@@ -171,6 +171,37 @@ def cli(ctx: click.Context, use_json: bool, human: bool, compact: bool, project_
 
     ctx.call_on_close(_heartbeat_on_close)
 
+    # ---------------------------------------------------------------------------
+    # Piggyback inbox delivery: after every CLI command, if MINION_AGENT_NAME is
+    # set, check for unread messages and append them to stderr. This replaces
+    # send-side inbox discipline — agents see messages in the output they are
+    # already reading. Excluded for commands that already handle inbox (poll,
+    # check-inbox) to avoid duplication.
+    # ---------------------------------------------------------------------------
+    # Commands that already deliver inbox content — skip piggyback for these.
+    # Matched against sys.argv tokens so both "minion poll" and
+    # "minion comms check-inbox" are caught regardless of nesting depth.
+    _PIGGYBACK_EXCLUDED_TOKENS = {"poll", "check-inbox"}
+
+    def _piggyback_inbox_on_close() -> None:
+        agent = ctx.obj.get("_heartbeat_agent") or os.environ.get("MINION_AGENT_NAME")
+        if not agent:
+            return
+        # Skip commands that already handle inbox delivery to avoid duplication.
+        import sys as _sys
+        argv_tokens = set(_sys.argv[1:])  # drop the program name
+        if argv_tokens & _PIGGYBACK_EXCLUDED_TOKENS:
+            return
+        try:
+            from minion.comms.inbox import check_inbox_silent
+            messages = check_inbox_silent(agent)
+            if messages:
+                click.echo(f"\n--- [INBOX] ---\n{messages}\n--- [/INBOX] ---", err=True)
+        except Exception:
+            pass  # best-effort — must never break the primary command
+
+    ctx.call_on_close(_piggyback_inbox_on_close)
+
 
 # ---------------------------------------------------------------------------
 # Register all command groups/commands onto cli
