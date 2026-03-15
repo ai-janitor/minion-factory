@@ -121,6 +121,13 @@ def register_commands(cli: click.Group) -> None:
         """
         if web:
             from minion.dashboard.web_server import serve
+            # Bug #285: When --db is not passed, resolve from the CLI framework's
+            # cached DB path (set during init_db at startup). This ensures the web
+            # dashboard uses the same DB as all other minion commands — respecting
+            # both -C/--project-dir and cwd-based ancestor walk.
+            if not db_path:
+                from minion.db.connection import _get_db_path
+                db_path = _get_db_path()
             serve(host=host, port=port, db_path=db_path)
         else:
             from minion.dashboard import run

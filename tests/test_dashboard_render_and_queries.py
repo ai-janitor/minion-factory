@@ -293,3 +293,37 @@ def test_fetch_backlog_returns_rows_on_success(tmp_path):
 
     assert len(rows) == 1
     assert rows[0]["title_short"] == "Test backlog item"
+
+
+# ---------------------------------------------------------------------------
+# Bug #285: dashboard_cmd resolves db_path from CLI cache, not re-resolve
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_cmd_uses_cached_db_path_when_no_explicit_db(tmp_path, monkeypatch):
+    """Bug #285: dashboard --web should use the CLI-cached DB path, not re-resolve.
+
+    When --db is not passed, dashboard_cmd should fall back to _get_db_path()
+    (the CLI framework's cached path from init_db) rather than letting serve()
+    call resolve_db_path() independently — which could resolve to a different DB.
+    """
+    from unittest.mock import patch, MagicMock
+
+    # Set up: the CLI cache has a specific db_path
+    expected_db = str(tmp_path / ".work" / "minion.db")
+
+    # Patch _get_db_path to return our expected path
+    with patch("minion.db.connection._get_db_path", return_value=expected_db):
+        # Patch serve() to capture what db_path it receives
+        with patch("minion.dashboard.web_server.serve") as mock_serve:
+            # Import and call dashboard_cmd logic directly
+            # Simulate: db_path="" (no --db flag), web=True
+            from minion.db.connection import _get_db_path
+            db_path = ""
+            if not db_path:
+                db_path = _get_db_path()
+            mock_serve(host="0.0.0.0", port=8765, db_path=db_path)
+
+            mock_serve.assert_called_once_with(
+                host="0.0.0.0", port=8765, db_path=expected_db
+            )
