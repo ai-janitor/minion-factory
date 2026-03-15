@@ -115,6 +115,13 @@ def _parse_agents(agents_raw: dict, system_prefix: str) -> Dict[str, AgentConfig
             if not permission_mode:
                 permission_mode = None
 
+        # Daemon agents run headless — no human to approve permission prompts.
+        # Default to bypassPermissions so crew YAMLs don't need to repeat it
+        # on every agent entry.  Terminal agents handle this separately via
+        # --dangerously-skip-permissions in terminal.py.
+        if permission_mode is None:
+            permission_mode = "bypassPermissions"
+
         model = item.get("model")
         if model is not None:
             model = str(model)
