@@ -275,14 +275,23 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
             )
             conn.commit()
 
-            # Auto-deregister agent when requirement reaches terminal stage
-            # Mechanical enforcement: leads don't linger as ghost agents after completion
+            # Auto-deregister agent and auto-close backlog when requirement
+            # reaches terminal stage.  Mechanical enforcement: leads don't
+            # linger as ghost agents, and promoted backlog items get closed
+            # regardless of whether the terminal stage was reached via task
+            # rollup or direct req update.
             deregistered: list[str] = []
-            if final_stage in TERMINAL_STATUSES and agent:
-                from minion.tasks.rollup import deregister_agent_on_completion, RollupResult
-                dereg_results: list[RollupResult] = []
-                deregister_agent_on_completion(conn, agent, results=dereg_results)
-                deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in dereg_results) else []
+            if final_stage in TERMINAL_STATUSES:
+                from minion.tasks.rollup import (
+                    deregister_agent_on_completion,
+                    _rollup_requirement_to_backlog,
+                    RollupResult,
+                )
+                rollup_results: list[RollupResult] = []
+                _rollup_requirement_to_backlog(conn, req_id, results=rollup_results)
+                if agent:
+                    deregister_agent_on_completion(conn, agent, results=rollup_results)
+                    deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in rollup_results) else []
 
             resp: dict[str, Any] = {
                 "status": "updated",
@@ -353,14 +362,20 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
         )
         conn.commit()
 
-        # Auto-deregister agent when requirement reaches terminal stage
-        # Mechanical enforcement: leads don't linger as ghost agents after completion
+        # Auto-deregister agent and auto-close backlog when requirement
+        # reaches terminal stage.  Same rationale as skip-path block above.
         deregistered: list[str] = []
-        if final_stage in TERMINAL_STATUSES and agent:
-            from minion.tasks.rollup import deregister_agent_on_completion, RollupResult
-            dereg_results: list[RollupResult] = []
-            deregister_agent_on_completion(conn, agent, results=dereg_results)
-            deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in dereg_results) else []
+        if final_stage in TERMINAL_STATUSES:
+            from minion.tasks.rollup import (
+                deregister_agent_on_completion,
+                _rollup_requirement_to_backlog,
+                RollupResult,
+            )
+            rollup_results: list[RollupResult] = []
+            _rollup_requirement_to_backlog(conn, req_id, results=rollup_results)
+            if agent:
+                deregister_agent_on_completion(conn, agent, results=rollup_results)
+                deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in rollup_results) else []
 
         resp = {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": final_stage}
         if skipped:

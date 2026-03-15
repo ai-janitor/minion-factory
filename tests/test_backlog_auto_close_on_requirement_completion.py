@@ -295,3 +295,149 @@ class TestFullRollupChain:
             pass
 
         conn.close()
+
+
+class TestUpdateStageTriggersBacklogAutoClose:
+    """Verify that crud.py update_stage() auto-closes backlog items
+    when a requirement reaches a terminal stage via direct req update
+    (not via task rollup).  This is the bug fixed in requirement #245."""
+
+    def test_direct_req_update_to_completed_closes_backlog(self, isolated_db_with_requirements):
+        """Direct update_stage() to 'completed' should auto-close the promoted backlog item."""
+        import sqlite3 as _sqlite3
+        from minion.requirements.crud import update_stage, register
+
+        tmp_path = isolated_db_with_requirements
+        work_dir = tmp_path / ".work"
+        req_path = "bugs/direct-update-test"
+
+        # Create requirement directory with README (seed gate)
+        req_dir = work_dir / "requirements" / req_path
+        req_dir.mkdir(parents=True, exist_ok=True)
+        (req_dir / "README.md").write_text("# Direct update test")
+
+        # Create a numbered child folder with README (tasked gate)
+        child_dir = req_dir / "001-fix"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        (child_dir / "README.md").write_text("# Fix")
+
+        # Register the requirement with requirement-lite flow
+        reg_result = register(
+            file_path=req_path,
+            created_by="test",
+            flow_type="requirement-lite",
+        )
+        assert "error" not in reg_result, f"Registration failed: {reg_result}"
+
+        # Get req_id
+        db_path = str(work_dir / "minion.db")
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        req_id = conn.execute(
+            "SELECT id FROM requirements WHERE file_path = ?", (req_path,)
+        ).fetchone()["id"]
+
+        # Create a backlog item promoted to this requirement
+        now = now_iso()
+        conn.execute(
+            """INSERT INTO backlog (file_path, type, title, priority, status, promoted_to, created_at, updated_at)
+               VALUES (?, 'bug', 'Direct update test', 'high', 'promoted', ?, ?, ?)""",
+            (req_path, req_path, now, now),
+        )
+        backlog_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Create a closed task so the all_impl_tasks_closed gate passes
+        conn.execute(
+            """INSERT INTO tasks (title, task_file, status, requirement_id, requirement_path, flow_type, created_by, created_at, updated_at)
+               VALUES ('Fix task', 'TASK-fix.md', 'closed', ?, ?, 'bugfix', 'test', ?, ?)""",
+            (req_id, req_path, now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        # Advance from seed -> completed using skip (lead privilege)
+        # The skip path checks `agent in {"lead"}` — agent param is the class string
+        result = update_stage(req_path, "completed", skip=True, agent="lead")
+        assert result.get("status") == "updated", f"update_stage failed: {result}"
+        assert result["to_stage"] == "completed", f"Expected completed, got {result['to_stage']}"
+
+        # Verify backlog item was auto-closed
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        bl_row = conn.execute("SELECT status FROM backlog WHERE id = ?", (backlog_id,)).fetchone()
+        assert bl_row["status"] == "closed", (
+            f"Backlog should be auto-closed when requirement reaches 'completed' via "
+            f"direct update_stage(), but got '{bl_row['status']}'"
+        )
+        conn.close()
+
+    def test_normal_path_update_to_terminal_closes_backlog(self, isolated_db_with_requirements):
+        """Normal (non-skip) update_stage() to a terminal stage should also auto-close backlog."""
+        import sqlite3 as _sqlite3
+        from minion.requirements.crud import update_stage, register
+
+        tmp_path = isolated_db_with_requirements
+        work_dir = tmp_path / ".work"
+        req_path = "bugs/normal-path-test"
+
+        # Create requirement directory with README
+        req_dir = work_dir / "requirements" / req_path
+        req_dir.mkdir(parents=True, exist_ok=True)
+        (req_dir / "README.md").write_text("# Normal path test")
+
+        # Child folder with README
+        child_dir = req_dir / "001-fix"
+        child_dir.mkdir(parents=True, exist_ok=True)
+        (child_dir / "README.md").write_text("# Fix")
+
+        # Register requirement at requirement-lite flow
+        reg_result = register(
+            file_path=req_path,
+            created_by="test",
+            flow_type="requirement-lite",
+        )
+        assert "error" not in reg_result, f"Registration failed: {reg_result}"
+
+        # Get req_id and manually advance to tasked stage
+        db_path = str(work_dir / "minion.db")
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        req_id = conn.execute(
+            "SELECT id FROM requirements WHERE file_path = ?", (req_path,)
+        ).fetchone()["id"]
+
+        # Manually set to tasked (one hop before completed)
+        conn.execute("UPDATE requirements SET stage = 'tasked' WHERE id = ?", (req_id,))
+
+        # Create backlog item
+        now = now_iso()
+        conn.execute(
+            """INSERT INTO backlog (file_path, type, title, priority, status, promoted_to, created_at, updated_at)
+               VALUES (?, 'bug', 'Normal path test', 'high', 'promoted', ?, ?, ?)""",
+            (req_path, req_path, now, now),
+        )
+        backlog_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Create closed task
+        conn.execute(
+            """INSERT INTO tasks (title, task_file, status, requirement_id, requirement_path, flow_type, created_by, created_at, updated_at)
+               VALUES ('Fix task', 'TASK-fix.md', 'closed', ?, ?, 'bugfix', 'test', ?, ?)""",
+            (req_id, req_path, now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        # Normal transition from tasked -> completed (single hop, no skip)
+        result = update_stage(req_path, "completed", skip=False, agent="")
+        assert result.get("status") == "updated", f"update_stage failed: {result}"
+        assert result["to_stage"] == "completed", f"Expected completed, got {result['to_stage']}"
+
+        # Verify backlog auto-closed
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        bl_row = conn.execute("SELECT status FROM backlog WHERE id = ?", (backlog_id,)).fetchone()
+        assert bl_row["status"] == "closed", (
+            f"Backlog should be auto-closed via normal path update_stage(), "
+            f"but got '{bl_row['status']}'"
+        )
+        conn.close()
