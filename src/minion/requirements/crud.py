@@ -16,6 +16,7 @@ from typing import Any
 import click
 
 from minion.db import get_db, now_iso
+from minion.tasks.dag import TERMINAL_STATUSES
 from minion.tasks.engine import apply_transition
 from minion.tasks.loader import load_flow
 
@@ -273,6 +274,16 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
                 (final_stage, now, file_path),
             )
             conn.commit()
+
+            # Auto-deregister agent when requirement reaches terminal stage
+            # Mechanical enforcement: leads don't linger as ghost agents after completion
+            deregistered: list[str] = []
+            if final_stage in TERMINAL_STATUSES and agent:
+                from minion.tasks.rollup import deregister_agent_on_completion, RollupResult
+                dereg_results: list[RollupResult] = []
+                deregister_agent_on_completion(conn, agent, results=dereg_results)
+                deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in dereg_results) else []
+
             resp: dict[str, Any] = {
                 "status": "updated",
                 "file_path": file_path,
@@ -283,6 +294,8 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
                 resp["skipped_through"] = walked
             if final_stage != to_stage:
                 resp["warning"] = f"halted at '{final_stage}' — could not reach '{to_stage}' (gate failure or invalid path)"
+            if deregistered:
+                resp["deregistered_agents"] = deregistered
             return resp
 
         # Normal path: single transition with full gate validation
@@ -339,9 +352,21 @@ def update_stage(file_path: str, to_stage: str, skip: bool = False, agent: str =
             (final_stage, now, file_path),
         )
         conn.commit()
+
+        # Auto-deregister agent when requirement reaches terminal stage
+        # Mechanical enforcement: leads don't linger as ghost agents after completion
+        deregistered: list[str] = []
+        if final_stage in TERMINAL_STATUSES and agent:
+            from minion.tasks.rollup import deregister_agent_on_completion, RollupResult
+            dereg_results: list[RollupResult] = []
+            deregister_agent_on_completion(conn, agent, results=dereg_results)
+            deregistered = [agent] if any(r.triggered and r.entity_type == "agent" for r in dereg_results) else []
+
         resp = {"status": "updated", "file_path": file_path, "from_stage": from_stage, "to_stage": final_stage}
         if skipped:
             resp["auto_advanced_through"] = skipped
+        if deregistered:
+            resp["deregistered_agents"] = deregistered
         return resp
     finally:
         conn.close()

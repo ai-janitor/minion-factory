@@ -5,11 +5,12 @@ When a child task closes:
   3. If yes, advance parent through the engine (gates, validation)
   4. Recursive — parent rollup may trigger grandparent rollup
   5. When a requirement reaches terminal, auto-close its originating backlog item
+  6. When a requirement reaches terminal, auto-deregister the advancing agent
 
 Purpose: Parent-child rollup — advance parent when all children reach terminal state.
 Rationale: Extracted into own module for single-responsibility task management.
 Responsibility: Parent-child rollup — advance parent when all children reach terminal state.
-  Also closes backlog items when their promoted requirement reaches terminal.
+  Also closes backlog items and deregisters agents when their promoted requirement reaches terminal.
 Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
@@ -351,4 +352,61 @@ def _rollup_requirement_to_backlog(
         results.append(RollupResult(
             triggered=True, entity_type="backlog", entity_id=bl_row["id"],
             from_status="promoted", to_status="closed",
+        ))
+
+
+# ---------------------------------------------------------------------------
+# Agent auto-deregister — deregister the agent that advanced a requirement
+# to a terminal stage (completed, stale, done, etc.)
+# Prevents ghost agents from lingering in the registry after work is done.
+# ---------------------------------------------------------------------------
+
+
+def deregister_agent_on_completion(
+    db, agent_name: str, *, results: list[RollupResult]
+) -> None:
+    """Auto-deregister an agent when a requirement reaches terminal stage.
+
+    Called from update_stage() when the requirement transitions to a terminal
+    stage. Only deregisters if the agent is currently registered.
+
+    Uses a lightweight DB-only deregister (DELETE from agents table + release
+    file claims) rather than the full comms.register.deregister() which also
+    touches the coordinator DB, roster files, and inbox directories. The full
+    cleanup is best-effort — the critical path is removing the agent from the
+    local DB so it no longer appears in the registry.
+
+    Time complexity: O(C) where C = file claims held by the agent.
+    """
+    if not agent_name:
+        return
+
+    try:
+        row = db.execute(
+            "SELECT name FROM agents WHERE name = ?", (agent_name,)
+        ).fetchone()
+    except Exception:
+        return  # agents table not available or other DB issue
+
+    if row is None:
+        return  # agent not registered — nothing to do
+
+    try:
+        # Release file claims held by this agent
+        db.execute("DELETE FROM file_claims WHERE agent_name = ?", (agent_name,))
+        db.execute("DELETE FROM file_waitlist WHERE agent_name = ?", (agent_name,))
+        # Remove the agent from the registry
+        db.execute("DELETE FROM agents WHERE name = ?", (agent_name,))
+        db.commit()
+
+        results.append(RollupResult(
+            triggered=True, entity_type="agent", entity_id=0,
+            from_status="registered", to_status="deregistered",
+            error=None,
+        ))
+    except Exception:
+        # Best-effort — don't break the rollup chain if deregister fails
+        results.append(RollupResult(
+            triggered=False, entity_type="agent", entity_id=0,
+            error=f"failed to deregister agent '{agent_name}'",
         ))
