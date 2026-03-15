@@ -343,6 +343,23 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
         except Exception:
             logger.debug("Failed to read agent activity", exc_info=True)
 
+        # --- Project-local theme override from .work/config/theme.json ---
+        # If the file exists and contains valid JSON (dict of CSS var → value),
+        # include it in the snapshot so the client can apply CSS variable overrides.
+        # If missing or invalid, omit the key — default theme stays unchanged.
+        theme: dict[str, str] | None = None
+        theme_path = os.path.join(work_dir, "config", "theme.json")
+        if os.path.isfile(theme_path):
+            try:
+                with open(theme_path, "r", encoding="utf-8") as f:
+                    theme = json.loads(f.read())
+                if not isinstance(theme, dict):
+                    logger.debug("theme.json is not a dict, ignoring: %s", theme_path)
+                    theme = None
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.debug("Failed to read theme.json: %s", e)
+                theme = None
+
         snapshot = {
             "type": "snapshot",
             "project_name": project_name,
@@ -358,6 +375,10 @@ def _build_snapshot(db_path: str) -> dict[str, Any]:
             "recent_messages": recent_messages,
             "agent_activity": agent_activity,
         }
+
+        # Only include theme key if theme.json was valid — avoids sending null
+        if theme is not None:
+            snapshot["theme"] = theme
     finally:
         conn.close()
 

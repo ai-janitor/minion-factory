@@ -805,6 +805,15 @@ function connectWS() {
         currentSnapshot = msg;
         taskToBacklog = msg.task_to_backlog || {};
         allBacklogItems = msg.backlog || [];
+        // --- Project-local theme override: apply CSS variable overrides from theme.json ---
+        // If the server includes a "theme" dict (from .work/config/theme.json),
+        // apply each key-value pair as a CSS custom property on :root.
+        // If absent, default theme stays untouched.
+        if (msg.theme && typeof msg.theme === 'object') {
+          Object.entries(msg.theme).forEach(function(entry) {
+            document.documentElement.style.setProperty(entry[0], entry[1]);
+          });
+        }
         renderDashboard(msg);
         if (document.getElementById('view-browser').classList.contains('active')) {
           renderBrowser();
