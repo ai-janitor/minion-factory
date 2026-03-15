@@ -4,10 +4,12 @@ When a child task closes:
   2. Check if all siblings are terminal
   3. If yes, advance parent through the engine (gates, validation)
   4. Recursive — parent rollup may trigger grandparent rollup
+  5. When a requirement reaches terminal, auto-close its originating backlog item
 
 Purpose: Parent-child rollup — advance parent when all children reach terminal state.
 Rationale: Extracted into own module for single-responsibility task management.
-Responsibility: Parent-child rollup — advance parent when all children reach terminal state. NOT responsible for unrelated concerns.
+Responsibility: Parent-child rollup — advance parent when all children reach terminal state.
+  Also closes backlog items when their promoted requirement reaches terminal.
 Organization: Standalone functions and/or a single class. See source."""
 
 from __future__ import annotations
@@ -115,6 +117,8 @@ def _rollup_task_to_requirement(
             triggered=True, entity_type="requirement", entity_id=req_id,
             from_status=req_row["stage"], to_status="stale",
         ))
+        # Auto-close backlog item when requirement reaches terminal (stale)
+        _rollup_requirement_to_backlog(db, req_id, results=results)
         _rollup_requirement_to_parent(db, req_id, context_dir=context_dir, results=results)
         return
 
@@ -151,6 +155,10 @@ def _rollup_task_to_requirement(
             triggered=True, entity_type="requirement", entity_id=req_id,
             from_status=current_stage, to_status=transition.to_status,
         ))
+
+        # Auto-close backlog item when requirement reaches terminal
+        if transition.to_status in TERMINAL_STATUSES:
+            _rollup_requirement_to_backlog(db, req_id, results=results)
 
         # Recursive: check if this requirement's parent should also advance
         _rollup_requirement_to_parent(db, req_id, context_dir=context_dir, results=results)
@@ -246,6 +254,10 @@ def _rollup_requirement_to_parent(
             from_status=parent_row["stage"], to_status=transition.to_status,
         ))
 
+        # Auto-close backlog item when parent requirement reaches terminal
+        if transition.to_status in TERMINAL_STATUSES:
+            _rollup_requirement_to_backlog(db, parent_id, results=results)
+
         # Recursive: grandparent
         _rollup_requirement_to_parent(db, parent_id, context_dir=context_dir, results=results)
     else:
@@ -253,4 +265,90 @@ def _rollup_requirement_to_parent(
             triggered=False, entity_type="requirement", entity_id=parent_id,
             from_status=parent_row["stage"],
             error=transition.error,
+        ))
+
+
+# ---------------------------------------------------------------------------
+# Backlog auto-close — close backlog items when their promoted requirement
+# reaches a terminal stage (completed, stale, done, etc.)
+# ---------------------------------------------------------------------------
+
+
+def _rollup_requirement_to_backlog(
+    db, req_id: int, *, results: list[RollupResult]
+) -> None:
+    """Auto-close a backlog item when its promoted requirement reaches terminal.
+
+    Looks up the requirement's file_path, then finds backlog items whose
+    promoted_to field contains that path. For multi-promote (comma-separated
+    promoted_to), only closes the backlog item if ALL promoted requirements
+    have reached terminal stages.
+
+    Time complexity: O(B) where B = number of backlog items with promoted status
+    that reference this requirement path.
+    """
+    try:
+        req_row = db.execute(
+            "SELECT file_path FROM requirements WHERE id = ?", (req_id,)
+        ).fetchone()
+    except (KeyError, sqlite3.OperationalError):
+        return  # requirements table not available
+
+    if req_row is None:
+        return
+
+    req_path = req_row["file_path"]
+
+    # Find backlog items that were promoted to this requirement path.
+    # promoted_to can be a single path or comma-separated list.
+    # Use LIKE to match the requirement path within the promoted_to field.
+    try:
+        backlog_rows = db.execute(
+            "SELECT id, file_path, status, promoted_to FROM backlog "
+            "WHERE status = 'promoted' AND promoted_to LIKE ?",
+            (f"%{req_path}%",),
+        ).fetchall()
+    except (KeyError, sqlite3.OperationalError):
+        return  # backlog table not available
+
+    if not backlog_rows:
+        return
+
+    from ..db import now_iso
+
+    for bl_row in backlog_rows:
+        promoted_to = bl_row["promoted_to"] or ""
+        req_paths = [p.strip() for p in promoted_to.split(",") if p.strip()]
+
+        # Verify the exact path is in the list (not just a substring match)
+        if req_path not in req_paths:
+            continue
+
+        # For multi-promote: only close if ALL promoted requirements are terminal
+        all_terminal = True
+        for rp in req_paths:
+            r = db.execute(
+                "SELECT stage FROM requirements WHERE file_path = ?", (rp,)
+            ).fetchone()
+            if r is None:
+                # Requirement not found — treat as terminal (may have been deleted)
+                continue
+            if r["stage"] not in TERMINAL_STATUSES:
+                all_terminal = False
+                break
+
+        if not all_terminal:
+            continue
+
+        # All promoted requirements are terminal — close the backlog item
+        now = now_iso()
+        db.execute(
+            "UPDATE backlog SET status = 'closed', updated_at = ? WHERE id = ?",
+            (now, bl_row["id"]),
+        )
+        db.commit()
+
+        results.append(RollupResult(
+            triggered=True, entity_type="backlog", entity_id=bl_row["id"],
+            from_status="promoted", to_status="closed",
         ))
