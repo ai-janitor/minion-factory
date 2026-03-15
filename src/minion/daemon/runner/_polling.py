@@ -11,7 +11,7 @@ import os
 import subprocess
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from minion.defaults import ENV_DB_PATH, ENV_DOCS_DIR
+from minion.defaults import ENV_CLASS, ENV_DB_PATH, ENV_DOCS_DIR
 
 from ..triggers import handle_stand_down, handle_standdown, handle_wake_from_standdown
 
@@ -39,6 +39,7 @@ class PollingMixin:
         """
         try:
             env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            env[ENV_CLASS] = self.agent_cfg.role or "coder"
             env[ENV_DB_PATH] = str(self.config.comms_db)
             env[ENV_DOCS_DIR] = str(self.config.docs_dir)
             proc = subprocess.run(
@@ -75,6 +76,7 @@ class PollingMixin:
         """Quick DB check: does this agent have any claimable tasks?"""
         try:
             env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            env[ENV_CLASS] = self.agent_cfg.role or "coder"
             env[ENV_DB_PATH] = str(self.config.comms_db)
             env[ENV_DOCS_DIR] = str(self.config.docs_dir)
             proc = subprocess.run(
