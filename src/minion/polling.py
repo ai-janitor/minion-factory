@@ -51,22 +51,29 @@ logger = logging.getLogger(__name__)
 _reviewers = classes_with(CAP_REVIEW)
 
 
-def _poll_pidfile(agent: str) -> str:
-    """Path to the PID file for an agent's poll process."""
+def _poll_pidfile(agent: str, instance_id: str | None = None) -> str:
+    """Path to the PID file for an agent's poll process.
+
+    When instance_id is provided, the file key includes the suffix
+    (e.g., "redmage-jr-2.pid") so multiple instances don't collide.
+    When instance_id is None/empty, uses bare agent name (backward compatible).
+    """
     from minion.db import get_runtime_dir
-    return os.path.join(get_runtime_dir(), ".minion-poll", f"{agent}.pid")
+    from minion.instance import resolve_file_key
+    file_key = resolve_file_key(agent, instance_id)
+    return os.path.join(get_runtime_dir(), ".minion-poll", f"{file_key}.pid")
 
 
-def _write_pidfile(agent: str) -> None:
-    pidfile = _poll_pidfile(agent)
+def _write_pidfile(agent: str, instance_id: str | None = None) -> None:
+    pidfile = _poll_pidfile(agent, instance_id)
     os.makedirs(os.path.dirname(pidfile), exist_ok=True)
     with open(pidfile, "w") as f:
         f.write(str(os.getpid()))
 
 
-def _remove_pidfile(agent: str) -> None:
+def _remove_pidfile(agent: str, instance_id: str | None = None) -> None:
     try:
-        os.remove(_poll_pidfile(agent))
+        os.remove(_poll_pidfile(agent, instance_id))
     except FileNotFoundError:
         # Expected race: another process already removed the pidfile — not an error
         logger.debug("Pidfile already gone for %s (expected race)", agent)
@@ -74,10 +81,10 @@ def _remove_pidfile(agent: str) -> None:
         logger.error("Failed to remove pidfile for %s: %s", agent, e)
 
 
-def _kill_existing_poll(agent: str) -> int | None:
-    """Kill any existing poll for this agent. Returns killed PID or None."""
+def _kill_existing_poll(agent: str, instance_id: str | None = None) -> int | None:
+    """Kill any existing poll for this agent instance. Returns killed PID or None."""
     import signal as _sig
-    pidfile = _poll_pidfile(agent)
+    pidfile = _poll_pidfile(agent, instance_id)
     if not os.path.exists(pidfile):
         return None
     try:
@@ -100,9 +107,11 @@ def _kill_existing_poll(agent: str) -> int | None:
             logger.error("Failed to remove stale pidfile %s: %s", pidfile, e)
 
 
-def is_poll_alive(agent: str, project_path: str) -> bool:
-    """Check if a poll process is running for an agent in a given project."""
-    pidfile = os.path.join(project_path, ".work", ".minion-poll", f"{agent}.pid")
+def is_poll_alive(agent: str, project_path: str, instance_id: str | None = None) -> bool:
+    """Check if a poll process is running for an agent instance in a given project."""
+    from minion.instance import resolve_file_key
+    file_key = resolve_file_key(agent, instance_id)
+    pidfile = os.path.join(project_path, ".work", ".minion-poll", f"{file_key}.pid")
     if not os.path.exists(pidfile):
         return False
     try:
@@ -327,7 +336,7 @@ def _check_signals(agent: str) -> str | None:
         conn.close()
 
 
-def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]:
+def poll_loop(agent: str, interval: int = 5, timeout: int = 0, instance_id: str | None = None) -> dict[str, Any]:
     """Block until messages/tasks arrive, then return them.
 
     Returns dict with:
@@ -340,15 +349,19 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
     Big-O: O(timeout/interval) iterations. Per iteration: O(1) signal check +
     O(1) message count + O(T*B) task finding (see _find_available_tasks).
     On content delivery: O(M+B) message fetch + sort. PID management O(1).
+
+    instance_id: Optional instance suffix for multi-instance daemon spawns.
+    When set, PID files use the instance-qualified name. When None, uses bare
+    agent name (backward compatible).
     """
     # Precondition assertions — backlog #63
     assert agent, "agent name must not be empty"
     assert interval > 0, f"interval must be positive, got {interval}"
     assert timeout >= 0, f"timeout must be non-negative, got {timeout}"
 
-    # Single instance: kill any existing poll for this agent
-    _kill_existing_poll(agent)
-    _write_pidfile(agent)
+    # Single instance: kill any existing poll for this agent instance
+    _kill_existing_poll(agent, instance_id)
+    _write_pidfile(agent, instance_id)
 
     elapsed = 0
     parent_pid = os.getppid()
@@ -356,7 +369,7 @@ def poll_loop(agent: str, interval: int = 5, timeout: int = 0) -> dict[str, Any]
     try:
         return _poll_inner(agent, interval, timeout, parent_pid)
     finally:
-        _remove_pidfile(agent)
+        _remove_pidfile(agent, instance_id)
 
 
 def _poll_inner(agent: str, interval: int, timeout: int, parent_pid: int) -> dict[str, Any]:
@@ -571,11 +584,13 @@ def multi_project_poll(agent_name: str, project_paths: list[str] | None = None) 
     return {"projects": projects_result}
 
 
-def poll_status(agent_name: str) -> dict[str, Any]:
-    """Diagnostic: report poll health for an agent.
+def poll_status(agent_name: str, instance_id: str | None = None) -> dict[str, Any]:
+    """Diagnostic: report poll health for an agent instance.
 
     SU-06: Check PID file, PID alive, last poll heartbeat, hook installed.
     Returns a dict with health status fields.
+
+    instance_id: Optional instance suffix for multi-instance daemon spawns.
     """
     import json
     from pathlib import Path
@@ -583,9 +598,11 @@ def poll_status(agent_name: str) -> dict[str, Any]:
     assert agent_name, "agent_name must not be empty"
 
     result: dict[str, Any] = {"agent": agent_name}
+    if instance_id:
+        result["instance_id"] = instance_id
 
     # 1. Check PID file
-    pidfile = _poll_pidfile(agent_name)
+    pidfile = _poll_pidfile(agent_name, instance_id)
     result["pid_file_exists"] = os.path.exists(pidfile)
     result["pid_alive"] = False
     result["pid_value"] = None
