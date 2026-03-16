@@ -19,7 +19,7 @@ Organization: Standalone functions and/or a single class. See source."""
 # AGENTS section:
 #   Source: queries.fetch_agents() → agents table
 #   Filter: transport IN ('daemon', 'daemon-ts', 'terminal')
-#   Fields: name, agent_class, model (#110), status, last_seen, registered_at,
+#   Fields: name, agent_class, model (#110), status, transport (#250), last_seen, registered_at,
 #           COALESCE(hp_input_tokens,0)+COALESCE(hp_output_tokens,0) (→tokens_used),
 #           COALESCE(hp_tokens_limit,0) (→tokens_limit),
 #           MAX(last_seen, context_updated_at, registered_at) (→effective_last_seen)
@@ -348,8 +348,8 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
     never heartbeated show "no hb" instead of their declared status.
     """
     lines: list[str] = [
-        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'MODEL':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
-        "─" * 90,
+        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'MODEL':<8}  {'XPORT':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
+        "─" * 100,
     ]
 
     visible = agents[:max_rows]
@@ -372,12 +372,15 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
         last_seen = _relative_time(row["effective_last_seen"])
         seen_color = _RED if "h ago" in last_seen or "d ago" in last_seen or last_seen == "never" else _DIM
         model_col = _visible_pad(f"{_DIM}{model_short}{_RESET}", 8)
+        transport = row["transport"] or "?"
+        transport_col = _visible_pad(f"{_DIM}{transport}{_RESET}", 8)
         status_col = _visible_pad(f"{status_color}{display_status}{_RESET}", 10)
         seen_col = _visible_pad(f"{seen_color}{last_seen}{_RESET}", 8)
         lines.append(
             f"{row['name']:<14}  "
             f"{row['agent_class']:<8}  "
             f"{model_col}  "
+            f"{transport_col}  "
             f"{status_col}  "
             f"{seen_col}  "
             f"{_visible_pad(bar, 20)}  "

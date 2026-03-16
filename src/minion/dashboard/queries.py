@@ -79,6 +79,7 @@ def fetch_agents(conn: sqlite3.Connection) -> list[sqlite3.Row]:
             COALESCE(model, '')                                             AS model,
             status,
             transport,
+            COALESCE(spawned_from, '')                                      AS spawned_from,
             COALESCE(hp_input_tokens, 0)  + COALESCE(hp_output_tokens, 0)  AS tokens_used,
             COALESCE(hp_tokens_limit, 0)                                    AS tokens_limit,
             hp_updated_at,
@@ -107,7 +108,7 @@ def get_agent_summary(conn: sqlite3.Connection) -> list[dict]:
     """
     agents = []
     for row in conn.execute(
-        "SELECT name, agent_class, status, hp_turn_input, hp_tokens_limit, "
+        "SELECT name, agent_class, status, transport, spawned_from, hp_turn_input, hp_tokens_limit, "
         "last_seen, registered_at FROM agents ORDER BY agent_class, name"
     ).fetchall():
         agent = dict(row)

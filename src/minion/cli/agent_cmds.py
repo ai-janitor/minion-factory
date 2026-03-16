@@ -30,8 +30,9 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--transport", "-T", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
     @click.option("--crew", "-w", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
     @click.option("--scope", "-S", default="project", type=click.Choice(["project", "sys", "cross-repo"]), help="Permission scope — narrows what commands are allowed")
+    @click.option("--spawned-from", default="", help="Parent agent name (for sub-agents spawned by another agent)")
     @click.pass_context
-    def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str, scope: str) -> None:
+    def register(ctx: click.Context, name: str, agent_class: str, model: str, description: str, transport: str, crew: str, scope: str, spawned_from: str) -> None:
         """Register an agent into the local session AND the global coordinator DB.
 
         After registering, you MUST start polling to receive messages:
@@ -40,7 +41,7 @@ def register_commands(cli: click.Group) -> None:
         An agent that registers but doesn't poll is deaf — it cannot receive
         messages or task assignments. Names must be unique across all projects."""
         from minion.comms import register as _register
-        _output(_register(name, agent_class, model, description, transport, crew, scope), ctx.obj["human"], ctx.obj["compact"])
+        _output(_register(name, agent_class, model, description, transport, crew, scope, spawned_from=spawned_from), ctx.obj["human"], ctx.obj["compact"])
 
     @agent_group.command("set-status")
     @_agent_option(required=True)
