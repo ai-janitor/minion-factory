@@ -348,7 +348,7 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
     never heartbeated show "no hb" instead of their declared status.
     """
     lines: list[str] = [
-        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'MODEL':<8}  {'XPORT':<8}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
+        f"{_BOLD}{'NAME':<14}  {'CLASS':<8}  {'MODEL':<8}  {'XPORT':<20}  {'STATUS':<10}  {'LAST SEEN':<8}  {'TOKENS':<20}  {'CHECKLIST':<14}{_RESET}",
         "─" * 100,
     ]
 
@@ -373,7 +373,12 @@ def _render_agents(agents: list[sqlite3.Row], max_rows: int, work_dir: str = "")
         seen_color = _RED if "h ago" in last_seen or "d ago" in last_seen or last_seen == "never" else _DIM
         model_col = _visible_pad(f"{_DIM}{model_short}{_RESET}", 8)
         transport = row["transport"] or "?"
-        transport_col = _visible_pad(f"{_DIM}{transport}{_RESET}", 8)
+        try:
+            spawned_from = row["spawned_from"] or ""
+        except (KeyError, IndexError):
+            spawned_from = ""
+        xport_display = f"{spawned_from}/{transport}" if spawned_from else transport
+        transport_col = _visible_pad(f"{_DIM}{xport_display}{_RESET}", 20)
         status_col = _visible_pad(f"{status_color}{display_status}{_RESET}", 10)
         seen_col = _visible_pad(f"{seen_color}{last_seen}{_RESET}", 8)
         lines.append(
