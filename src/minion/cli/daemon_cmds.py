@@ -25,12 +25,13 @@ def register_commands(cli: click.Group) -> None:
     @daemon_group.command("run", hidden=True)
     @click.option("--config", "-c", required=True, help="Path to crew YAML config")
     @_agent_option(required=True, help="Agent name to run")
-    def daemon_run(config: str, agent: str) -> None:
+    @click.option("--instance-id", default=None, help="Instance suffix for multi-instance spawns")
+    def daemon_run(config: str, agent: str, instance_id: str | None) -> None:
         """Run a single agent daemon (internal — called by spawn-party)."""
         from minion.daemon.config import load_config
         from minion.daemon.runner import AgentDaemon
         cfg = load_config(config)
-        daemon = AgentDaemon(cfg, agent)
+        daemon = AgentDaemon(cfg, agent, instance_id=instance_id)
         daemon.run()
 
     @daemon_group.command("start")

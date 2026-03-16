@@ -54,13 +54,14 @@ class AgentDaemon(
     AlertingMixin,
     WatcherModeMixin,
 ):
-    def __init__(self, config: SwarmConfig, agent_name: str) -> None:
+    def __init__(self, config: SwarmConfig, agent_name: str, instance_id: str | None = None) -> None:
         if agent_name not in config.agents:
             raise KeyError(f"Unknown agent '{agent_name}' in config")
 
         self.config = config
         self.agent_cfg = config.agents[agent_name]
         self.agent_name = agent_name
+        self.instance_id = instance_id
 
         self.buffer = RollingBuffer(self.agent_cfg.max_history_tokens)
 
@@ -81,7 +82,11 @@ class AgentDaemon(
         self._stood_down = False
         self._last_task_id: int | None = None
 
-        self.state_path = self.config.state_dir / f"{self.agent_name}.json"
+        # State file uses instance-qualified name for multi-instance isolation.
+        # When instance_id is None, uses bare agent name (backward compatible).
+        from minion.instance import resolve_file_key
+        file_key = resolve_file_key(self.agent_name, self.instance_id)
+        self.state_path = self.config.state_dir / f"{file_key}.json"
         self.resume_ready = self._load_resume_ready()
 
         # watcher mode uses direct DB access for backward compat
@@ -91,7 +96,7 @@ class AgentDaemon(
         self._provider = get_provider(
             self.agent_cfg.provider, self.agent_name, self.agent_cfg, self._use_poll,
         )
-        self._error_log = self.config.logs_dir / f"{self.agent_name}.error.log"
+        self._error_log = self.config.logs_dir / f"{file_key}.error.log"
 
     def run(self) -> None:
         self.config.ensure_runtime_dirs()

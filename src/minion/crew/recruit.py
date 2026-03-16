@@ -167,22 +167,48 @@ def recruit_agent(
     if result.returncode == 0:
         pane_idx = len(result.stdout.strip().splitlines())
 
+    # --- Multi-instance: detect if this agent already has an alive process ---
+    from minion.instance import is_instance_alive, next_instance_id
+    instance_id: str | None = None
+    effective_name = name
+    if is_instance_alive(name, None, project_dir):
+        instance_id = next_instance_id(name, project_dir)
+        effective_name = f"{name}-{instance_id}"
+        # Re-register with instance-qualified name so comms routing works
+        _register(
+            agent_name=effective_name,
+            agent_class=agent_class,
+            model=model,
+            transport=transport,
+        )
+        # Update crew column for instance-qualified agent
+        conn2 = get_db()
+        try:
+            conn2.execute("UPDATE agents SET crew = ? WHERE name = ?", (crew, effective_name))
+            conn2.commit()
+        finally:
+            conn2.close()
+
     # --- Spawn tmux pane ---
-    pane_result = spawn_pane(tmux_session, name, project_dir, crew_config, session_exists=True)
+    pane_result = spawn_pane(tmux_session, name, project_dir, crew_config, session_exists=True, instance_id=instance_id)
     if pane_result is not True:
         return {"error": f"Failed to spawn pane: {pane_result}"}
 
-    style_pane(tmux_session, pane_idx, name, agent_class, model=model, provider=provider)
+    style_pane(tmux_session, pane_idx, effective_name, agent_class, model=model, provider=provider)
     finalize_layout(tmux_session, is_new=False, pane_count=pane_idx + 1)
 
     # --- Start daemon ---
     db_path = os.path.join(project_dir, ".work", "minion.db")
-    start_swarm(name, crew_config, project_dir, runtime=runtime, db_path=db_path)
+    start_swarm(name, crew_config, project_dir, runtime=runtime, db_path=db_path, instance_id=instance_id)
 
-    return {
+    result_dict: dict[str, Any] = {
         "status": "recruited",
-        "agent": name,
+        "agent": effective_name,
         "class": agent_class,
         "crew": crew,
         "tmux_session": tmux_session,
     }
+    if instance_id:
+        result_dict["instance_id"] = instance_id
+        result_dict["base_agent"] = name
+    return result_dict

@@ -40,11 +40,30 @@ def init_swarm(config_path: str, project_dir: str) -> None:
     cfg.ensure_runtime_dirs()
 
 
-def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> None:
-    """Fork a daemon process for one agent (replaces minion-swarm start)."""
+def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "", instance_id: str | None = None) -> None:
+    """Fork a daemon process for one agent (replaces minion-swarm start).
+
+    instance_id: Optional instance suffix for multi-instance spawns. When set,
+    log files use the instance-qualified name (e.g., redmage-jr-2.log) and
+    MINION_INSTANCE_ID is set in the environment. When None, uses bare agent
+    name (backward compatible).
+    """
     from minion.crew.config import load_config
+    from minion.instance import resolve_file_key, is_instance_alive
     cfg = load_config(config_path)
-    log_file = cfg.logs_dir / f"{agent_name}.log"
+    file_key = resolve_file_key(agent_name, instance_id)
+
+    # Guard: prevent accidental duplicate spawn of the exact same instance.
+    # This does NOT prevent multi-instance (different instance IDs) — only
+    # double-starting the same instance_id.
+    project_dir = str(cfg.comms_db.parent.parent) if cfg.comms_db else ""
+    if project_dir and is_instance_alive(agent_name, instance_id, project_dir):
+        raise RuntimeError(
+            f"daemon for {file_key} already has an alive process in {project_dir}. "
+            f"Stop it first or use a different instance_id."
+        )
+
+    log_file = cfg.logs_dir / f"{file_key}.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_fp = open(log_file, "a")
 
@@ -52,6 +71,8 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     env = {**os.environ, "MINION_DB_PATH": resolved_db}
     env["MINION_AGENT_NAME"] = agent_name
     env["MINION_PROJECT_DIR"] = str(cfg.comms_db.parent.parent)  # .work/minion.db → project root
+    if instance_id:
+        env["MINION_INSTANCE_ID"] = instance_id
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
 
@@ -62,11 +83,14 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
         log_fp.close()
         raise FileNotFoundError("'minion' binary not found in PATH — is minion-factory installed?")
 
-    _log_json(log_fp, agent_name, "INFO", "daemon-launch", bin=minion_bin, db=resolved_db, config=config_path)
+    _log_json(log_fp, agent_name, "INFO", "daemon-launch", bin=minion_bin, db=resolved_db, config=config_path, instance_id=instance_id)
 
     import time
+    cmd = [minion_bin, "daemon-run", "--config", config_path, "--agent", agent_name]
+    if instance_id:
+        cmd.extend(["--instance-id", instance_id])
     proc = subprocess.Popen(
-        [minion_bin, "daemon-run", "--config", config_path, "--agent", agent_name],
+        cmd,
         stdin=subprocess.DEVNULL,
         stdout=log_fp,
         stderr=subprocess.STDOUT,
@@ -78,7 +102,7 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "") -> 
     if proc.poll() is not None:
         log_fp.close()
         raise RuntimeError(
-            f"daemon for {agent_name} died immediately (exit code {proc.returncode}). "
+            f"daemon for {file_key} died immediately (exit code {proc.returncode}). "
             f"Check {log_file}"
         )
     log_fp.close()
@@ -113,13 +137,19 @@ def spawn_pane(
     crew_config: str,
     session_exists: bool,
     pane_cmd: str = "",
+    instance_id: str | None = None,
 ) -> bool:
     """Create a tmux pane. Uses tail -f <log> unless pane_cmd is given.
 
     Returns True if pane was created, error string if it didn't fit.
+
+    instance_id: Optional instance suffix. When set, the log file uses the
+    instance-qualified name so each instance gets its own tail pane.
     """
     if not pane_cmd:
-        log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{agent}.log")
+        from minion.instance import resolve_file_key
+        file_key = resolve_file_key(agent, instance_id)
+        log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{file_key}.log")
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         open(log_file, "a").close()
         pane_cmd = f"tail -f {log_file}"
@@ -162,18 +192,25 @@ def _find_ts_daemon_dir() -> str:
     return os.path.expanduser("~/.minion-swarm/ts-daemon")
 
 
-def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python", db_path: str = "") -> None:
+def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python", db_path: str = "", instance_id: str | None = None) -> None:
     """Start daemon watcher for an agent.
 
     runtime='python' uses in-process AgentDaemon.
     runtime='ts' uses the TypeScript SDK daemon.
+
+    instance_id: Optional instance suffix for multi-instance spawns. Passed
+    through to start_agent_daemon() for file isolation.
     """
     if runtime == "ts":
-        log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{agent}.log")
+        from minion.instance import resolve_file_key
+        file_key = resolve_file_key(agent, instance_id)
+        log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{file_key}.log")
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         log_fp = open(log_file, "a")
         project_name = os.path.basename(os.path.abspath(project_dir))
         env = {**os.environ, "MINION_CLASS": "lead", "MINION_PROJECT": project_name}
+        if instance_id:
+            env["MINION_INSTANCE_ID"] = instance_id
         env.pop("CLAUDECODE", None)
         subprocess.Popen(
             ["npx", "tsx", "src/main.ts", "--config", crew_config, "--agent", agent],
@@ -186,4 +223,4 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         )
         log_fp.close()
     else:
-        start_agent_daemon(crew_config, agent, db_path=db_path)
+        start_agent_daemon(crew_config, agent, db_path=db_path, instance_id=instance_id)
