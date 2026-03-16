@@ -218,7 +218,7 @@ def test_link_task(runner, project_dir, tmp_path):
     _run(runner, project_dir, "req", "register", "--path", "features/genesis/")
 
     # Register a lead agent + create a task (requires lead class and battle plan)
-    _run(runner, project_dir, "register", "--name", "lead1", "--class", "lead")
+    _run(runner, project_dir, "register", "--name", "lead1", "--class", "lead", "--model", "claude-sonnet-4-6")
 
     battle_plan_file = project_dir / "plan.md"
     battle_plan_file.write_text("# Plan\n")
@@ -280,7 +280,7 @@ def test_unlinked_tasks(runner, project_dir, tmp_path):
     """Tasks without requirement_path appear in unlinked output."""
     import json
 
-    _run(runner, project_dir, "register", "--name", "lead1", "--class", "lead")
+    _run(runner, project_dir, "register", "--name", "lead1", "--class", "lead", "--model", "claude-sonnet-4-6")
     battle_plan_file = project_dir / "plan.md"
     battle_plan_file.write_text("# Plan\n")
     _run(runner, project_dir, "set-battle-plan", "--agent", "lead1", "--plan", str(battle_plan_file))

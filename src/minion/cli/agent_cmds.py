@@ -25,7 +25,7 @@ def register_commands(cli: click.Group) -> None:
     @agent_group.command("register")
     @click.option("--name", "-n", required=True)
     @click.option("--class", "-c", "agent_class", required=True, type=click.Choice(["lead", "coder", "builder", "oracle", "recon", "planner", "auditor", "coordinator"]))
-    @click.option("--model", "-M", default="")
+    @click.option("--model", "-M", required=True, help="Model ID (e.g. claude-sonnet-4-6, claude-opus-4-6)")
     @click.option("--description", "-d", default="")
     @click.option("--transport", "-T", default="terminal", type=click.Choice(["terminal", "daemon", "daemon-ts"]))
     @click.option("--crew", "-w", default="", help="Crew YAML name — injects zone, capabilities, system prompt excerpt")
