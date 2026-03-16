@@ -39,6 +39,7 @@ def register(
     transport: str = "terminal",
     crew: str = "",
     scope: str = "project",
+    spawned_from: str = "",
 ) -> dict[str, object]:
     """Register an agent in local + coordinator DBs, return onboarding payload.
 
@@ -93,8 +94,8 @@ def register(
         with conn:
             cursor.execute(
                 """INSERT INTO agents
-                    (name, agent_class, model, registered_at, last_seen, description, status, transport, scope_mode)
-                VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?)
+                    (name, agent_class, model, registered_at, last_seen, description, status, transport, scope_mode, spawned_from)
+                VALUES (?, ?, ?, ?, ?, ?, 'waiting for work', ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                     last_seen        = excluded.last_seen,
                     agent_class      = excluded.agent_class,
@@ -102,10 +103,11 @@ def register(
                     description      = COALESCE(NULLIF(excluded.description, ''), agents.description),
                     transport        = excluded.transport,
                     scope_mode       = excluded.scope_mode,
+                    spawned_from     = COALESCE(NULLIF(excluded.spawned_from, ''), agents.spawned_from),
                     status           = 'waiting for work',
                     hp_alerts_fired  = NULL
                 """,
-                (agent_name, agent_class, model or None, now, now, description or None, transport, scope),
+                (agent_name, agent_class, model or None, now, now, description or None, transport, scope, spawned_from or None),
             )
 
             # Auto-mark old broadcasts as read
