@@ -381,14 +381,37 @@ def spawn_party(
     finalize_layout(tmux_session, is_new, pane_count=pane_idx)
 
     # Start daemons — per-agent runtime from transport, global --runtime as fallback
+    # Multi-instance support: if an agent already has an alive process, auto-assign
+    # a numeric instance_id suffix so both instances coexist with isolated runtime files.
     import time
+    from minion.instance import is_instance_alive, next_instance_id
     daemon_list = [
         a for a in spawned_agents
         if resolved_cfgs.get(a, {}).get("transport", "daemon") != "terminal"
     ]
+    instance_ids: dict[str, str | None] = {}  # agent -> instance_id (None = bare name)
     for i, agent in enumerate(daemon_list):
         if i > 0:
             time.sleep(0.25)
+
+        # Detect if this agent already has a running instance
+        instance_id: str | None = None
+        if is_instance_alive(agent, None, project_dir):
+            instance_id = next_instance_id(agent, project_dir)
+            # Register the instance-qualified name so comms routing works
+            instance_name = f"{agent}-{instance_id}"
+            cfg = all_agents_cfg.get(agent, {})
+            _register(
+                agent_name=instance_name,
+                agent_class=_role_to_class(cfg.get("role", "coder")),
+                model=cfg.get("model", ""),
+                transport=cfg.get("transport", "daemon"),
+                crew=crew,
+                scope=cfg.get("scope", "project"),
+            )
+            log.info("multi-instance: %s already alive, spawning as %s", agent, instance_name)
+        instance_ids[agent] = instance_id
+
         transport = resolved_cfgs.get(agent, {}).get("transport", "daemon")
         if transport == "daemon-ts":
             agent_runtime = "ts"
@@ -396,7 +419,7 @@ def spawn_party(
             agent_runtime = runtime  # global --runtime flag as fallback
         else:
             agent_runtime = "python"
-        start_swarm(agent, crew_config, project_dir, runtime=agent_runtime, db_path=db_path)
+        start_swarm(agent, crew_config, project_dir, runtime=agent_runtime, db_path=db_path, instance_id=instance_id)
 
     result_dict: dict[str, object] = {
         "status": "spawned",
@@ -408,4 +431,8 @@ def spawn_party(
         result_dict["renames"] = renames
     if failed_agents:
         result_dict["failed"] = failed_agents
+    # Report instance ID assignments for visibility
+    assigned_instances = {a: iid for a, iid in instance_ids.items() if iid}
+    if assigned_instances:
+        result_dict["instances"] = assigned_instances
     return result_dict

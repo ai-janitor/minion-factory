@@ -49,9 +49,20 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "", ins
     name (backward compatible).
     """
     from minion.crew.config import load_config
-    from minion.instance import resolve_file_key
+    from minion.instance import resolve_file_key, is_instance_alive
     cfg = load_config(config_path)
     file_key = resolve_file_key(agent_name, instance_id)
+
+    # Guard: prevent accidental duplicate spawn of the exact same instance.
+    # This does NOT prevent multi-instance (different instance IDs) — only
+    # double-starting the same instance_id.
+    project_dir = str(cfg.comms_db.parent.parent) if cfg.comms_db else ""
+    if project_dir and is_instance_alive(agent_name, instance_id, project_dir):
+        raise RuntimeError(
+            f"daemon for {file_key} already has an alive process in {project_dir}. "
+            f"Stop it first or use a different instance_id."
+        )
+
     log_file = cfg.logs_dir / f"{file_key}.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_fp = open(log_file, "a")
