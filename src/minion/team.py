@@ -47,6 +47,8 @@ def _get_team_client(server_url: str = ""):
         st = api_status()
         if st.get("status") in ("running", "pid_alive"):
             url = st.get("url", "https://127.0.0.1:8377")
+            # Replace non-routable 0.0.0.0 with localhost for actual connections
+            url = url.replace("://0.0.0.0", "://127.0.0.1")
             local_server = True
 
     # Fallback: check configured remote profiles (set via `minion api set-remote`)
@@ -106,9 +108,11 @@ def _auto_save_profile(client) -> None:
     team commands work without re-specifying the server URL.
 
     Only saves if no default remote profile exists yet.
+    Skips non-routable addresses (0.0.0.0) that can't be reached from other machines.
     """
     try:
         from minion.api.remotes import get_remote, save_remote
+
         existing = get_remote()
         if existing:
             return  # already have a default profile, don't overwrite
@@ -116,8 +120,12 @@ def _auto_save_profile(client) -> None:
         url = client.base_url
         token = client.token
         insecure = client._insecure
-        if url:
-            save_remote(name="default", url=url, token=token, insecure=insecure)
+
+        # Don't save non-routable bind addresses as remote profiles
+        if not url or "0.0.0.0" in url:
+            return
+
+        save_remote(name="default", url=url, token=token, insecure=insecure)
     except Exception:
         pass  # non-fatal — profile save is best-effort
 
