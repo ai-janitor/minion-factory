@@ -157,6 +157,28 @@ def register_commands(cli: click.Group) -> None:
         result = channels(server_url=server)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
+    @team_group.command("clone")
+    @click.argument("channel")
+    @click.option("--target", "-t", default="", help="Target directory (default: ./<channel-name>)")
+    @click.option("--server", "-s", default="", help="API server URL or alias")
+    @click.pass_context
+    def team_clone(ctx: click.Context, channel: str, target: str, server: str) -> None:
+        """Clone a project workspace from the coordinator's git info.
+
+        \b
+        Reads git_remote and git_branch from the channel metadata
+        and clones the repo. Git info is set automatically when
+        agents join from a machine that has the repo.
+
+        \b
+        Examples:
+          minion team clone llama-metal
+          minion team clone llama-metal --target ~/projects/llama-metal
+        """
+        from minion.team import clone
+        result = clone(channel=channel, target_dir=target, server_url=server)
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
     @team_group.command("coordinators")
     @click.pass_context
     def team_coordinators(ctx: click.Context) -> None:

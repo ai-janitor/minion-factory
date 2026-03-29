@@ -31,6 +31,7 @@ def register(router) -> None:
     router.add_post("/channels/{name}/leave", handle_leave_channel)
     router.add_get("/channels/{name}/members", handle_channel_members)
     router.add_get("/channels/{name}/messages", handle_channel_messages)
+    router.add_post("/channels/{name}/git", handle_update_channel_git)
 
 
 def _get_or_create_channel(conn: sqlite3.Connection, name: str, created_by: str = "") -> int:
@@ -154,11 +155,22 @@ def handle_channel_detail(handler, db_path: str, name: str = "", **kwargs) -> No
         finally:
             conn.close()
 
+    # Extract git info (may not exist on older schemas)
+    git_remote = None
+    git_branch = None
+    try:
+        git_remote = channel["git_remote"]
+        git_branch = channel["git_branch"]
+    except (IndexError, KeyError):
+        pass
+
     handler._json_response(200, {
         "channel": name,
         "id": channel["id"],
         "created_at": channel["created_at"],
         "description": channel["description"],
+        "git_remote": git_remote,
+        "git_branch": git_branch,
         "member_count": len(members),
         "message_count": msg_count,
         "members": [
@@ -335,3 +347,38 @@ def handle_channel_messages(handler, db_path: str, name: str = "", **kwargs) -> 
             for m in messages
         ],
     })
+
+
+def handle_update_channel_git(handler, db_path: str, name: str = "", **kwargs) -> None:
+    """POST /channels/{name}/git — update channel with git project identity.
+
+    Body: {"git_remote": "https://github.com/org/repo.git", "git_branch": "main"}
+    New machines can read this to discover and clone the project workspace.
+    """
+    body = handler._parse_json_body()
+    if not body:
+        return
+
+    git_remote = body.get("git_remote", "").strip()
+    git_branch = body.get("git_branch", "main").strip()
+
+    if not git_remote:
+        handler._json_response(400, {"error": "git_remote is required."})
+        return
+
+    with _DB_LOCK:
+        conn = _get_server_db(db_path)
+        try:
+            channel = conn.execute("SELECT id FROM channels WHERE name = ?", (name,)).fetchone()
+            if not channel:
+                handler._json_response(404, {"error": f"Channel '{name}' not found."})
+                return
+            conn.execute(
+                "UPDATE channels SET git_remote = ?, git_branch = ? WHERE id = ?",
+                (git_remote, git_branch, channel["id"]),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    handler._json_response(200, {"status": "updated", "channel": name, "git_remote": git_remote, "git_branch": git_branch})

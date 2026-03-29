@@ -84,7 +84,9 @@ CREATE TABLE IF NOT EXISTS channels (
     name        TEXT NOT NULL UNIQUE,       -- e.g. "llama-metal"
     created_at  TEXT NOT NULL,
     description TEXT,
-    created_by  TEXT                        -- agent name that created the channel
+    created_by  TEXT,                       -- agent name that created the channel
+    git_remote  TEXT,                       -- canonical git remote URL (e.g., github.com/org/repo.git)
+    git_branch  TEXT                        -- default branch (e.g., "main")
 );
 
 -- Channel membership: which agents belong to which channels
@@ -360,6 +362,18 @@ def migrate_channels(db_path: str) -> dict:
     conn.commit()
     conn.close()
     return {"status": "migrated", "channels_created": channels_created, "members_added": members_added}
+
+
+def migrate_channel_git(db_path: str) -> None:
+    """Add git_remote and git_branch columns to channels table (idempotent)."""
+    conn = _connect(db_path)
+    for col in ("git_remote TEXT", "git_branch TEXT"):
+        try:
+            conn.execute(f"ALTER TABLE channels ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    conn.commit()
+    conn.close()
 
 
 def migrate_message_uuids(db_path: str) -> None:

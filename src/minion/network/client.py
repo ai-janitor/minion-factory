@@ -206,6 +206,12 @@ class NetworkClient:
         """GET /channels/{name}/messages — messages in a channel."""
         return self._request("GET", f"/channels/{channel}/messages?limit={limit}")
 
+    def update_channel_git(self, channel: str, git_remote: str, git_branch: str = "main") -> dict:
+        """POST /channels/{name}/git — update channel with git project identity."""
+        return self._request("POST", f"/channels/{channel}/git", {
+            "git_remote": git_remote, "git_branch": git_branch,
+        })
+
 
 def _build_query_string(params: dict) -> str:
     """Build ?key=val&... from non-empty params."""

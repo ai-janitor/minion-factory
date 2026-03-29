@@ -71,6 +71,36 @@ def _machine_id() -> str:
     return socket.gethostname()
 
 
+def _detect_git_remote(project_path: str) -> str:
+    """Detect the canonical git remote URL for a project directory."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "-C", project_path, "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return ""
+
+
+def _detect_git_branch(project_path: str) -> str:
+    """Detect the current git branch for a project directory."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "-C", project_path, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return ""
+
+
 def _auto_save_profile(client) -> None:
     """Auto-save the coordinator URL as a remote profile so subsequent
     team commands work without re-specifying the server URL.
@@ -129,6 +159,9 @@ def join(
     stored = get_identity(channel=channel, agent_name=agent)
     stored_uuid = stored.get("agent_uuid", "") if stored else ""
 
+    # Detect git remote for project identity
+    git_remote = _detect_git_remote(project_path)
+
     # Register on network tier (also auto-joins channel via project_path bridge)
     reg = client.register(
         name=agent,
@@ -144,6 +177,11 @@ def join(
     # Explicitly join channel (canonical path, idempotent)
     role = "lead" if agent_class == "lead" else "member"
     client.join_channel(channel=channel, agent=agent, machine_id=_machine_id(), role=role)
+
+    # Update channel with git project identity if detected
+    if git_remote:
+        git_branch = _detect_git_branch(project_path)
+        client.update_channel_git(channel=channel, git_remote=git_remote, git_branch=git_branch or "main")
 
     # Fetch channel roster
     members_result = client.channel_members(channel)
@@ -439,6 +477,55 @@ def _guess_channel(coordinator_url: str) -> str:
     except Exception:
         pass
     return ""
+
+
+def clone(channel: str, target_dir: str = "", server_url: str = "") -> dict:
+    """Clone a project workspace using git info from the coordinator channel.
+
+    Reads git_remote and git_branch from the channel, clones to target_dir
+    (or cwd/<channel-name> if not specified).
+    """
+    import subprocess
+
+    client, err = _get_team_client(server_url)
+    if err:
+        return {"error": err}
+
+    detail = client.channel_detail(channel)
+    if "error" in detail:
+        return detail
+
+    git_remote = detail.get("git_remote")
+    git_branch = detail.get("git_branch", "main")
+
+    if not git_remote:
+        return {"error": f"Channel '{channel}' has no git remote configured. "
+                "Join from a machine with the repo to set it automatically."}
+
+    target = target_dir or os.path.join(os.getcwd(), channel)
+
+    if os.path.exists(target):
+        return {"error": f"Target directory already exists: {target}"}
+
+    try:
+        result = subprocess.run(
+            ["git", "clone", "-b", git_branch, git_remote, target],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            return {"error": f"git clone failed: {result.stderr.strip()}"}
+    except subprocess.TimeoutExpired:
+        return {"error": "git clone timed out after 120s"}
+    except FileNotFoundError:
+        return {"error": "git not found on PATH"}
+
+    return {
+        "status": "cloned",
+        "channel": channel,
+        "git_remote": git_remote,
+        "git_branch": git_branch,
+        "target": target,
+    }
 
 
 def coordinators() -> dict:
