@@ -33,6 +33,7 @@ struct CoordinatorStatusResponse: Codable {
 
 struct ServerInfo: Codable {
     let status: String
+    let coordinatorId: String?
     let uptimeSeconds: Int
     let port: Int
     let tls: Bool
@@ -40,6 +41,7 @@ struct ServerInfo: Codable {
 
     enum CodingKeys: String, CodingKey {
         case status
+        case coordinatorId = "coordinator_id"
         case uptimeSeconds = "uptime_seconds"
         case port, tls
         case startedAt = "started_at"
@@ -141,4 +143,14 @@ struct ChannelEntry: Codable, Identifiable {
 struct ProjectSummary: Codable {
     let count: Int
     let names: [String]
+    let summaries: [ProjectDetail]?
+}
+
+struct ProjectDetail: Codable, Identifiable {
+    let name: String
+    let tasks: [String: Int]?
+    let backlog: [String: Int]?
+    let requirements: [String: Int]?
+
+    var id: String { name }
 }

@@ -15,13 +15,23 @@ class CoordinatorViewModel: ObservableObject {
     @Published var lastError: String?
     @Published var isPolling: Bool = false
 
-    // Token stored separately (Keychain in production, UserDefaults for v1)
-    @AppStorage("authToken") var authToken: String = ""
+    // Token stored in Keychain for security
+    @Published var authToken: String = "" {
+        didSet {
+            if !authToken.isEmpty {
+                _ = KeychainHelper.saveToken(authToken)
+            }
+        }
+    }
 
     private let client = CoordinatorClient()
     private var pollTask: Task<Void, Never>?
 
     init() {
+        // Load token from Keychain on startup
+        if let saved = KeychainHelper.loadToken() {
+            authToken = saved
+        }
         // Auto-start polling if URL is configured
         if !coordinatorURL.isEmpty {
             startPolling()

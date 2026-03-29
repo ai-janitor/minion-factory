@@ -117,7 +117,10 @@ struct StatusMenuView: View {
 
             HStack {
                 Text("Auth: \(auth.enabled ? "Enabled" : "Disabled")")
-                Spacer()
+                if let cid = server.coordinatorId {
+                    Spacer()
+                    Text("ID: \(cid)")
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
