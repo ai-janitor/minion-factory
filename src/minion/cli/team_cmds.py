@@ -157,6 +157,26 @@ def register_commands(cli: click.Group) -> None:
         result = channels(server_url=server)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
+    @team_group.command("ping")
+    @click.option("--from", "-f", "from_agent", required=True, help="Sender agent name")
+    @click.option("--to", "-t", "to_agent", required=True, help="Target agent name")
+    @click.option("--server", "-s", default="", help="API server URL or alias")
+    @click.pass_context
+    def team_ping(ctx: click.Context, from_agent: str, to_agent: str, server: str) -> None:
+        """Send a ping and verify round-trip delivery.
+
+        \b
+        Sends a timestamped message and immediately checks the target's
+        inbox to confirm delivery. Reports status and latency.
+
+        \b
+        Examples:
+          minion team ping --from trashcan-lead --to codex-lead
+        """
+        from minion.team import ping
+        result = ping(from_agent=from_agent, to_agent=to_agent, server_url=server)
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
     @team_group.command("clone")
     @click.argument("channel")
     @click.option("--target", "-t", default="", help="Target directory (default: ./<channel-name>)")

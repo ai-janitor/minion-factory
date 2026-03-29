@@ -311,9 +311,14 @@ def inbox(
         client, err = _get_team_client(server_url)
         if err:
             return {"error": err}
-        result = client.check_inbox(agent, channel=channel)
-        # Tag messages with server context
-        for msg in result.get("messages", []):
+        # Two-step safe delivery: peek first, then mark read after successful fetch
+        result = client.check_inbox(agent, channel=channel, peek=True)
+        messages = result.get("messages", [])
+        if messages:
+            ids = [m["id"] for m in messages if isinstance(m.get("id"), int)]
+            if ids:
+                client.mark_read(agent, ids)
+        for msg in messages:
             msg["coordinator"] = client.base_url
         return result
 
@@ -372,13 +377,19 @@ def inbox(
                     token = _read_token()
                 insecure = insecure or resolve_network_insecure() or "://0.0.0.0" in url or "://127.0.0.1" in url
                 client = NetworkClient(base_url=url, token=token, insecure=insecure)
-                result = client.check_inbox(agent, channel=channel)
+                # Two-step safe delivery: peek first, mark read after successful fetch
+                result = client.check_inbox(agent, channel=channel, peek=True)
                 if "error" in result:
                     errors.append({"coordinator": url, "error": result["error"]})
                 else:
-                    for msg in result.get("messages", []):
+                    msgs = result.get("messages", [])
+                    if msgs:
+                        ids = [m["id"] for m in msgs if isinstance(m.get("id"), int)]
+                        if ids:
+                            client.mark_read(agent, ids)
+                    for msg in msgs:
                         msg["coordinator"] = url
-                    all_messages.extend(result.get("messages", []))
+                    all_messages.extend(msgs)
             except Exception as e:
                 errors.append({"coordinator": url, "error": str(e)})
 
@@ -510,6 +521,52 @@ def _guess_channel(coordinator_url: str) -> str:
     except Exception:
         pass
     return ""
+
+
+def ping(from_agent: str, to_agent: str, server_url: str = "") -> dict:
+    """Send a ping message and verify round-trip delivery.
+
+    Sends a timestamped ping, then immediately peeks the target's inbox
+    to verify delivery. Returns delivery status and latency.
+    """
+    import time
+    from datetime import datetime
+
+    client, err = _get_team_client(server_url)
+    if err:
+        return {"error": err}
+
+    ping_id = f"ping-{int(time.time())}"
+    ping_msg = f"PING {ping_id} from {from_agent} at {datetime.now().isoformat()}"
+
+    # Send
+    t0 = time.monotonic()
+    send_result = client.send(from_agent, to_agent, ping_msg)
+    if "error" in send_result:
+        return {"error": f"send failed: {send_result['error']}"}
+
+    # Verify delivery by peeking target inbox
+    peek_result = client.check_inbox(to_agent, peek=True)
+    t1 = time.monotonic()
+
+    delivered = False
+    for msg in peek_result.get("messages", []):
+        if ping_id in msg.get("content", ""):
+            delivered = True
+            # Mark just the ping as read
+            msg_id = msg.get("id")
+            if msg_id:
+                client.mark_read(to_agent, [msg_id])
+            break
+
+    return {
+        "status": "delivered" if delivered else "sent_not_yet_visible",
+        "ping_id": ping_id,
+        "from": from_agent,
+        "to": to_agent,
+        "round_trip_ms": round((t1 - t0) * 1000, 1),
+        "delivered": delivered,
+    }
 
 
 def clone(channel: str, target_dir: str = "", server_url: str = "") -> dict:
