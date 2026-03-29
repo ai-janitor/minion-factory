@@ -23,14 +23,23 @@ def _get_team_client(server_url: str = ""):
     """Build a NetworkClient pointed at the team's API server.
 
     Resolution order for the server URL:
-    1. Explicit server_url argument
+    1. Explicit server_url argument (URL or named remote alias like "trashcan")
     2. MINION_NETWORK_URL env var
     3. Local API server (https://127.0.0.1:8377) if running
+    4. Default remote profile
     """
     from minion.network.client import NetworkClient
     from minion.defaults import resolve_network_url, resolve_network_insecure
 
-    url = server_url or resolve_network_url()
+    # If server_url looks like a name (no ://), try to resolve as a remote profile alias
+    if server_url and "://" not in server_url:
+        from minion.api.remotes import get_remote_client
+        client, err = get_remote_client(server_url)
+        if client:
+            return client, None
+        # Fall through — maybe it's a hostname, not a profile name
+
+    url = (server_url if "://" in server_url else "") or resolve_network_url()
     local_server = False
     if not url:
         # Check if local API server is running — use it as default
