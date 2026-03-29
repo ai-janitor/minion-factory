@@ -244,14 +244,17 @@ def send(
 def inbox(
     agent: str, project_dir: str = "", channel: str = "", server_url: str = "",
 ) -> dict:
-    """Check unread messages for an agent, optionally scoped to a channel."""
+    """Check unread messages for an agent, optionally scoped to a channel.
+
+    Without --channel, returns ALL unread messages (including unchanneled ones
+    like those sent via api remote-send). Only pass channel when explicitly requested.
+    """
     client, err = _get_team_client(server_url)
     if err:
         return {"error": err}
 
-    if not channel and project_dir:
-        channel = _channel_name(project_dir)
-
+    # Don't auto-derive channel — return all unread by default.
+    # Only scope to channel when explicitly requested via --channel.
     return client.check_inbox(agent, channel=channel)
 
 
