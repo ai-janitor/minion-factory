@@ -70,16 +70,19 @@ class NetworkClient:
         host: str = "",
         project_path: str = "",
         machine_id: str = "",
+        agent_uuid: str = "",
     ) -> dict:
-        """Register agent on the network tier."""
+        """Register agent on the network tier. Pass agent_uuid to reclaim identity on rejoin."""
         import socket
-        body = {
+        body: dict = {
             "name": name,
             "agent_class": agent_class,
             "host": host or socket.gethostname(),
             "project_path": project_path or os.getcwd(),
             "machine_id": machine_id or _get_machine_id(),
         }
+        if agent_uuid:
+            body["agent_uuid"] = agent_uuid
         return self._request("POST", "/register", body)
 
     def send(self, from_agent: str, to_agent: str, message: str, channel: str = "") -> dict:

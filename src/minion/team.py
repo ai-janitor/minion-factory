@@ -114,7 +114,11 @@ def join(
     # Auto-save coordinator profile so subsequent commands just work
     _auto_save_profile(client)
 
-    from minion.team_identity import save_identity
+    from minion.team_identity import save_identity, get_identity
+
+    # Check for stored identity to reclaim UUID on rejoin
+    stored = get_identity(channel=channel, agent_name=agent)
+    stored_uuid = stored.get("agent_uuid", "") if stored else ""
 
     # Register on network tier (also auto-joins channel via project_path bridge)
     reg = client.register(
@@ -123,6 +127,7 @@ def join(
         host=_machine_id(),
         project_path=project_path,
         machine_id=_machine_id(),
+        agent_uuid=stored_uuid,
     )
     if "error" in reg:
         return reg

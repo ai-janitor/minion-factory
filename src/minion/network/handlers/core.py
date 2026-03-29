@@ -352,9 +352,9 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
     project_basename = os.path.basename(project_path.rstrip("/")) if project_path != "unknown" else "unknown"
     fqn = f"{machine_id}/{project_basename}/{name}"
 
-    # Generate a stable UUID for new agents — existing agents keep theirs on rejoin
+    # Use client-provided UUID for reclaim, or generate a new one for first registration
     import uuid as _uuid
-    new_agent_uuid = str(_uuid.uuid4())
+    new_agent_uuid = body.get("agent_uuid", "").strip() or str(_uuid.uuid4())
 
     with _DB_LOCK:
         conn = _get_server_db(db_path)
@@ -497,9 +497,16 @@ def handle_send(handler, db_path: str, **kwargs) -> None:
                 if ch_row:
                     channel_id = ch_row[0]
 
+            # Resolve agent UUIDs for stable routing/history
+            from_uuid_row = conn.execute("SELECT agent_uuid FROM agents WHERE name = ?", (from_agent,)).fetchone()
+            to_uuid_row = conn.execute("SELECT agent_uuid FROM agents WHERE name = ?", (to_agent,)).fetchone()
+            from_uuid = from_uuid_row["agent_uuid"] if from_uuid_row else None
+            to_uuid = to_uuid_row["agent_uuid"] if to_uuid_row else None
+
             conn.execute(
-                "INSERT INTO messages (from_agent, to_agent, content, timestamp, channel_id) VALUES (?, ?, ?, ?, ?)",
-                (from_agent, to_agent, content, now, channel_id),
+                "INSERT INTO messages (from_agent, to_agent, from_agent_uuid, to_agent_uuid, content, timestamp, channel_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (from_agent, to_agent, from_uuid, to_uuid, content, now, channel_id),
             )
             conn.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
             conn.commit()

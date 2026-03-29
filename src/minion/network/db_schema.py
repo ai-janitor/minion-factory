@@ -65,13 +65,15 @@ CREATE TABLE IF NOT EXISTS agents (
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_agent  TEXT NOT NULL,
-    to_agent    TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    timestamp   TEXT NOT NULL,
-    read_flag   INTEGER DEFAULT 0,
-    channel_id  INTEGER REFERENCES channels(id)  -- NULL = direct message
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_agent      TEXT NOT NULL,
+    to_agent        TEXT NOT NULL,
+    from_agent_uuid TEXT,          -- stable identity for routing/history
+    to_agent_uuid   TEXT,          -- stable identity for routing/history
+    content         TEXT NOT NULL,
+    timestamp       TEXT NOT NULL,
+    read_flag       INTEGER DEFAULT 0,
+    channel_id      INTEGER REFERENCES channels(id)  -- NULL = direct message
 );
 
 CREATE INDEX IF NOT EXISTS idx_msg_to_unread ON messages(to_agent, read_flag);
@@ -358,6 +360,18 @@ def migrate_channels(db_path: str) -> dict:
     conn.commit()
     conn.close()
     return {"status": "migrated", "channels_created": channels_created, "members_added": members_added}
+
+
+def migrate_message_uuids(db_path: str) -> None:
+    """Add from_agent_uuid and to_agent_uuid columns to messages table (idempotent)."""
+    conn = _connect(db_path)
+    for col in ("from_agent_uuid", "to_agent_uuid"):
+        try:
+            conn.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    conn.commit()
+    conn.close()
 
 
 def migrate_agent_uuids(db_path: str) -> dict:

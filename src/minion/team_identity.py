@@ -57,6 +57,8 @@ def save_identity(
 
     Keyed by (coordinator_url, channel, agent_name) — upserts if exists.
     """
+    from datetime import datetime
+    now = datetime.now().isoformat()
     identities = _read_identities()
 
     # Find existing entry to update
@@ -70,6 +72,7 @@ def save_identity(
                 "agent_uuid": agent_uuid,
                 "agent_class": agent_class,
                 "project_path": project_path,
+                "last_contact": now,
             })
             _write_identities(identities)
             return
@@ -82,6 +85,7 @@ def save_identity(
         "agent_uuid": agent_uuid,
         "agent_class": agent_class,
         "project_path": project_path,
+        "last_contact": now,
     })
     _write_identities(identities)
 

@@ -35,12 +35,13 @@ def _get_server_db(db_path: str) -> sqlite3.Connection:
 
 def _init_server_db(db_path: str) -> None:
     # PSEUDO: Use db_schema.init_db() for fresh installs, then migrate_to_composite_pk() for upgrades
-    from minion.network.db_schema import init_db, migrate_db, migrate_to_composite_pk, migrate_channels, migrate_agent_uuids
+    from minion.network.db_schema import init_db, migrate_db, migrate_to_composite_pk, migrate_channels, migrate_agent_uuids, migrate_message_uuids
     init_db(db_path)
     migrate_db(db_path)
     migrate_to_composite_pk(db_path)
     migrate_channels(db_path)
     migrate_agent_uuids(db_path)
+    migrate_message_uuids(db_path)
 
 
 class _Handler(AuthMixin, BaseHTTPRequestHandler):
