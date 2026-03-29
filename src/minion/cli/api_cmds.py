@@ -54,12 +54,14 @@ def register_commands(cli: click.Group) -> None:
         """Start the API server as a background daemon.
 
         \b
-        Auth token is required (unless --insecure). Three input methods
-        in priority order:
+        Auth is ON by default. Token resolution order:
           1. -p /path/to/file   — reads first line (automation/scripts)
           2. MINION_CLUSTER_TOKEN env var (CI/containers)
           3. Interactive prompt via getpass (humans at terminal)
-        Token is hashed and saved so restart doesn't need re-entry.
+          4. Saved token from previous start (~/.minion/.api-token)
+          5. Auto-generate a secure random token (first start)
+        Token is saved to ~/.minion/.api-token (chmod 600) and reused
+        on restart. On first generation, the token is printed once.
 
         \b
         Forks the server to background and returns immediately.
@@ -68,14 +70,15 @@ def register_commands(cli: click.Group) -> None:
 
         \b
         Examples:
-          minion api start                      # Prompts for token
+          minion api start                      # Auto-generates token on first run
           minion api start -p ~/.minion/token    # Read from file
-          minion api start --insecure            # Dev mode, no auth
+          minion api start --insecure            # Dev mode, no auth (NOT recommended)
         """
         import getpass
         import sys
 
         token = ""
+        generated = False
         if not insecure:
             # Priority 1: -p password file
             if password_file:
@@ -90,15 +93,24 @@ def register_commands(cli: click.Group) -> None:
             # Priority 3: interactive prompt — only when stdin is a real TTY (not an agent/pipe)
             if not token and sys.stdin.isatty():
                 token = getpass.getpass("Cluster auth token: ")
+            # Priority 4: reuse previously saved token from ~/.minion/.api-token
             if not token:
-                raise click.UsageError(
-                    "Auth token is required.\n"
-                    "Provide via: -p <file>, MINION_CLUSTER_TOKEN env var, or interactive prompt.\n"
-                    "Use --insecure to skip auth (dev only)."
-                )
+                from minion.api.daemon import _read_token
+                token = _read_token()
+            # Priority 5: auto-generate a secure random token on first start
+            if not token:
+                import secrets
+                token = secrets.token_urlsafe(32)
+                generated = True
 
-        from minion.api.daemon import start
+        from minion.api.daemon import start, _token_file
         result = start(port=port, token=token)
+        # On first-time auto-generation, tell the user where the token lives
+        if generated and result.get("status") == "started":
+            token_path = str(_token_file())
+            result["token_generated"] = True
+            result["token_path"] = token_path
+            result["token"] = token
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("stop")
