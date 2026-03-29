@@ -149,8 +149,10 @@ def run_poll_loop(
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    # Track notified message IDs to prevent duplicate notifications
-    notified_ids: set[int] = set()
+    # Track notified IDs to prevent duplicate notifications
+    notified_msg_ids: set[int] = set()
+    notified_task_ids: set[int] = set()
+    seen_task_states: dict[int, str] = {}  # task_id → last seen status
 
     try:
         while running:
@@ -160,21 +162,19 @@ def run_poll_loop(
                     time.sleep(interval)
                     continue
 
-                # Always peek — never destructive
+                # --- Check messages ---
                 result = client.check_inbox(agent, channel=channel, peek=True)
                 messages = result.get("messages", [])
 
                 if messages:
                     if mode == "foreground":
-                        # Delivery mode: print messages, then mark read
                         for msg in messages:
                             _print_message(msg)
                         ids = [m["id"] for m in messages if isinstance(m.get("id"), int)]
                         if ids:
                             client.mark_read(agent, ids, read_via="team_poll_foreground")
                     else:
-                        # Notify mode: print hint only, don't mark read
-                        new_msgs = [m for m in messages if m.get("id") not in notified_ids]
+                        new_msgs = [m for m in messages if m.get("id") not in notified_msg_ids]
                         if new_msgs:
                             count = len(new_msgs)
                             senders = list({m.get("from_agent", "?") for m in new_msgs})
@@ -182,7 +182,32 @@ def run_poll_loop(
                             for m in new_msgs:
                                 mid = m.get("id")
                                 if mid:
-                                    notified_ids.add(mid)
+                                    notified_msg_ids.add(mid)
+
+                # --- Check tasks assigned to this agent ---
+                try:
+                    tasks_result = client._request("GET", f"/team/tasks?assigned_to={agent}")
+                    tasks = tasks_result.get("tasks", [])
+                    for task in tasks:
+                        tid = task.get("id")
+                        status = task.get("status", "")
+                        title = task.get("title", "")
+                        if tid is None:
+                            continue
+
+                        prev_status = seen_task_states.get(tid)
+                        if prev_status is None:
+                            # New task we haven't seen before
+                            if tid not in notified_task_ids:
+                                _print_task_notification(task, "new")
+                                notified_task_ids.add(tid)
+                        elif prev_status != status:
+                            # Status changed
+                            _print_task_notification(task, f"{prev_status} → {status}")
+
+                        seen_task_states[tid] = status
+                except Exception:
+                    pass  # task check is best-effort
 
             except Exception as e:
                 print(f"[poll error] {e}", file=sys.stderr, flush=True)
@@ -190,6 +215,19 @@ def run_poll_loop(
             time.sleep(interval)
     finally:
         unregister_poller(agent)
+
+
+def _print_task_notification(task: dict, change: str) -> None:
+    """Print a task notification in operator-friendly format."""
+    tid = task.get("id", "?")
+    title = task.get("title", "")
+    status = task.get("status", "")
+    created_by = task.get("created_by_agent", "")
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"\n[{ts}] TASK #{tid} ({change}): {title}", flush=True)
+    if created_by:
+        print(f"  from: {created_by}  status: {status}", flush=True)
+    print("---", flush=True)
 
 
 def _print_message(msg: dict) -> None:
