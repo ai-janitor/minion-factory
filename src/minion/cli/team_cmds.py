@@ -217,7 +217,7 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--title", "-t", required=True, help="Task title")
     @click.option("--channel", "-ch", default="", help="Channel name")
     @click.option("--assign", "-a", default="", help="Assign to agent")
-    @click.option("--created-by", "-c", default="", help="Creator agent name")
+    @click.option("--from", "-c", "created_by", required=True, help="Creator agent name (your registered name)")
     @click.option("-f", "body_file", default=None, type=click.Path(exists=True), help="Read body from file")
     @click.option("--body", "-b", default="", help="Task body text")
     @click.option("--server", "-s", default="", help="Server alias or URL")
@@ -240,22 +240,6 @@ def register_commands(cli: click.Group) -> None:
             with open(body_file) as f:
                 body = f.read()
         channel = channel or _channel_name(ctx.obj.get("project_dir") or "")
-        # Default created_by: env var → saved identity → hostname
-        if not created_by:
-            import os as _os
-            created_by = _os.environ.get("MINION_AGENT_NAME", "")
-        if not created_by:
-            from minion.team_identity import get_identity_for_project, list_identities
-            identity = get_identity_for_project(ctx.obj.get("project_dir") or "")
-            if identity:
-                created_by = identity.get("agent_name", "")
-            else:
-                all_ids = list_identities()
-                if all_ids:
-                    created_by = all_ids[0].get("agent_name", "")
-        if not created_by:
-            import socket
-            created_by = socket.gethostname()
         client, err = _get_team_client(server)
         if err:
             _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
