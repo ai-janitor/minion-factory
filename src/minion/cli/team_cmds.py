@@ -206,6 +206,47 @@ def register_commands(cli: click.Group) -> None:
         result = clone(channel=channel, target_dir=target, server_url=server)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
+    @team_group.command("poll")
+    @click.option("--agent", "-a", required=True, help="Agent name to poll as")
+    @click.option("--channel", "-ch", default="", help="Channel filter")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.option("--interval", "-i", default=5, type=int, help="Poll interval in seconds (default: 5)")
+    @click.option("--mode", type=click.Choice(["foreground", "notify"]), default="foreground",
+                  help="foreground=delivery (marks read), notify=hint only (stays unread)")
+    def team_poll(agent: str, channel: str, server: str, interval: int, mode: str) -> None:
+        """Live poll loop — delivers messages as they arrive.
+
+        \b
+        foreground (default): prints full messages, marks read after display.
+        notify: prints unread hints only, messages stay unread for manual inbox.
+
+        \b
+        Ctrl+C to stop. Only one poller per agent allowed.
+
+        \b
+        Examples:
+          minion team poll --agent trashcan-lead
+          minion team poll -a me --mode notify --interval 10
+        """
+        from minion.team_poll import run_poll_loop
+        run_poll_loop(agent=agent, server_url=server, channel=channel,
+                      interval=interval, mode=mode)
+
+    @team_group.command("poll-stop")
+    @click.option("--agent", "-a", required=True, help="Agent name to stop polling")
+    @click.pass_context
+    def team_poll_stop(ctx: click.Context, agent: str) -> None:
+        """Stop a running poll loop for an agent."""
+        from minion.team_poll import stop_poller
+        _output(stop_poller(agent), ctx.obj["human"], ctx.obj["compact"])
+
+    @team_group.command("poll-list")
+    @click.pass_context
+    def team_poll_list(ctx: click.Context) -> None:
+        """List active poll loops."""
+        from minion.team_poll import list_pollers
+        _output({"pollers": list_pollers()}, ctx.obj["human"], ctx.obj["compact"])
+
     @team_group.command("coordinators")
     @click.pass_context
     def team_coordinators(ctx: click.Context) -> None:
