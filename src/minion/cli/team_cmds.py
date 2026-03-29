@@ -206,6 +206,139 @@ def register_commands(cli: click.Group) -> None:
         result = clone(channel=channel, target_dir=target, server_url=server)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
+    # --- Team task subgroup ---
+
+    @team_group.group("task")
+    def task_group() -> None:
+        """Coordinator team tasks — lightweight work handoff."""
+        pass
+
+    @task_group.command("create")
+    @click.option("--title", "-t", required=True, help="Task title")
+    @click.option("--channel", "-ch", default="", help="Channel name")
+    @click.option("--assign", "-a", default="", help="Assign to agent")
+    @click.option("--created-by", "-c", default="", help="Creator agent name")
+    @click.option("-f", "body_file", default=None, type=click.Path(exists=True), help="Read body from file")
+    @click.option("--body", "-b", default="", help="Task body text")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_create(ctx: click.Context, title: str, channel: str, assign: str,
+                    created_by: str, body_file: str | None, body: str, server: str) -> None:
+        """Create a coordinator team task.
+
+        \b
+        -f reads body from a file (spec, review, etc.).
+        The body is stored on the coordinator — no SCP needed.
+
+        \b
+        Examples:
+          minion team task create -t "Fix inbox bug" -c codex-lead -a trashcan-lead
+          minion team task create -t "DMG packaging" -f .work/reviews/spec.md -ch llama-metal
+        """
+        from minion.team import _get_team_client, _channel_name
+        if body_file:
+            with open(body_file) as f:
+                body = f.read()
+        channel = channel or _channel_name(ctx.obj.get("project_dir") or "")
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        result = client._request("POST", "/team/tasks", {
+            "title": title, "body_text": body, "channel": channel,
+            "created_by": created_by, "assigned_to": assign,
+        })
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    @task_group.command("list")
+    @click.option("--channel", "-ch", default="", help="Filter by channel")
+    @click.option("--status", default=None, help="Filter by status")
+    @click.option("--assigned-to", "-a", default=None, help="Filter by assignee")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_list(ctx: click.Context, channel: str, status: str | None,
+                  assigned_to: str | None, server: str) -> None:
+        """List coordinator team tasks."""
+        from minion.team import _get_team_client
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        params = {}
+        if channel:
+            params["channel"] = channel
+        if status:
+            params["status"] = status
+        if assigned_to:
+            params["assigned_to"] = assigned_to
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        path = "/team/tasks" + (f"?{qs}" if qs else "")
+        _output(client._request("GET", path), ctx.obj["human"], ctx.obj["compact"])
+
+    @task_group.command("show")
+    @click.argument("task_id", type=int)
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_show(ctx: click.Context, task_id: int, server: str) -> None:
+        """Show task detail with comments."""
+        from minion.team import _get_team_client
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(client._request("GET", f"/team/tasks/{task_id}"), ctx.obj["human"], ctx.obj["compact"])
+
+    @task_group.command("assign")
+    @click.argument("task_id", type=int)
+    @click.option("--to", "-t", "assigned_to", required=True, help="Agent to assign to")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_assign(ctx: click.Context, task_id: int, assigned_to: str, server: str) -> None:
+        """Assign or reassign a task."""
+        from minion.team import _get_team_client
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(client._request("POST", f"/team/tasks/{task_id}/assign", {"assigned_to": assigned_to}),
+                ctx.obj["human"], ctx.obj["compact"])
+
+    @task_group.command("update-status")
+    @click.argument("task_id", type=int)
+    @click.option("--status", required=True, type=click.Choice(["open", "assigned", "in_progress", "blocked", "done", "canceled"]))
+    @click.option("--comment", "-m", default="", help="Status change note")
+    @click.option("--agent", "-a", default="", help="Agent making the change")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_update_status(ctx: click.Context, task_id: int, status: str,
+                           comment: str, agent: str, server: str) -> None:
+        """Update task status."""
+        from minion.team import _get_team_client
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(client._request("POST", f"/team/tasks/{task_id}/status",
+                                {"status": status, "comment": comment, "agent": agent}),
+                ctx.obj["human"], ctx.obj["compact"])
+
+    @task_group.command("comment")
+    @click.argument("task_id", type=int)
+    @click.option("--agent", "-a", default="", help="Author agent name")
+    @click.option("--body", "-b", required=True, help="Comment text")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.pass_context
+    def task_comment(ctx: click.Context, task_id: int, agent: str, body: str, server: str) -> None:
+        """Add a comment to a task."""
+        from minion.team import _get_team_client
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(client._request("POST", f"/team/tasks/{task_id}/comment",
+                                {"agent": agent, "body_text": body}),
+                ctx.obj["human"], ctx.obj["compact"])
+
     @team_group.command("poll")
     @click.option("--agent", "-a", required=True, help="Agent name to poll as")
     @click.option("--channel", "-ch", default="", help="Channel filter")

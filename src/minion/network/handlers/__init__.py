@@ -24,6 +24,7 @@ from .coordinator_status import register as register_coordinator_status
 from .bootstrap import register as register_bootstrap
 from .channels import register as register_channels
 from .maintenance import register as register_maintenance
+from .team_tasks import register as register_team_tasks
 
 __all__ = [
     "register_core",
@@ -42,6 +43,7 @@ __all__ = [
     "register_bootstrap",
     "register_channels",
     "register_maintenance",
+    "register_team_tasks",
 ]
 
 
@@ -66,3 +68,4 @@ def register_all(router) -> None:
     register_bootstrap(router)
     register_channels(router)
     register_maintenance(router)
+    register_team_tasks(router)
