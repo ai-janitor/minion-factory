@@ -64,6 +64,7 @@ minion stand-down --agent cloud
 | [Daemon](docs/daemon.md) | Boot sequence, HP tracking, compaction, fenix-down |
 | [Auth](docs/auth.md) | Agent classes, permissions, model whitelist |
 | [CLI Reference](docs/cli-reference.md) | All 48 commands — usage, options, examples |
+| [Coordinator](docs/coordinator.md) | Team hub setup, multi-machine coordination, auth, topology |
 
 ## Missions — Capability-Driven Team Composition
 
