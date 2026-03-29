@@ -114,6 +114,8 @@ def join(
     # Auto-save coordinator profile so subsequent commands just work
     _auto_save_profile(client)
 
+    from minion.team_identity import save_identity
+
     # Register on network tier (also auto-joins channel via project_path bridge)
     reg = client.register(
         name=agent,
@@ -161,6 +163,16 @@ def join(
             for m in members
         ],
     }
+
+    # Persist identity locally so subsequent commands auto-resolve agent/channel
+    save_identity(
+        coordinator_url=client.base_url,
+        channel=channel,
+        agent_name=agent,
+        agent_uuid=agent_uuid,
+        agent_class=agent_class,
+        project_path=project_path,
+    )
 
     # Include catch-up summary if there are unread messages
     if unread:
@@ -245,3 +257,33 @@ def channels(server_url: str = "") -> dict:
         return {"error": err}
 
     return client.list_channels()
+
+
+def coordinators() -> dict:
+    """List all coordinators this CLI has joined."""
+    from minion.team_identity import list_coordinators, list_identities
+    urls = list_coordinators()
+    identities = list_identities()
+    return {
+        "coordinators": [
+            {
+                "url": url,
+                "identities": [
+                    {
+                        "channel": i.get("channel"),
+                        "agent": i.get("agent_name"),
+                        "class": i.get("agent_class"),
+                        "uuid": i.get("agent_uuid"),
+                    }
+                    for i in identities if i.get("coordinator_url", "").rstrip("/") == url.rstrip("/")
+                ],
+            }
+            for url in urls
+        ],
+    }
+
+
+def identities() -> dict:
+    """List all saved team identities."""
+    from minion.team_identity import list_identities
+    return {"identities": list_identities()}

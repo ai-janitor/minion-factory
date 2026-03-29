@@ -154,3 +154,33 @@ def register_commands(cli: click.Group) -> None:
         from minion.team import channels
         result = channels(server_url=server)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    @team_group.command("coordinators")
+    @click.pass_context
+    def team_coordinators(ctx: click.Context) -> None:
+        """List all coordinators this CLI has joined.
+
+        \b
+        Shows coordinator URLs and the identities (channel/agent) joined on each.
+
+        \b
+        Examples:
+          minion team coordinators
+        """
+        from minion.team import coordinators
+        _output(coordinators(), ctx.obj["human"], ctx.obj["compact"])
+
+    @team_group.command("identities")
+    @click.pass_context
+    def team_identities(ctx: click.Context) -> None:
+        """List all saved team identities.
+
+        \b
+        Shows every coordinator/channel/agent combination this CLI has joined.
+
+        \b
+        Examples:
+          minion team identities
+        """
+        from minion.team import identities
+        _output(identities(), ctx.obj["human"], ctx.obj["compact"])
