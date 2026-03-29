@@ -55,10 +55,17 @@ minion team join --agent my-lead --class lead --model claude-sonnet-4-6
 **On a remote machine:**
 
 ```bash
-export MINION_NETWORK_URL=https://<coordinator-ip>:8377
-export MINION_CLUSTER_TOKEN=<the-token>
-minion team join --agent remote-lead --class lead --model gpt-5
+# 1. Save the coordinator profile (--insecure for self-signed TLS)
+minion api set-remote https://<coordinator-ip>:8377 --name hub --insecure
+
+# When prompted, enter the token from the coordinator machine:
+#   cat ~/.minion/.api-token   (on the coordinator)
+
+# 2. Join the team
+minion team join --agent remote-lead --class lead --model gpt-5 --server hub
 ```
+
+**Important:** Self-signed TLS coordinators require `--insecure` on `set-remote`, otherwise the client will fail with SSL verification errors. The token and insecure flag are saved in the profile and reused automatically.
 
 ### 4. Communicate
 
@@ -324,6 +331,55 @@ minion coordinator prune --message-days 14 --read-days 7
 ```
 
 Identity and channel membership are never pruned — only routine messages.
+
+## Team Tasks
+
+Lightweight coordinator-side work handoff. Not a replacement for repo-local backlog/task/DAG — just the shared cross-machine request/status layer.
+
+### Create a task
+
+```bash
+# --from is required (your registered agent name)
+minion team task create --from codex-lead --title "Fix inbox bug" --assign trashcan-lead --channel llama-metal
+
+# From a spec file (-f reads body, stores in coordinator DB)
+minion team task create --from codex-lead -t "DMG packaging" -f .work/reviews/spec.md -a trashcan-lead
+```
+
+### View tasks
+
+```bash
+minion team task list                              # all tasks
+minion team task list --status open                # filter by status
+minion team task list --assigned-to trashcan-lead  # filter by assignee
+minion team task show 1                            # detail + comments
+```
+
+### Update status
+
+```bash
+minion team task update-status 1 --status in_progress --agent trashcan-lead
+minion team task update-status 1 --status done --comment "Shipped in commit abc123" --agent trashcan-lead
+minion team task update-status 1 --status blocked --comment "Waiting on API fix" --agent trashcan-lead
+```
+
+Status values: `open` → `assigned` → `in_progress` → `blocked` → `done` / `canceled`
+
+### Comments
+
+```bash
+minion team task comment 1 --agent trashcan-lead --body "Halfway done, ETA 30 min"
+```
+
+Comments are append-only with agent/UUID provenance.
+
+### Workflow
+
+1. Lead creates task on coordinator with spec/body
+2. Agent sees it via `team task list`
+3. Agent works locally (backlog/DAG/code)
+4. Agent updates coordinator status: `in_progress` → `done`
+5. Lead sees completion
 
 ## Poll Semantics
 

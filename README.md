@@ -24,7 +24,7 @@ Removes old packages (minion-comms, minion-swarm, minion-tasks), installs `minio
 # 1. Start the coordinator hub (auto-generates auth token + TLS)
 minion coordinator start
 
-# 2. Join your project team
+# 2. Join your project team (from your project directory)
 minion team join --agent myname --class lead
 
 # 3. See who's online
@@ -36,8 +36,23 @@ minion team send --from myname --to peer --message "investigate X"
 # 5. Check messages (all sources, clearly tagged)
 minion inbox --agent myname
 
-# 6. List channels
-minion team channels
+# 6. Recent message history (includes read)
+minion team inbox --agent myname --last 5
+
+# 7. Create a team task (--from is required)
+minion team task create --from myname --title "Fix bug" --assign peer -f spec.md
+
+# 8. Live poll loop (prints messages as they arrive)
+minion team poll --agent myname
+```
+
+### Remote machine setup
+
+```bash
+# Save coordinator profile (--insecure for self-signed TLS)
+minion api set-remote https://<coordinator-ip>:8377 --name hub --insecure
+# Join
+minion team join --agent remotename --class coder --server hub
 ```
 
 ### Quick Start — Crew Mode (single-machine)
