@@ -242,19 +242,75 @@ def send(
 
 
 def inbox(
-    agent: str, project_dir: str = "", channel: str = "", server_url: str = "",
+    agent: str, project_dir: str = "", channel: str = "",
+    server_url: str = "", all_coordinators: bool = True,
 ) -> dict:
     """Check unread messages for an agent, optionally scoped to a channel.
 
-    Without --channel, returns ALL unread messages (including unchanneled ones
-    like those sent via api remote-send). Only pass channel when explicitly requested.
+    Without --channel, returns ALL unread messages (including unchanneled ones).
+    If all_coordinators=True and no server_url specified, aggregates across all
+    joined coordinators. Each message is tagged with coordinator/channel/sender.
     """
-    client, err = _get_team_client(server_url)
+    # If a specific server is given, just query that one
+    if server_url:
+        client, err = _get_team_client(server_url)
+        if err:
+            return {"error": err}
+        result = client.check_inbox(agent, channel=channel)
+        # Tag messages with server context
+        for msg in result.get("messages", []):
+            msg["coordinator"] = client.base_url
+        return result
+
+    # Aggregate across all joined coordinators
+    if all_coordinators:
+        from minion.team_identity import list_identities
+        from minion.network.client import NetworkClient
+        from minion.defaults import resolve_network_insecure
+
+        identities = list_identities()
+        # Deduplicate coordinator URLs
+        seen_urls = set()
+        coordinator_urls = []
+        for identity in identities:
+            url = identity.get("coordinator_url", "").rstrip("/")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                coordinator_urls.append(url)
+
+        if not coordinator_urls:
+            # No saved identities — fall back to single-server path
+            client, err = _get_team_client()
+            if err:
+                return {"error": err}
+            return client.check_inbox(agent, channel=channel)
+
+        all_messages = []
+        errors = []
+        for url in coordinator_urls:
+            try:
+                token = _read_token()
+                insecure = resolve_network_insecure() or url.startswith("https://0.0.0.0") or url.startswith("https://127.0.0.1")
+                client = NetworkClient(base_url=url, token=token, insecure=insecure)
+                result = client.check_inbox(agent, channel=channel)
+                if "error" in result:
+                    errors.append({"coordinator": url, "error": result["error"]})
+                else:
+                    for msg in result.get("messages", []):
+                        msg["coordinator"] = url
+                    all_messages.extend(result.get("messages", []))
+            except Exception as e:
+                errors.append({"coordinator": url, "error": str(e)})
+
+        response: dict = {"messages": all_messages, "agent": agent}
+        if errors:
+            response["errors"] = errors
+        return response
+
+    # Single coordinator fallback
+    client, err = _get_team_client()
     if err:
         return {"error": err}
-
-    # Don't auto-derive channel — return all unread by default.
-    # Only scope to channel when explicitly requested via --channel.
     return client.check_inbox(agent, channel=channel)
 
 

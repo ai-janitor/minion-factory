@@ -120,19 +120,21 @@ def register_commands(cli: click.Group) -> None:
     @team_group.command("inbox")
     @click.option("--agent", "-a", required=True, help="Agent name to check inbox for")
     @click.option("--channel", "-ch", default="", help="Channel name (default: all channels)")
-    @click.option("--server", "-s", default="", help="API server URL")
+    @click.option("--server", "-s", default="", help="API server URL (default: all joined coordinators)")
     @click.pass_context
     def team_inbox(ctx: click.Context, agent: str, channel: str, server: str) -> None:
         """Check unread messages for an agent.
 
         \b
-        Without --channel, returns all unread messages across all channels.
-        With --channel, scopes to messages in that channel only.
+        By default, aggregates unread messages across ALL joined coordinators.
+        Each message is tagged with its coordinator URL.
+        Use --server to scope to one coordinator, --channel for one channel.
 
         \b
         Examples:
           minion team inbox --agent trashcan-lead
           minion team inbox -a codex-lead --channel llama-metal
+          minion team inbox -a me --server https://192.168.0.31:8377
         """
         from minion.team import inbox
         result = inbox(agent=agent, channel=channel, server_url=server)
