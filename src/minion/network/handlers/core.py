@@ -302,8 +302,9 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
             if messages and not peek:
                 ids = [m["id"] for m in messages]
                 conn.execute(
-                    f"UPDATE messages SET read_flag = 1 WHERE id IN ({','.join('?' * len(ids))})",
-                    ids,
+                    f"UPDATE messages SET read_flag = 1, read_by_agent = ?, read_at = ?, read_via = ? "
+                    f"WHERE id IN ({','.join('?' * len(ids))})",
+                    [agent, now, "inbox_fetch"] + ids,
                 )
             # Update last_seen for all agents matching this name (composite PK)
             conn.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent))
@@ -316,8 +317,9 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
 def handle_mark_read(handler, db_path: str, agent: str = "", **kwargs) -> None:
     """POST /inbox/{agent}/mark-read — explicitly mark message IDs as read.
 
-    Body: {"ids": [1, 2, 3]}
+    Body: {"ids": [1, 2, 3], "read_via": "team_inbox"}
     Use after successfully receiving messages via ?peek=true.
+    Stamps read provenance: who read it, when, and via what path.
     """
     body = handler._parse_json_body()
     if not body:
@@ -327,17 +329,21 @@ def handle_mark_read(handler, db_path: str, agent: str = "", **kwargs) -> None:
         handler._json_response(400, {"error": "ids must be a non-empty list of integers"})
         return
 
+    read_via = body.get("read_via", "mark_read")
+    now = datetime.now().isoformat()
+
     with _DB_LOCK:
         conn = _get_server_db(db_path)
         try:
             conn.execute(
-                f"UPDATE messages SET read_flag = 1 WHERE to_agent = ? AND id IN ({','.join('?' * len(ids))})",
-                [agent] + ids,
+                f"UPDATE messages SET read_flag = 1, read_by_agent = ?, read_at = ?, read_via = ? "
+                f"WHERE to_agent = ? AND id IN ({','.join('?' * len(ids))})",
+                [agent, now, read_via, agent] + ids,
             )
             conn.commit()
         finally:
             conn.close()
-    handler._json_response(200, {"status": "marked_read", "agent": agent, "count": len(ids)})
+    handler._json_response(200, {"status": "marked_read", "agent": agent, "count": len(ids), "read_via": read_via})
 
 
 def handle_register(handler, db_path: str, **kwargs) -> None:

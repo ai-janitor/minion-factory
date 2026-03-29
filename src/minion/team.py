@@ -317,7 +317,7 @@ def inbox(
         if messages:
             ids = [m["id"] for m in messages if isinstance(m.get("id"), int)]
             if ids:
-                client.mark_read(agent, ids)
+                client.mark_read(agent, ids, read_via="team_inbox")
         for msg in messages:
             msg["coordinator"] = client.base_url
         return result
@@ -386,7 +386,7 @@ def inbox(
                     if msgs:
                         ids = [m["id"] for m in msgs if isinstance(m.get("id"), int)]
                         if ids:
-                            client.mark_read(agent, ids)
+                            client.mark_read(agent, ids, read_via="aggregate_inbox")
                     for msg in msgs:
                         msg["coordinator"] = url
                     all_messages.extend(msgs)

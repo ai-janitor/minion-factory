@@ -288,7 +288,7 @@ def register_commands(cli: click.Group) -> None:
         if messages:
             ids = [m["id"] for m in messages if isinstance(m.get("id"), int)]
             if ids:
-                client.mark_read(agent, ids)
+                client.mark_read(agent, ids, read_via="api_remote_inbox")
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-projects")

@@ -73,7 +73,11 @@ CREATE TABLE IF NOT EXISTS messages (
     content         TEXT NOT NULL,
     timestamp       TEXT NOT NULL,
     read_flag       INTEGER DEFAULT 0,
-    channel_id      INTEGER REFERENCES channels(id)  -- NULL = direct message
+    channel_id      INTEGER REFERENCES channels(id),  -- NULL = direct message
+    read_by_agent   TEXT,          -- who marked it read (agent name)
+    read_by_uuid    TEXT,          -- who marked it read (agent UUID)
+    read_at         TEXT,          -- when it was marked read
+    read_via        TEXT           -- how it was read (team_inbox, aggregate_inbox, api_remote_inbox, mark_read)
 );
 
 CREATE INDEX IF NOT EXISTS idx_msg_to_unread ON messages(to_agent, read_flag);
@@ -377,9 +381,9 @@ def migrate_channel_git(db_path: str) -> None:
 
 
 def migrate_message_uuids(db_path: str) -> None:
-    """Add from_agent_uuid and to_agent_uuid columns to messages table (idempotent)."""
+    """Add UUID and read-provenance columns to messages table (idempotent)."""
     conn = _connect(db_path)
-    for col in ("from_agent_uuid", "to_agent_uuid"):
+    for col in ("from_agent_uuid", "to_agent_uuid", "read_by_agent", "read_by_uuid", "read_at", "read_via"):
         try:
             conn.execute(f"ALTER TABLE messages ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:

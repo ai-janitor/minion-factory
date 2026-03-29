@@ -108,9 +108,14 @@ class NetworkClient:
             path += "?" + "&".join(params)
         return self._request("GET", path)
 
-    def mark_read(self, agent: str, ids: list[int]) -> dict:
-        """Explicitly mark message IDs as read. Use after peek=True fetch."""
-        return self._request("POST", f"/inbox/{agent}/mark-read", {"ids": ids})
+    def mark_read(self, agent: str, ids: list[int], read_via: str = "mark_read") -> dict:
+        """Explicitly mark message IDs as read. Use after peek=True fetch.
+
+        read_via: provenance tag — team_inbox, aggregate_inbox, api_remote_inbox, etc.
+        """
+        return self._request("POST", f"/inbox/{agent}/mark-read", {
+            "ids": ids, "read_via": read_via,
+        })
 
     def who(self) -> dict:
         """List all agents registered on the network tier."""
