@@ -162,9 +162,41 @@ def handle_coordinator_status(handler, db_path: str, **kwargs) -> None:
         finally:
             conn.close()
 
-    # --- Projects ---
+    # --- Projects with task/backlog summaries ---
     projects = discover_projects(db_path, _DB_LOCK)
     project_names = [p["name"] for p in projects]
+    project_summaries = []
+    for proj in projects:
+        summary = {"name": proj["name"]}
+        pconn = get_project_db(proj["path"])
+        if pconn:
+            try:
+                # Task counts by status
+                task_counts = {}
+                for row in pconn.execute("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status").fetchall():
+                    task_counts[row["status"]] = row["cnt"]
+                summary["tasks"] = task_counts
+
+                # Backlog counts by status
+                backlog_counts = {}
+                try:
+                    for row in pconn.execute("SELECT status, COUNT(*) as cnt FROM backlog GROUP BY status").fetchall():
+                        backlog_counts[row["status"]] = row["cnt"]
+                except sqlite3.OperationalError:
+                    pass
+                summary["backlog"] = backlog_counts
+
+                # Requirement counts by stage
+                req_counts = {}
+                try:
+                    for row in pconn.execute("SELECT stage, COUNT(*) as cnt FROM requirements GROUP BY stage").fetchall():
+                        req_counts[row["stage"]] = row["cnt"]
+                except sqlite3.OperationalError:
+                    pass
+                summary["requirements"] = req_counts
+            except (sqlite3.OperationalError, AttributeError) as e:
+                logger.warning("coordinator_status: project summary failed for %s: %s", proj["name"], e)
+        project_summaries.append(summary)
 
     # --- Recent alerts (top 5 from project DBs) ---
     alerts = []
@@ -208,5 +240,5 @@ def handle_coordinator_status(handler, db_path: str, **kwargs) -> None:
         "messages": {"total_unread": total_unread, "unread_by_agent": unread_by_agent},
         "alerts": {"total": len(alerts), "items": alerts},
         "channels": {"count": len(channels_list), "items": channels_list},
-        "projects": {"count": len(project_names), "names": project_names},
+        "projects": {"count": len(project_names), "names": project_names, "summaries": project_summaries},
     })

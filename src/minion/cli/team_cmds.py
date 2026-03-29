@@ -247,6 +247,63 @@ def register_commands(cli: click.Group) -> None:
         from minion.team_poll import list_pollers
         _output({"pollers": list_pollers()}, ctx.obj["human"], ctx.obj["compact"])
 
+    @team_group.command("backlog")
+    @click.option("--channel", "-ch", default="", help="Channel/project name (default: from cwd)")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.option("--status", default=None, help="Filter by status (open, promoted, killed, deferred)")
+    @click.option("--priority", default=None, help="Filter by priority (high, medium, low)")
+    @click.pass_context
+    def team_backlog(ctx: click.Context, channel: str, server: str,
+                     status: str | None, priority: str | None) -> None:
+        """View backlog for a channel/project.
+
+        \b
+        Examples:
+          minion team backlog
+          minion team backlog --channel llama-metal --status open
+        """
+        from minion.team import _get_team_client, _channel_name
+        channel = channel or _channel_name(ctx.obj.get("project_dir") or "")
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        kwargs = {}
+        if status:
+            kwargs["status"] = status
+        if priority:
+            kwargs["priority"] = priority
+        _output(client.project_backlog(channel, **kwargs), ctx.obj["human"], ctx.obj["compact"])
+
+    @team_group.command("tasks")
+    @click.option("--channel", "-ch", default="", help="Channel/project name (default: from cwd)")
+    @click.option("--server", "-s", default="", help="Server alias or URL")
+    @click.option("--status", default=None, help="Filter by status (open, assigned, in_progress, closed)")
+    @click.option("--assigned-to", default=None, help="Filter by assignee")
+    @click.pass_context
+    def team_tasks(ctx: click.Context, channel: str, server: str,
+                   status: str | None, assigned_to: str | None) -> None:
+        """View tasks for a channel/project.
+
+        \b
+        Examples:
+          minion team tasks
+          minion team tasks --channel llama-metal --status open
+          minion team tasks --assigned-to metal-coder
+        """
+        from minion.team import _get_team_client, _channel_name
+        channel = channel or _channel_name(ctx.obj.get("project_dir") or "")
+        client, err = _get_team_client(server)
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        kwargs = {}
+        if status:
+            kwargs["status"] = status
+        if assigned_to:
+            kwargs["assigned_to"] = assigned_to
+        _output(client.project_tasks(channel, **kwargs), ctx.obj["human"], ctx.obj["compact"])
+
     @team_group.command("coordinators")
     @click.pass_context
     def team_coordinators(ctx: click.Context) -> None:
