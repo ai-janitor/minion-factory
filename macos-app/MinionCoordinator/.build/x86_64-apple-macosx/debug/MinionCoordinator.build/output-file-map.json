@@ -1,0 +1,41 @@
+{
+  "": {
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/master.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/CoordinatorClient.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorClient.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorClient.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorClient~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorClient.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/CoordinatorViewModel.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorViewModel.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorViewModel.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorViewModel~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/CoordinatorViewModel.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/MinionCoordinatorApp.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/MinionCoordinatorApp.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/MinionCoordinatorApp.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/MinionCoordinatorApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/MinionCoordinatorApp.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/Models.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/Models.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/Models.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/Models~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/Models.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/SettingsView.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/SettingsView.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/SettingsView.swiftdeps"
+  },
+  "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/MinionCoordinator/StatusMenuView.swift": {
+    "dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/StatusMenuView.d",
+    "object": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/StatusMenuView.swift.o",
+    "swiftmodule": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/StatusMenuView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hung/projects/minion-factory/macos-app/MinionCoordinator/.build/x86_64-apple-macosx/debug/MinionCoordinator.build/StatusMenuView.swiftdeps"
+  }
+}
