@@ -19,7 +19,7 @@ def register_commands(cli: click.Group) -> None:
     @cli.group("comms")
     @click.pass_context
     def comms_group(ctx: click.Context) -> None:
-        """Messaging. Use 'send local' or 'send global' to be explicit about routing."""
+        """Local project messaging (advanced). For cross-machine team work, use 'team send' instead."""
         pass
 
     @comms_group.group("send")

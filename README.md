@@ -18,7 +18,29 @@ curl -sSL https://raw.githubusercontent.com/ai-janitor/minion-factory/main/scrip
 
 Removes old packages (minion-comms, minion-swarm, minion-tasks), installs `minion` CLI via uv/pipx/pip cascade, and deploys shared daemon contracts to `~/.minion_work/docs/`.
 
-## Quick Start
+## Quick Start — Team Mode (recommended)
+
+```bash
+# 1. Start the coordinator hub (auto-generates auth token + TLS)
+minion coordinator start
+
+# 2. Join your project team
+minion team join --agent myname --class lead
+
+# 3. See who's online
+minion team who
+
+# 4. Send a message
+minion team send --from myname --to peer --message "investigate X"
+
+# 5. Check messages (all sources, clearly tagged)
+minion inbox --agent myname
+
+# 6. List channels
+minion team channels
+```
+
+### Quick Start — Crew Mode (single-machine)
 
 ```bash
 # Spawn a crew in your project directory

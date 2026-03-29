@@ -71,8 +71,14 @@ minion team who
 # Send a message
 minion team send --from my-lead --to remote-lead --message "status?"
 
-# Check inbox
+# Check team inbox (coordinator messages only)
 minion team inbox --agent my-lead
+
+# Check ALL messages (local + all coordinators, tagged)
+minion inbox --agent my-lead
+
+# List channels
+minion team channels
 ```
 
 ### 5. Monitor
@@ -93,15 +99,36 @@ minion coordinator snapshot
 | `minion coordinator status` | Check if running, PID, port, health |
 | `minion coordinator restart` | Stop + start (reuses saved token) |
 | `minion coordinator snapshot` | Consolidated status snapshot |
+| `minion coordinator stats` | DB statistics (message/agent/channel counts) |
+| `minion coordinator prune` | Retention pruning (default: 7d messages, 3d read) |
 
 ### Team Operations
 
 | Command | Description |
 |---------|-------------|
-| `minion team join -a NAME -c CLASS` | Register on the network tier |
-| `minion team who` | List all agents for this project |
-| `minion team send -f FROM -t TO -m MSG` | Send a message (network tier) |
-| `minion team inbox -a NAME` | Check unread messages |
+| `minion team join -a NAME -c CLASS` | Join a channel on the network tier |
+| `minion team who` | List channel members across all machines |
+| `minion team send -f FROM -t TO -m MSG` | Send a message (channel-scoped) |
+| `minion team inbox -a NAME` | Coordinator/team messages only |
+| `minion team channels` | List all channels |
+| `minion team coordinators` | List all joined coordinators |
+| `minion team identities` | List all saved identities |
+
+### Aggregate Inbox
+
+| Command | Description |
+|---------|-------------|
+| `minion inbox -a NAME` | All sources (local + coordinators), tagged |
+| `minion inbox -a NAME --channel CH` | Filter by channel |
+| `minion inbox -a NAME --server ALIAS` | Filter by coordinator |
+
+### Command Scopes
+
+| Scope | Commands | What it reads |
+|-------|----------|---------------|
+| Team (coordinator) | `team send/inbox/who` | Network API tier |
+| Local (project) | `comms send/check-inbox` | Local `.work/minion.db` |
+| Aggregate | `inbox` | Both, tagged with source |
 
 ## Auth & Token Handling
 

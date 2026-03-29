@@ -90,17 +90,20 @@ def cli(ctx: click.Context, use_json: bool, human: bool, compact: bool, project_
     """minion — multi-agent coordination CLI.
 
     \b
-    Quick start:
-      1. Register:  minion agent register --name <you> --class <role>
-      2. Poll:      minion poll --agent <you>  (REQUIRED — no poll = no messages)
-      3. Send:      minion comms send local  --from <you> --to <target> --message '...'
-                    minion comms send global --from <you> --to <target> --message '...'
+    Quick start (team mode — recommended):
+      1. Hub:    minion coordinator start
+      2. Join:   minion team join --agent <you> --class <role>
+      3. Who:    minion team who
+      4. Send:   minion team send --from <you> --to <target> --message '...'
+      5. Inbox:  minion inbox --agent <you>
 
     \b
-    Communication:
-      LOCAL  (comms send local)  — same-repo agents. Messages in .work/minion.db.
-      GLOBAL (comms send global) — cross-repo agents. Routes via ~/.minion/coordinator.db.
-      Poll checks BOTH automatically.
+    Command scopes:
+      team          — coordinator/network-first team collaboration
+      coordinator   — hub operations (start/stop/status/snapshot)
+      inbox         — aggregate inbox (all sources, tagged)
+      comms         — local project DB only (advanced/legacy)
+      api remote-*  — low-level API client (debug/automation)
 
     \b
     Output (default: human-readable text):
