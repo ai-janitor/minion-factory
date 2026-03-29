@@ -40,8 +40,16 @@ def _get_team_client(server_url: str = ""):
             url = st.get("url", "https://127.0.0.1:8377")
             local_server = True
 
+    # Fallback: check configured remote profiles (set via `minion api set-remote`)
     if not url:
-        return None, "No API server found. Start one with: minion api start"
+        from minion.api.remotes import get_remote_client
+        client, err = get_remote_client()
+        if client:
+            return client, None
+
+    if not url:
+        return None, "No API server found. Start one with: minion coordinator start\n" \
+            "Or configure a remote: minion api set-remote https://host:8377"
 
     token = _read_token()
     # Local server uses self-signed TLS cert — always skip verification
