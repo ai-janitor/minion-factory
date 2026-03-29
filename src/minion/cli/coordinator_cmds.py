@@ -114,6 +114,49 @@ def register_commands(cli: click.Group) -> None:
         from minion.api.daemon import restart
         _output(restart(port=port), ctx.obj["human"], ctx.obj["compact"])
 
+    @coordinator_group.command("prune")
+    @click.option("--message-days", default=7, type=int, help="Delete messages older than N days (default: 7)")
+    @click.option("--read-days", default=3, type=int, help="Delete read messages older than N days (default: 3)")
+    @click.pass_context
+    def coord_prune(ctx: click.Context, message_days: int, read_days: int) -> None:
+        """Prune old messages and routine data from the coordinator DB.
+
+        \b
+        Retention defaults: 7 days for all messages, 3 days for read messages.
+        Identity and channel membership are never pruned.
+
+        \b
+        Examples:
+          minion coordinator prune
+          minion coordinator prune --message-days 14 --read-days 7
+        """
+        from minion.team import _get_team_client
+        client, err = _get_team_client()
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        result = client._request("POST", "/maintenance/prune", {
+            "message_days": message_days,
+            "read_message_days": read_days,
+        })
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
+
+    @coordinator_group.command("stats")
+    @click.pass_context
+    def coord_stats(ctx: click.Context) -> None:
+        """Show coordinator DB statistics.
+
+        \b
+        Examples:
+          minion coordinator stats
+        """
+        from minion.team import _get_team_client
+        client, err = _get_team_client()
+        if err:
+            _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
+            return
+        _output(client._request("GET", "/maintenance/stats"), ctx.obj["human"], ctx.obj["compact"])
+
     @coordinator_group.command("snapshot")
     @click.option("--server", "-s", default="", help="API server URL (auto-detected if omitted)")
     @click.pass_context
