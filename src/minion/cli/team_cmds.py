@@ -121,23 +121,30 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--agent", "-a", required=True, help="Agent name to check inbox for")
     @click.option("--channel", "-ch", default="", help="Channel name (default: all channels)")
     @click.option("--server", "-s", default="", help="API server URL (default: all joined coordinators)")
+    @click.option("--last", "-n", "last_n", default=None, type=int, help="Show last N messages (includes read)")
+    @click.option("--include-read", is_flag=True, help="Include already-read messages")
     @click.pass_context
-    def team_inbox(ctx: click.Context, agent: str, channel: str, server: str) -> None:
-        """Check unread messages for an agent.
+    def team_inbox(ctx: click.Context, agent: str, channel: str, server: str,
+                   last_n: int | None, include_read: bool) -> None:
+        """Check messages for an agent.
 
         \b
-        By default, aggregates unread messages across ALL joined coordinators.
-        Each message is tagged with its coordinator URL.
-        Use --server to scope to one coordinator, --channel for one channel.
+        Default: unread messages only.
+        --last N: show most recent N messages (including read).
+        --include-read: include already-read messages.
+
+        \b
+        Each message shows read provenance (read_by_agent, read_at, read_via).
 
         \b
         Examples:
           minion team inbox --agent trashcan-lead
-          minion team inbox -a codex-lead --channel llama-metal
-          minion team inbox -a me --server https://192.168.0.31:8377
+          minion team inbox -a codex-lead --last 5
+          minion team inbox -a me --include-read --channel llama-metal
         """
         from minion.team import inbox
-        result = inbox(agent=agent, channel=channel, server_url=server)
+        result = inbox(agent=agent, channel=channel, server_url=server,
+                       last_n=last_n, include_read=include_read)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @team_group.command("channels")

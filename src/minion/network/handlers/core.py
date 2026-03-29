@@ -273,17 +273,40 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
         handler._json_response(400, {"error": "Agent name required: /inbox/{name}"})
         return
 
-    # Parse query params: ?channel=, ?peek=true (don't mark read)
+    # Parse query params: ?channel=, ?peek=true, ?last=N, ?include_read=true
     parsed_url = urlparse(handler.path)
     inbox_params = parse_qs(parsed_url.query)
     channel_filter = inbox_params.get("channel", [None])[0]
     peek = inbox_params.get("peek", [""])[0].lower() == "true"
+    last_n = inbox_params.get("last", [None])[0]
+    include_read = inbox_params.get("include_read", [""])[0].lower() == "true"
 
     now = datetime.now().isoformat()
     with _DB_LOCK:
         conn = _get_server_db(db_path)
         try:
-            if channel_filter:
+            # Build query based on filters
+            if last_n or include_read:
+                # Recent history mode — show last N messages (including read)
+                limit = int(last_n) if last_n else 20
+                read_clause = "" if include_read or last_n else "AND read_flag = 0"
+                if channel_filter:
+                    ch_row = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_filter,)).fetchone()
+                    if ch_row:
+                        rows = conn.execute(
+                            f"SELECT * FROM messages WHERE to_agent = ? {read_clause} AND channel_id = ? ORDER BY id DESC LIMIT ?",
+                            (agent, ch_row[0], limit),
+                        ).fetchall()
+                    else:
+                        rows = []
+                else:
+                    rows = conn.execute(
+                        f"SELECT * FROM messages WHERE to_agent = ? {read_clause} ORDER BY id DESC LIMIT ?",
+                        (agent, limit),
+                    ).fetchall()
+                # Reverse to chronological order
+                rows = list(reversed(rows))
+            elif channel_filter:
                 ch_row = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_filter,)).fetchone()
                 if ch_row:
                     rows = conn.execute(

@@ -299,6 +299,7 @@ def send(
 def inbox(
     agent: str, project_dir: str = "", channel: str = "",
     server_url: str = "", all_coordinators: bool = True,
+    last_n: int | None = None, include_read: bool = False,
 ) -> dict:
     """Check unread messages for an agent, optionally scoped to a channel.
 
@@ -311,6 +312,14 @@ def inbox(
         client, err = _get_team_client(server_url)
         if err:
             return {"error": err}
+        # History mode (--last N) uses peek without mark-read
+        if last_n is not None or include_read:
+            result = client.check_inbox(agent, channel=channel, peek=True,
+                                        last=last_n, include_read=include_read)
+            for msg in result.get("messages", []):
+                msg["coordinator"] = client.base_url
+            return result
+
         # Two-step safe delivery: peek first, then mark read after successful fetch
         result = client.check_inbox(agent, channel=channel, peek=True)
         messages = result.get("messages", [])

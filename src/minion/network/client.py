@@ -92,17 +92,23 @@ class NetworkClient:
             body["channel"] = channel
         return self._request("POST", "/send", body)
 
-    def check_inbox(self, agent: str, channel: str = "", peek: bool = False) -> dict:
-        """Fetch unread messages from the network tier. Optional channel filter.
+    def check_inbox(self, agent: str, channel: str = "", peek: bool = False,
+                    last: int | None = None, include_read: bool = False) -> dict:
+        """Fetch messages from the network tier.
 
         peek=True: non-destructive fetch (messages stay unread).
-        peek=False (default): marks messages as read on fetch.
+        last=N: show most recent N messages (includes read by default).
+        include_read=True: include already-read messages.
         """
         params = []
         if channel:
             params.append(f"channel={channel}")
         if peek:
             params.append("peek=true")
+        if last is not None:
+            params.append(f"last={last}")
+        if include_read:
+            params.append("include_read=true")
         path = f"/inbox/{agent}"
         if params:
             path += "?" + "&".join(params)
