@@ -62,6 +62,27 @@ def _machine_id() -> str:
     return socket.gethostname()
 
 
+def _auto_save_profile(client) -> None:
+    """Auto-save the coordinator URL as a remote profile so subsequent
+    team commands work without re-specifying the server URL.
+
+    Only saves if no default remote profile exists yet.
+    """
+    try:
+        from minion.api.remotes import get_remote, save_remote
+        existing = get_remote()
+        if existing:
+            return  # already have a default profile, don't overwrite
+
+        url = client.base_url
+        token = client.token
+        insecure = client._insecure
+        if url:
+            save_remote(name="default", url=url, token=token, insecure=insecure)
+    except Exception:
+        pass  # non-fatal — profile save is best-effort
+
+
 def _channel_name(project_dir: str) -> str:
     """Derive channel name from the last path component of the project dir."""
     return os.path.basename(os.path.abspath(project_dir))
@@ -90,6 +111,9 @@ def join(
     if err:
         return {"error": err}
 
+    # Auto-save coordinator profile so subsequent commands just work
+    _auto_save_profile(client)
+
     # Register on network tier (also auto-joins channel via project_path bridge)
     reg = client.register(
         name=agent,
@@ -109,10 +133,14 @@ def join(
     members_result = client.channel_members(channel)
     members = members_result.get("members", [])
 
+    # Catch-up: fetch unread messages so the rejoining agent sees what they missed
+    catchup = client.check_inbox(agent)
+    unread = catchup.get("messages", [])
+
     # Extract stable UUID from registration response
     agent_uuid = reg.get("agent_uuid", "")
 
-    return {
+    result = {
         "status": "joined",
         "agent": agent,
         "agent_uuid": agent_uuid,
@@ -133,6 +161,22 @@ def join(
             for m in members
         ],
     }
+
+    # Include catch-up summary if there are unread messages
+    if unread:
+        result["catchup"] = {
+            "unread_count": len(unread),
+            "messages": [
+                {
+                    "from": m.get("from_agent", ""),
+                    "content": m.get("content", "")[:200],  # truncate for summary
+                    "timestamp": m.get("timestamp", ""),
+                }
+                for m in unread[:10]  # cap at 10 most recent
+            ],
+        }
+
+    return result
 
 
 def who(project_dir: str = "", channel: str = "", server_url: str = "") -> dict:
