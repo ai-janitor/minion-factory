@@ -1,14 +1,15 @@
 """Team mode — network-first multi-machine team coordination.
 
 Treats the network API tier as the source of truth for team membership,
-messaging, and roster. Eliminates the local-vs-global-vs-API confusion
-by routing everything through one project-scoped team layer.
+messaging, and roster. Uses first-class channels as the collaboration scope.
+Eliminates the local-vs-global-vs-API confusion by routing everything
+through one channel-scoped team layer.
 
 Purpose: Team mode — network-first multi-machine team coordination.
 Rationale: Extracted into own module to provide unified team UX over the
   existing local/global/network tiers.
-Responsibility: team join, team who, team send, team inbox. NOT responsible
-  for local DB comms, daemon lifecycle, or crew YAML parsing."""
+Responsibility: team join, team who, team send, team inbox, team channels.
+  NOT responsible for local DB comms, daemon lifecycle, or crew YAML parsing."""
 
 from __future__ import annotations
 
@@ -53,8 +54,8 @@ def _machine_id() -> str:
     return socket.gethostname()
 
 
-def _project_name(project_dir: str) -> str:
-    """Derive project name from the last path component."""
+def _channel_name(project_dir: str) -> str:
+    """Derive channel name from the last path component of the project dir."""
     return os.path.basename(os.path.abspath(project_dir))
 
 
@@ -63,22 +64,25 @@ def join(
     agent_class: str = "coder",
     model: str = "",
     project_dir: str = "",
+    channel: str = "",
     server_url: str = "",
 ) -> dict:
-    """Join a team — register on the network tier and verify connectivity.
+    """Join a team — register on the network tier and join a channel.
 
     1. Ensure API server is reachable
     2. Register agent with machine_id, project_path, class, model
-    3. Return roster
+    3. Explicitly join the channel
+    4. Return channel roster
     """
     project_dir = project_dir or os.getcwd()
     project_path = os.path.abspath(project_dir)
+    channel = channel or _channel_name(project_dir)
 
     client, err = _get_team_client(server_url)
     if err:
         return {"error": err}
 
-    # Register on network tier
+    # Register on network tier (also auto-joins channel via project_path bridge)
     reg = client.register(
         name=agent,
         agent_class=agent_class,
@@ -89,15 +93,13 @@ def join(
     if "error" in reg:
         return reg
 
-    # Fetch current roster for this project
-    project = _project_name(project_dir)
-    who = client.who()
-    agents = who.get("agents", [])
-    # Filter to same project
-    team = [
-        a for a in agents
-        if _project_name(a.get("project_path", "")) == project
-    ]
+    # Explicitly join channel (canonical path, idempotent)
+    role = "lead" if agent_class == "lead" else "member"
+    client.join_channel(channel=channel, agent=agent, machine_id=_machine_id(), role=role)
+
+    # Fetch channel roster
+    members_result = client.channel_members(channel)
+    members = members_result.get("members", [])
 
     return {
         "status": "joined",
@@ -105,69 +107,85 @@ def join(
         "class": agent_class,
         "model": model,
         "machine": _machine_id(),
-        "project": project,
+        "channel": channel,
         "project_path": project_path,
-        "team_size": len(team),
+        "team_size": len(members),
         "roster": [
             {
-                "name": a.get("name"),
-                "machine": a.get("machine_id", ""),
-                "class": a.get("agent_class", ""),
-                "presence": a.get("presence", "unknown"),
+                "name": m.get("name"),
+                "machine": m.get("machine", ""),
+                "class": m.get("class", ""),
+                "role": m.get("role", ""),
+                "presence": m.get("presence", "unknown"),
             }
-            for a in team
+            for m in members
         ],
     }
 
 
-def who(project_dir: str = "", server_url: str = "") -> dict:
-    """List all team members for a project across all machines."""
+def who(project_dir: str = "", channel: str = "", server_url: str = "") -> dict:
+    """List all team members for a channel across all machines."""
     project_dir = project_dir or os.getcwd()
-    project = _project_name(project_dir)
+    channel = channel or _channel_name(project_dir)
 
     client, err = _get_team_client(server_url)
     if err:
         return {"error": err}
 
-    result = client.who()
+    result = client.channel_members(channel)
     if "error" in result:
         return result
 
-    agents = result.get("agents", [])
-    team = [
-        a for a in agents
-        if _project_name(a.get("project_path", "")) == project
-    ]
-
+    members = result.get("members", [])
     return {
-        "project": project,
+        "channel": channel,
         "agents": [
             {
-                "name": a.get("name"),
-                "machine": a.get("machine_id", ""),
-                "class": a.get("agent_class", ""),
-                "model": a.get("model", ""),
-                "presence": a.get("presence", "unknown"),
-                "availability": a.get("availability", "unknown"),
+                "name": m.get("name"),
+                "machine": m.get("machine", ""),
+                "class": m.get("class", ""),
+                "model": m.get("model", ""),
+                "role": m.get("role", ""),
+                "presence": m.get("presence", "unknown"),
             }
-            for a in team
+            for m in members
         ],
     }
 
 
-def send(from_agent: str, to_agent: str, message: str, server_url: str = "") -> dict:
-    """Send a message via the network tier. No local/global distinction."""
+def send(
+    from_agent: str, to_agent: str, message: str,
+    project_dir: str = "", channel: str = "", server_url: str = "",
+) -> dict:
+    """Send a message via the network tier, scoped to a channel."""
+    project_dir = project_dir or os.getcwd()
+    channel = channel or _channel_name(project_dir)
+
     client, err = _get_team_client(server_url)
     if err:
         return {"error": err}
 
-    return client.send(from_agent, to_agent, message)
+    return client.send(from_agent, to_agent, message, channel=channel)
 
 
-def inbox(agent: str, server_url: str = "") -> dict:
-    """Check unread messages for an agent on the network tier."""
+def inbox(
+    agent: str, project_dir: str = "", channel: str = "", server_url: str = "",
+) -> dict:
+    """Check unread messages for an agent, optionally scoped to a channel."""
     client, err = _get_team_client(server_url)
     if err:
         return {"error": err}
 
-    return client.check_inbox(agent)
+    if not channel and project_dir:
+        channel = _channel_name(project_dir)
+
+    return client.check_inbox(agent, channel=channel)
+
+
+def channels(server_url: str = "") -> dict:
+    """List all available channels on the network tier."""
+    client, err = _get_team_client(server_url)
+    if err:
+        return {"error": err}
+
+    return client.list_channels()

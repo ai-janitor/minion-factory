@@ -82,17 +82,19 @@ class NetworkClient:
         }
         return self._request("POST", "/register", body)
 
-    def send(self, from_agent: str, to_agent: str, message: str) -> dict:
-        """Send a message via the network tier."""
-        return self._request("POST", "/send", {
-            "from": from_agent,
-            "to": to_agent,
-            "message": message,
-        })
+    def send(self, from_agent: str, to_agent: str, message: str, channel: str = "") -> dict:
+        """Send a message via the network tier. Optional channel scopes the message."""
+        body: dict = {"from": from_agent, "to": to_agent, "message": message}
+        if channel:
+            body["channel"] = channel
+        return self._request("POST", "/send", body)
 
-    def check_inbox(self, agent: str) -> dict:
-        """Fetch unread messages from the network tier."""
-        return self._request("GET", f"/inbox/{agent}")
+    def check_inbox(self, agent: str, channel: str = "") -> dict:
+        """Fetch unread messages from the network tier. Optional channel filter."""
+        path = f"/inbox/{agent}"
+        if channel:
+            path += f"?channel={channel}"
+        return self._request("GET", path)
 
     def who(self) -> dict:
         """List all agents registered on the network tier."""
@@ -164,6 +166,42 @@ class NetworkClient:
     def coordinator_status(self) -> dict:
         """GET /coordinator/status — consolidated coordinator snapshot."""
         return self._request("GET", "/coordinator/status")
+
+    # --- Channel endpoints ---
+
+    def create_channel(self, name: str, description: str = "", created_by: str = "") -> dict:
+        """POST /channels — create a new channel."""
+        return self._request("POST", "/channels", {
+            "name": name, "description": description, "created_by": created_by,
+        })
+
+    def list_channels(self) -> dict:
+        """GET /channels — list all channels with member counts."""
+        return self._request("GET", "/channels")
+
+    def channel_detail(self, name: str) -> dict:
+        """GET /channels/{name} — channel detail with members."""
+        return self._request("GET", f"/channels/{name}")
+
+    def join_channel(self, channel: str, agent: str, machine_id: str = "", role: str = "member") -> dict:
+        """POST /channels/{name}/join — join a channel."""
+        return self._request("POST", f"/channels/{channel}/join", {
+            "agent": agent, "machine_id": machine_id or _get_machine_id(), "role": role,
+        })
+
+    def leave_channel(self, channel: str, agent: str, machine_id: str = "") -> dict:
+        """POST /channels/{name}/leave — leave a channel."""
+        return self._request("POST", f"/channels/{channel}/leave", {
+            "agent": agent, "machine_id": machine_id or _get_machine_id(),
+        })
+
+    def channel_members(self, channel: str) -> dict:
+        """GET /channels/{name}/members — list channel members."""
+        return self._request("GET", f"/channels/{channel}/members")
+
+    def channel_messages(self, channel: str, limit: int = 50) -> dict:
+        """GET /channels/{name}/messages — messages in a channel."""
+        return self._request("GET", f"/channels/{channel}/messages?limit={limit}")
 
 
 def _build_query_string(params: dict) -> str:

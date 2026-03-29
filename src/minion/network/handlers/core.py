@@ -219,12 +219,29 @@ def handle_who(handler, db_path: str, **kwargs) -> None:
     # Apply filters
     filter_class = params.get("class", [None])[0]
     filter_project = params.get("project", [None])[0]
+    filter_channel = params.get("channel", [None])[0]
     filter_status = params.get("status", [None])[0]
     filter_available = params.get("available", [None])[0]
 
     if filter_class:
         agents = [a for a in agents if a.get("agent_class") == filter_class]
-    if filter_project:
+    if filter_channel:
+        # Filter by channel membership (authoritative, replaces project_path basename matching)
+        with _DB_LOCK:
+            conn = _get_server_db(db_path)
+            try:
+                ch_row = conn.execute("SELECT id FROM channels WHERE name = ?", (filter_channel,)).fetchone()
+                if ch_row:
+                    member_rows = conn.execute(
+                        "SELECT agent_name FROM channel_members WHERE channel_id = ?", (ch_row[0],)
+                    ).fetchall()
+                    member_names = {r["agent_name"] for r in member_rows}
+                else:
+                    member_names = set()
+            finally:
+                conn.close()
+        agents = [a for a in agents if a.get("name") in member_names]
+    elif filter_project:
         agents = [a for a in agents if a.get("project_name") == filter_project]
     if filter_status:
         agents = [a for a in agents if a.get("presence") == filter_status]
@@ -255,14 +272,29 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
         handler._json_response(400, {"error": "Agent name required: /inbox/{name}"})
         return
 
+    # Optional ?channel= filter for channel-scoped inbox
+    parsed_url = urlparse(handler.path)
+    inbox_params = parse_qs(parsed_url.query)
+    channel_filter = inbox_params.get("channel", [None])[0]
+
     now = datetime.now().isoformat()
     with _DB_LOCK:
         conn = _get_server_db(db_path)
         try:
-            rows = conn.execute(
-                "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0 ORDER BY timestamp ASC",
-                (agent,),
-            ).fetchall()
+            if channel_filter:
+                ch_row = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_filter,)).fetchone()
+                if ch_row:
+                    rows = conn.execute(
+                        "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0 AND channel_id = ? ORDER BY timestamp ASC",
+                        (agent, ch_row[0]),
+                    ).fetchall()
+                else:
+                    rows = []
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM messages WHERE to_agent = ? AND read_flag = 0 ORDER BY timestamp ASC",
+                    (agent,),
+                ).fetchall()
             messages = [dict(r) for r in rows]
             if messages:
                 ids = [m["id"] for m in messages]
@@ -374,6 +406,24 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
                 ),
             )
             conn.commit()
+
+            # Auto-join channel derived from project_path (backward compat bridge)
+            if project_path and project_path != "unknown":
+                channel_name = os.path.basename(project_path.rstrip("/"))
+                if channel_name:
+                    from minion.network.handlers.channels import _get_or_create_channel
+                    channel_id = _get_or_create_channel(conn, channel_name, created_by=name)
+                    agent_class = body.get("agent_class", "coder")
+                    role = "lead" if agent_class == "lead" else "member"
+                    try:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO channel_members "
+                            "(channel_id, agent_name, machine_id, joined_at, role) VALUES (?, ?, ?, ?, ?)",
+                            (channel_id, name, machine_id, now, role),
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass  # non-fatal — channel join is best-effort
         finally:
             conn.close()
 
@@ -426,9 +476,17 @@ def handle_send(handler, db_path: str, **kwargs) -> None:
                 handler._json_response(404, {"error": f"Agent '{to_agent}' not registered on network"})
                 conn.close()
                 return
+            # Resolve optional channel → channel_id
+            channel_name = body.get("channel", "")
+            channel_id = None
+            if channel_name:
+                ch_row = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_name,)).fetchone()
+                if ch_row:
+                    channel_id = ch_row[0]
+
             conn.execute(
-                "INSERT INTO messages (from_agent, to_agent, content, timestamp) VALUES (?, ?, ?, ?)",
-                (from_agent, to_agent, content, now),
+                "INSERT INTO messages (from_agent, to_agent, content, timestamp, channel_id) VALUES (?, ?, ?, ?, ?)",
+                (from_agent, to_agent, content, now, channel_id),
             )
             conn.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, from_agent))
             conn.commit()

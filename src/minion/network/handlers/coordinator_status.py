@@ -26,7 +26,7 @@ from minion.network.project_db import get_project_db
 
 # Schema version — increment when response shape changes.
 # Swift client should check this and warn on mismatch.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def register(router) -> None:
@@ -124,6 +124,38 @@ def handle_coordinator_status(handler, db_path: str, **kwargs) -> None:
         unread_by_agent[row["to_agent"]] = row["cnt"]
     total_unread = sum(unread_by_agent.values())
 
+    # --- Channels ---
+    channels_list = []
+    with _DB_LOCK:
+        conn = _get_server_db(db_path)
+        try:
+            ch_rows = conn.execute(
+                "SELECT c.id, c.name, "
+                "  (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS member_count, "
+                "  (SELECT COUNT(*) FROM messages m WHERE m.channel_id = c.id AND m.read_flag = 0) AS total_unread "
+                "FROM channels c ORDER BY c.name"
+            ).fetchall()
+
+            for ch in ch_rows:
+                # Get member names and compute online count
+                members = conn.execute(
+                    "SELECT cm.agent_name, a.last_seen FROM channel_members cm "
+                    "LEFT JOIN agents a ON a.name = cm.agent_name AND a.machine_id = cm.machine_id "
+                    "WHERE cm.channel_id = ?", (ch["id"],)
+                ).fetchall()
+                online = sum(1 for m in members if _compute_presence(m["last_seen"]) == "online")
+                channels_list.append({
+                    "name": ch["name"],
+                    "member_count": ch["member_count"],
+                    "online_count": online,
+                    "total_unread": ch["total_unread"],
+                    "members": [m["agent_name"] for m in members],
+                })
+        except sqlite3.OperationalError:
+            pass  # channels table may not exist yet on old DBs
+        finally:
+            conn.close()
+
     # --- Projects ---
     projects = discover_projects(db_path, _DB_LOCK)
     project_names = [p["name"] for p in projects]
@@ -169,5 +201,6 @@ def handle_coordinator_status(handler, db_path: str, **kwargs) -> None:
         "agents_list": agents_list,
         "messages": {"total_unread": total_unread, "unread_by_agent": unread_by_agent},
         "alerts": {"total": len(alerts), "items": alerts},
+        "channels": {"count": len(channels_list), "items": channels_list},
         "projects": {"count": len(project_names), "names": project_names},
     })

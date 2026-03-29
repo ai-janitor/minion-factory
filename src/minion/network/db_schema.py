@@ -67,10 +67,33 @@ CREATE TABLE IF NOT EXISTS messages (
     to_agent    TEXT NOT NULL,
     content     TEXT NOT NULL,
     timestamp   TEXT NOT NULL,
-    read_flag   INTEGER DEFAULT 0
+    read_flag   INTEGER DEFAULT 0,
+    channel_id  INTEGER REFERENCES channels(id)  -- NULL = direct message
 );
 
 CREATE INDEX IF NOT EXISTS idx_msg_to_unread ON messages(to_agent, read_flag);
+
+-- Channels: first-class collaboration scopes (projects/topics agents join)
+CREATE TABLE IF NOT EXISTS channels (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,       -- e.g. "llama-metal"
+    created_at  TEXT NOT NULL,
+    description TEXT,
+    created_by  TEXT                        -- agent name that created the channel
+);
+
+-- Channel membership: which agents belong to which channels
+CREATE TABLE IF NOT EXISTS channel_members (
+    channel_id  INTEGER NOT NULL REFERENCES channels(id),
+    agent_name  TEXT NOT NULL,
+    machine_id  TEXT NOT NULL DEFAULT 'unknown',
+    joined_at   TEXT NOT NULL,
+    role        TEXT DEFAULT 'member',      -- 'member' or 'lead'
+    PRIMARY KEY (channel_id, agent_name, machine_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_members_agent ON channel_members(agent_name);
+CREATE INDEX IF NOT EXISTS idx_msg_channel_unread ON messages(channel_id, to_agent, read_flag);
 """
 
 # --- Migration SQL for existing DBs (add columns if missing) ---
@@ -237,3 +260,97 @@ def migrate_db(db_path: str) -> list[str]:
     conn.commit()
     conn.close()
     return added
+
+
+def migrate_channels(db_path: str) -> dict:
+    """Add channels tables and seed from existing project_path data (idempotent).
+
+    1. Create channels + channel_members tables (IF NOT EXISTS)
+    2. Add channel_id column to messages (if missing)
+    3. Seed channels from distinct project_paths in agents table
+    4. Auto-join existing agents to their project's channel
+
+    Returns dict with migration status and counts.
+    """
+    import os
+    from datetime import datetime
+
+    conn = _connect(db_path)
+
+    # Create tables (idempotent)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS channels (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            created_at  TEXT NOT NULL,
+            description TEXT,
+            created_by  TEXT
+        );
+        CREATE TABLE IF NOT EXISTS channel_members (
+            channel_id  INTEGER NOT NULL REFERENCES channels(id),
+            agent_name  TEXT NOT NULL,
+            machine_id  TEXT NOT NULL DEFAULT 'unknown',
+            joined_at   TEXT NOT NULL,
+            role        TEXT DEFAULT 'member',
+            PRIMARY KEY (channel_id, agent_name, machine_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_channel_members_agent ON channel_members(agent_name);
+    """)
+
+    # Add channel_id to messages if missing
+    try:
+        conn.execute("ALTER TABLE messages ADD COLUMN channel_id INTEGER REFERENCES channels(id)")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Create index for channel-scoped message queries
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_msg_channel_unread ON messages(channel_id, to_agent, read_flag)")
+
+    # Seed channels from existing agent project_paths
+    now = datetime.now().isoformat()
+    rows = conn.execute(
+        "SELECT DISTINCT project_path FROM agents WHERE project_path IS NOT NULL AND project_path != 'unknown'"
+    ).fetchall()
+
+    channels_created = 0
+    members_added = 0
+
+    for row in rows:
+        project_path = row[0]
+        channel_name = os.path.basename(project_path.rstrip("/"))
+        if not channel_name:
+            continue
+
+        # Create channel if it doesn't exist
+        existing = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_name,)).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO channels (name, created_at, description, created_by) VALUES (?, ?, ?, ?)",
+                (channel_name, now, f"Auto-created from project_path: {project_path}", "migration"),
+            )
+            channels_created += 1
+
+        # Get channel id
+        channel_id = conn.execute("SELECT id FROM channels WHERE name = ?", (channel_name,)).fetchone()[0]
+
+        # Auto-join agents with this project_path
+        agents = conn.execute(
+            "SELECT name, machine_id, agent_class, registered_at FROM agents WHERE project_path = ?",
+            (project_path,),
+        ).fetchall()
+
+        for agent in agents:
+            role = "lead" if agent["agent_class"] == "lead" else "member"
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO channel_members (channel_id, agent_name, machine_id, joined_at, role) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (channel_id, agent["name"], agent["machine_id"], agent["registered_at"] or now, role),
+                )
+                members_added += 1
+            except sqlite3.IntegrityError:
+                pass  # already a member
+
+    conn.commit()
+    conn.close()
+    return {"status": "migrated", "channels_created": channels_created, "members_added": members_added}

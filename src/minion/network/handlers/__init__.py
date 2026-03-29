@@ -22,6 +22,7 @@ from .task_workflow import register as register_task_workflow
 from .diagnostics import register as register_diagnostics
 from .coordinator_status import register as register_coordinator_status
 from .bootstrap import register as register_bootstrap
+from .channels import register as register_channels
 
 __all__ = [
     "register_core",
@@ -38,6 +39,7 @@ __all__ = [
     "register_diagnostics",
     "register_coordinator_status",
     "register_bootstrap",
+    "register_channels",
 ]
 
 
@@ -60,3 +62,4 @@ def register_all(router) -> None:
     register_diagnostics(router)
     register_coordinator_status(router)
     register_bootstrap(router)
+    register_channels(router)
