@@ -352,17 +352,22 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
     project_basename = os.path.basename(project_path.rstrip("/")) if project_path != "unknown" else "unknown"
     fqn = f"{machine_id}/{project_basename}/{name}"
 
+    # Generate a stable UUID for new agents — existing agents keep theirs on rejoin
+    import uuid as _uuid
+    new_agent_uuid = str(_uuid.uuid4())
+
     with _DB_LOCK:
         conn = _get_server_db(db_path)
         try:
-            # PSEUDO: ON CONFLICT uses composite key (machine_id, project_path, name)
+            # ON CONFLICT uses composite key (machine_id, project_path, name)
+            # agent_uuid is set on first insert, preserved on conflict (rejoin reclaims identity)
             conn.execute(
                 """INSERT INTO agents (name, agent_class, host, project_path, machine_id,
-                       registered_at, last_seen, model, capabilities, crew_name, local_lead,
+                       registered_at, last_seen, agent_uuid, model, capabilities, crew_name, local_lead,
                        machine_specs, runtimes, os_platform, session_count, compaction_count,
                        crash_rate, total_input_tokens, total_output_tokens,
                        last_task_completed_at, autonomous_delegation)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(machine_id, project_path, name) DO UPDATE SET
                        agent_class = COALESCE(NULLIF(excluded.agent_class, 'coder'), agents.agent_class),
                        host = COALESCE(excluded.host, agents.host),
@@ -389,6 +394,7 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
                     project_path,
                     machine_id,
                     now, now,
+                    new_agent_uuid,
                     body.get("model"),
                     capabilities,
                     body.get("crew_name"),
@@ -406,6 +412,13 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
                 ),
             )
             conn.commit()
+
+            # Read the actual agent_uuid (preserved on rejoin, new on first register)
+            uuid_row = conn.execute(
+                "SELECT agent_uuid FROM agents WHERE machine_id = ? AND project_path = ? AND name = ?",
+                (machine_id, project_path, name),
+            ).fetchone()
+            agent_uuid = uuid_row["agent_uuid"] if uuid_row else new_agent_uuid
 
             # Auto-join channel derived from project_path (backward compat bridge)
             if project_path and project_path != "unknown":
@@ -427,7 +440,7 @@ def handle_register(handler, db_path: str, **kwargs) -> None:
         finally:
             conn.close()
 
-    handler._json_response(200, {"status": "registered", "agent": name, "fqn": fqn})
+    handler._json_response(200, {"status": "registered", "agent": name, "fqn": fqn, "agent_uuid": agent_uuid})
 
 
 def handle_send(handler, db_path: str, **kwargs) -> None:

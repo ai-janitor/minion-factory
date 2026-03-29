@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS agents (
     registered_at         TEXT,
     last_seen             TEXT,
 
-    -- Identity & Capability (new)
+    -- Stable durable identity — survives restarts, rejoin, channel changes
+    agent_uuid            TEXT,
+
+    -- Identity & Capability
     model                 TEXT,
     capabilities          TEXT,            -- JSON array: ["code","build","test"]
     crew_name             TEXT,
@@ -101,6 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_msg_channel_unread ON messages(channel_id, to_age
 
 MIGRATION_COLUMNS = [
     # (column_name, column_def)
+    ("agent_uuid", "TEXT"),  # Stable durable identity — survives restarts, rejoin, channel changes
     ("model", "TEXT"),
     ("capabilities", "TEXT"),
     ("crew_name", "TEXT"),
@@ -354,3 +358,34 @@ def migrate_channels(db_path: str) -> dict:
     conn.commit()
     conn.close()
     return {"status": "migrated", "channels_created": channels_created, "members_added": members_added}
+
+
+def migrate_agent_uuids(db_path: str) -> dict:
+    """Backfill agent_uuid for existing agents that don't have one (idempotent).
+
+    Generates a stable UUID4 for each agent missing one. The UUID persists
+    across restarts and rejoin — it's the durable identity handle.
+    """
+    import uuid
+
+    conn = _connect(db_path)
+
+    # Add column if missing
+    try:
+        conn.execute("ALTER TABLE agents ADD COLUMN agent_uuid TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
+
+    # Backfill any agents missing a UUID
+    rows = conn.execute("SELECT name, machine_id FROM agents WHERE agent_uuid IS NULL").fetchall()
+    count = 0
+    for row in rows:
+        conn.execute(
+            "UPDATE agents SET agent_uuid = ? WHERE name = ? AND machine_id = ?",
+            (str(uuid.uuid4()), row["name"], row["machine_id"]),
+        )
+        count += 1
+
+    conn.commit()
+    conn.close()
+    return {"status": "migrated", "uuids_backfilled": count}

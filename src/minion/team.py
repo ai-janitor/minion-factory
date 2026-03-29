@@ -109,9 +109,13 @@ def join(
     members_result = client.channel_members(channel)
     members = members_result.get("members", [])
 
+    # Extract stable UUID from registration response
+    agent_uuid = reg.get("agent_uuid", "")
+
     return {
         "status": "joined",
         "agent": agent,
+        "agent_uuid": agent_uuid,
         "class": agent_class,
         "model": model,
         "machine": _machine_id(),
