@@ -347,11 +347,12 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--mode", type=click.Choice(["foreground", "notify"]), default="foreground",
                   help="foreground=delivery (marks read), notify=hint only (stays unread)")
     def team_poll(agent: str, channel: str, server: str, interval: int, mode: str) -> None:
-        """Live poll loop — delivers messages as they arrive.
+        """Live poll loop — delivers messages and task updates as they arrive.
 
         \b
-        foreground (default): prints full messages, marks read after display.
-        notify: prints unread hints only, messages stay unread for manual inbox.
+        Checks both inbox (messages) and assigned tasks each cycle.
+        foreground (default): prints full messages + task changes, marks read.
+        notify: prints hints only, messages stay unread for manual inbox.
 
         \b
         Ctrl+C to stop. Only one poller per agent allowed.
