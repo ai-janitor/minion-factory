@@ -86,6 +86,7 @@ def register(router) -> None:
     router.add_get("/who", handle_who)
     router.add_get("/messages/recent", handle_recent_messages)
     router.add_get("/inbox/{agent}", handle_inbox)
+    router.add_post("/inbox/{agent}/mark-read", handle_mark_read)
     router.add_post("/register", handle_register)
     router.add_post("/send", handle_send)
 
@@ -272,10 +273,11 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
         handler._json_response(400, {"error": "Agent name required: /inbox/{name}"})
         return
 
-    # Optional ?channel= filter for channel-scoped inbox
+    # Parse query params: ?channel=, ?peek=true (don't mark read)
     parsed_url = urlparse(handler.path)
     inbox_params = parse_qs(parsed_url.query)
     channel_filter = inbox_params.get("channel", [None])[0]
+    peek = inbox_params.get("peek", [""])[0].lower() == "true"
 
     now = datetime.now().isoformat()
     with _DB_LOCK:
@@ -296,19 +298,46 @@ def handle_inbox(handler, db_path: str, agent: str = "", **kwargs) -> None:
                     (agent,),
                 ).fetchall()
             messages = [dict(r) for r in rows]
-            if messages:
+            # Only mark read if not peeking — peek=true is non-destructive
+            if messages and not peek:
                 ids = [m["id"] for m in messages]
                 conn.execute(
                     f"UPDATE messages SET read_flag = 1 WHERE id IN ({','.join('?' * len(ids))})",
                     ids,
                 )
-            # PSEUDO: update last_seen for all agents matching this name (composite PK)
-            # In network DB, agent URL param is short name — update all matching rows
+            # Update last_seen for all agents matching this name (composite PK)
             conn.execute("UPDATE agents SET last_seen = ? WHERE name = ?", (now, agent))
             conn.commit()
         finally:
             conn.close()
-    handler._json_response(200, {"messages": messages, "agent": agent})
+    handler._json_response(200, {"messages": messages, "agent": agent, "peek": peek})
+
+
+def handle_mark_read(handler, db_path: str, agent: str = "", **kwargs) -> None:
+    """POST /inbox/{agent}/mark-read — explicitly mark message IDs as read.
+
+    Body: {"ids": [1, 2, 3]}
+    Use after successfully receiving messages via ?peek=true.
+    """
+    body = handler._parse_json_body()
+    if not body:
+        return
+    ids = body.get("ids", [])
+    if not ids or not all(isinstance(i, int) for i in ids):
+        handler._json_response(400, {"error": "ids must be a non-empty list of integers"})
+        return
+
+    with _DB_LOCK:
+        conn = _get_server_db(db_path)
+        try:
+            conn.execute(
+                f"UPDATE messages SET read_flag = 1 WHERE to_agent = ? AND id IN ({','.join('?' * len(ids))})",
+                [agent] + ids,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    handler._json_response(200, {"status": "marked_read", "agent": agent, "count": len(ids)})
 
 
 def handle_register(handler, db_path: str, **kwargs) -> None:
