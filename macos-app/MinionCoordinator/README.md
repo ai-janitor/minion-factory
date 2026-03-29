@@ -23,17 +23,43 @@ swift build -c release
 
 Creates `build/MinionCoordinator.app` — a standard macOS app bundle with `LSUIElement=true` (menu bar only, no Dock icon).
 
-## Install to /Applications
+## Package as DMG (for distribution)
+
+```bash
+./scripts/package-dmg.sh
+```
+
+Creates `build/MinionCoordinator.dmg` — a standard macOS disk image with the app and an Applications shortcut for drag-to-install.
+
+## Install
+
+### From DMG (recommended for sharing)
+
+1. Open `MinionCoordinator.dmg`
+2. Drag `MinionCoordinator` to `Applications`
+3. Launch from Applications or Spotlight
+
+### Direct install (developer)
 
 ```bash
 ./scripts/package-app.sh --install
 ```
 
-Or manually:
+### Manual
 
 ```bash
 cp -R build/MinionCoordinator.app /Applications/
 ```
+
+## Signing & Notarization
+
+**Current status: unsigned, local/internal only.**
+
+The app is not signed or notarized. On first launch, macOS Gatekeeper may block it. To allow:
+- Right-click → Open → "Open" in the dialog
+- Or: `xattr -d com.apple.quarantine /Applications/MinionCoordinator.app`
+
+Signing and notarization can be added later with an Apple Developer ID. The app works correctly without it for internal/team use.
 
 ## Launch
 
