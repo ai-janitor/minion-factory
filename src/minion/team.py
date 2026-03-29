@@ -386,13 +386,15 @@ def inbox(
                     token = _read_token()
                 insecure = insecure or resolve_network_insecure() or "://0.0.0.0" in url or "://127.0.0.1" in url
                 client = NetworkClient(base_url=url, token=token, insecure=insecure)
-                # Two-step safe delivery: peek first, mark read after successful fetch
-                result = client.check_inbox(agent, channel=channel, peek=True)
+                # History mode or normal unread fetch
+                result = client.check_inbox(agent, channel=channel, peek=True,
+                                            last=last_n, include_read=include_read)
                 if "error" in result:
                     errors.append({"coordinator": url, "error": result["error"]})
                 else:
                     msgs = result.get("messages", [])
-                    if msgs:
+                    # Only mark read if not in history/browse mode
+                    if msgs and last_n is None and not include_read:
                         ids = [m["id"] for m in msgs if isinstance(m.get("id"), int)]
                         if ids:
                             client.mark_read(agent, ids, read_via="aggregate_inbox")
