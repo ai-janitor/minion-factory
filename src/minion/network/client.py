@@ -161,6 +161,10 @@ class NetworkClient:
         """GET /capacity — machine capacity for agent spawning."""
         return self._request("GET", "/capacity")
 
+    def coordinator_status(self) -> dict:
+        """GET /coordinator/status — consolidated coordinator snapshot."""
+        return self._request("GET", "/coordinator/status")
+
 
 def _build_query_string(params: dict) -> str:
     """Build ?key=val&... from non-empty params."""

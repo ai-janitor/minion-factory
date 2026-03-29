@@ -20,6 +20,7 @@ from .lifecycle import register as register_lifecycle
 from .agent_context import register as register_agent_context
 from .task_workflow import register as register_task_workflow
 from .diagnostics import register as register_diagnostics
+from .coordinator_status import register as register_coordinator_status
 
 __all__ = [
     "register_core",
@@ -34,6 +35,7 @@ __all__ = [
     "register_agent_context",
     "register_task_workflow",
     "register_diagnostics",
+    "register_coordinator_status",
 ]
 
 
@@ -54,3 +56,4 @@ def register_all(router) -> None:
     register_agent_context(router)
     register_task_workflow(router)
     register_diagnostics(router)
+    register_coordinator_status(router)
