@@ -112,20 +112,31 @@ def get_db() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create all tables if they don't exist, then run pending migrations."""
-    from minion.db.migrations import _migrate, _run_migrations
-    from minion.db.schema import (
-        _COMMS_SCHEMA_SQL,
-        _REQUIREMENTS_SCHEMA_SQL,
-        _SCHEMA_VERSION_SQL,
-        _TASKS_SCHEMA_SQL,
-    )
+    """Create all tables if they don't exist, then run pending migrations.
 
-    conn = get_db()
-    conn.executescript(_COMMS_SCHEMA_SQL)
-    conn.executescript(_TASKS_SCHEMA_SQL)
-    conn.executescript(_REQUIREMENTS_SCHEMA_SQL)
-    conn.executescript(_SCHEMA_VERSION_SQL)
-    _migrate(conn)
-    _run_migrations(conn)
-    conn.close()
+    Tolerates failure gracefully — network-only commands (team, coordinator, api)
+    don't need the project-local DB. If the DB can't be opened (e.g., running
+    from a directory without write access), log a warning but don't crash.
+    """
+    import logging as _logging
+    try:
+        from minion.db.migrations import _migrate, _run_migrations
+        from minion.db.schema import (
+            _COMMS_SCHEMA_SQL,
+            _REQUIREMENTS_SCHEMA_SQL,
+            _SCHEMA_VERSION_SQL,
+            _TASKS_SCHEMA_SQL,
+        )
+
+        conn = get_db()
+        conn.executescript(_COMMS_SCHEMA_SQL)
+        conn.executescript(_TASKS_SCHEMA_SQL)
+        conn.executescript(_REQUIREMENTS_SCHEMA_SQL)
+        conn.executescript(_SCHEMA_VERSION_SQL)
+        _migrate(conn)
+        _run_migrations(conn)
+        conn.close()
+    except (sqlite3.OperationalError, OSError) as e:
+        _logging.getLogger("minion.db").debug(
+            "init_db skipped (non-fatal): %s — network-only commands still work", e
+        )
