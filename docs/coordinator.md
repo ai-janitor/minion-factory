@@ -110,7 +110,16 @@ minion coordinator snapshot
 | `minion team who` | List channel members across all machines |
 | `minion team send -f FROM -t TO -m MSG` | Send a message (channel-scoped) |
 | `minion team inbox -a NAME` | Coordinator/team messages only |
+| `minion team inbox -a NAME --last 5` | Recent message history (includes read) |
 | `minion team channels` | List all channels |
+| `minion team backlog` | View project backlog |
+| `minion team tasks` | View project tasks |
+| `minion team ping -f FROM -t TO` | Round-trip delivery smoke test |
+| `minion team clone CHANNEL` | Clone repo from coordinator git metadata |
+| `minion team poll -a NAME` | Live delivery loop (foreground) |
+| `minion team poll -a NAME --mode notify` | Notify-only (doesn't mark read) |
+| `minion team poll-stop -a NAME` | Stop a running poller |
+| `minion team poll-list` | List active pollers |
 | `minion team coordinators` | List all joined coordinators |
 | `minion team identities` | List all saved identities |
 
@@ -119,8 +128,10 @@ minion coordinator snapshot
 | Command | Description |
 |---------|-------------|
 | `minion inbox -a NAME` | All sources (local + coordinators), tagged |
+| `minion inbox -a NAME --last 5` | Global recent history across all sources |
 | `minion inbox -a NAME --channel CH` | Filter by channel |
 | `minion inbox -a NAME --server ALIAS` | Filter by coordinator |
+| `minion inbox -a NAME --include-read` | Include already-read messages |
 
 ### Command Scopes
 
@@ -313,6 +324,39 @@ minion coordinator prune --message-days 14 --read-days 7
 ```
 
 Identity and channel membership are never pruned — only routine messages.
+
+## Poll Semantics
+
+### Foreground poll (delivery)
+
+```bash
+minion team poll --agent my-name
+```
+
+Prints full messages as they arrive, marks read after display. This is the live delivery loop — use it in a terminal you're watching.
+
+### Notify-only poll (background)
+
+```bash
+minion team poll --agent my-name --mode notify
+```
+
+Prints sender hints only, does NOT mark messages read. Messages stay available for manual `team inbox` checks. Deduplicates notifications by message ID.
+
+### Rules
+
+- **Foreground poll = delivery**: mark-read implies successful display
+- **Notify poll = hint only**: messages stay unread
+- **No silent consumption**: a poller must never mark messages read without surfacing them
+
+### Poller management
+
+```bash
+minion team poll-list           # see what's running
+minion team poll-stop -a NAME   # stop a poller
+```
+
+Only one poller per agent allowed — prevents duplicate consumption.
 
 ## Backward Compatibility
 
