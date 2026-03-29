@@ -199,7 +199,7 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--name", "-n", default="default", help="Profile name (default: 'default')")
     @click.option("-p", "--password-file", default=None, type=click.Path(exists=True),
                   help="Read token from file (first line)")
-    @click.option("--insecure", "-I", is_flag=True, help="Skip TLS verification + no auth")
+    @click.option("--insecure", "-I", is_flag=True, help="Skip TLS verification (for self-signed certs). Auth token still required.")
     @click.pass_context
     def api_set_remote(ctx: click.Context, url: str, name: str,
                        password_file: str | None, insecure: bool) -> None:
@@ -214,7 +214,7 @@ def register_commands(cli: click.Group) -> None:
         Examples:
           minion api set-remote https://server:8377
           minion api set-remote https://lab1:8377 --name lab1 -p ~/token.txt
-          minion api set-remote http://localhost:8377 --insecure
+          minion api set-remote https://hub:8377 --name hub --insecure  # self-signed TLS
         """
         token = _resolve_token(password_file, insecure)
         from minion.api.remotes import save_remote
