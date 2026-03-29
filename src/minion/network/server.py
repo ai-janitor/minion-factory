@@ -153,6 +153,16 @@ class _Handler(AuthMixin, BaseHTTPRequestHandler):
             except (ImportError, OSError):
                 pass  # Fall through to auth-required routes if dashboard views unavailable
 
+        # Bootstrap endpoints — served without auth (new machines need these to install)
+        _GET_NO_AUTH = {"/install.sh", "/version"}
+        if path in _GET_NO_AUTH:
+            if self._router:
+                handler_fn, params = self._router.route_get(path)
+                if handler_fn:
+                    handler_fn(self, self.db_path, **params)
+                    self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
+                    return
+
         # API endpoints — auth required
         if not self.require_auth():
             self._log_request("GET", path, self._response_status, (time.monotonic() - start) * 1000)
