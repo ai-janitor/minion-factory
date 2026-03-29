@@ -240,6 +240,12 @@ def register_commands(cli: click.Group) -> None:
             with open(body_file) as f:
                 body = f.read()
         channel = channel or _channel_name(ctx.obj.get("project_dir") or "")
+        # Default created_by from saved identity if not specified
+        if not created_by:
+            from minion.team_identity import get_identity_for_project
+            identity = get_identity_for_project(ctx.obj.get("project_dir") or "")
+            if identity:
+                created_by = identity.get("agent_name", "")
         client, err = _get_team_client(server)
         if err:
             _output({"error": err}, ctx.obj["human"], ctx.obj["compact"])
