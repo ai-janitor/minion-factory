@@ -280,9 +280,16 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--remote", "-r", default=None, help="Remote profile name")
     @click.pass_context
     def api_remote_inbox(ctx: click.Context, agent: str, remote: str | None) -> None:
-        """Check inbox on remote machine."""
+        """Check inbox on remote machine (uses safe peek + mark-read)."""
         client = _get_remote(ctx, remote)
-        _output(client.check_inbox(agent), ctx.obj["human"], ctx.obj["compact"])
+        # Two-step safe delivery: peek first, mark read after successful display
+        result = client.check_inbox(agent, peek=True)
+        messages = result.get("messages", [])
+        if messages:
+            ids = [m["id"] for m in messages if isinstance(m.get("id"), int)]
+            if ids:
+                client.mark_read(agent, ids)
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @api_group.command("remote-projects")
     @click.option("--remote", "-r", default=None, help="Remote profile name")
