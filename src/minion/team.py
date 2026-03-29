@@ -332,6 +332,115 @@ def channels(server_url: str = "") -> dict:
     return client.list_channels()
 
 
+def aggregate_inbox(agent: str, channel: str = "", server_url: str = "") -> dict:
+    """Aggregate inbox across ALL sources: local project DB + all joined coordinators.
+
+    Every message is tagged with source context:
+    - source_kind: "local" or "coordinator"
+    - source_name: "local" or server alias/URL
+    - channel: project/channel name
+    - source_label: compact "source_name/channel" string
+    """
+    all_messages = []
+    errors = []
+
+    # 1. Local project inbox
+    try:
+        from minion.db.connection import get_db
+        conn = get_db()
+        # Read local messages — look for content_file or inline content
+        rows = conn.execute(
+            "SELECT id, from_agent, to_agent, timestamp, content_file FROM messages "
+            "WHERE to_agent = ? AND read_flag = 0 ORDER BY timestamp ASC",
+            (agent,),
+        ).fetchall()
+        # Derive local project name from DB path
+        from minion.db.connection import _get_db_path
+        db_path = _get_db_path()
+        local_project = os.path.basename(os.path.dirname(os.path.dirname(db_path)))
+
+        for row in rows:
+            content = ""
+            content_file = row["content_file"] if "content_file" in row.keys() else None
+            if content_file and os.path.isfile(content_file):
+                try:
+                    with open(content_file) as f:
+                        content = f.read()[:500]
+                except OSError:
+                    content = "(unreadable)"
+            msg = {
+                "id": row["id"],
+                "from": row["from_agent"],
+                "to": row["to_agent"],
+                "content": content,
+                "timestamp": row["timestamp"],
+                "source_kind": "local",
+                "source_name": "local",
+                "channel": local_project,
+                "source_label": f"local/{local_project}",
+            }
+            all_messages.append(msg)
+        conn.close()
+    except Exception as e:
+        # Local DB may not exist — non-fatal for network-only setups
+        errors.append({"source": "local", "error": str(e)})
+
+    # 2. Coordinator inboxes (reuse the existing multi-coordinator logic)
+    coord_result = inbox(agent=agent, channel=channel, server_url=server_url)
+    if "error" in coord_result:
+        errors.append({"source": "coordinator", "error": coord_result["error"]})
+    else:
+        for msg in coord_result.get("messages", []):
+            coordinator_url = msg.get("coordinator", "")
+            # Resolve server alias from remote profiles
+            server_alias = _resolve_server_alias(coordinator_url)
+            ch = msg.get("channel", "") or _guess_channel(coordinator_url)
+            msg["source_kind"] = "coordinator"
+            msg["source_name"] = server_alias
+            msg["channel"] = ch
+            msg["source_label"] = f"{server_alias}/{ch}" if ch else server_alias
+            all_messages.append(msg)
+
+    # Sort all by timestamp
+    all_messages.sort(key=lambda m: m.get("timestamp", ""))
+
+    result: dict = {"messages": all_messages, "agent": agent}
+    if errors:
+        result["errors"] = errors
+    return result
+
+
+def _resolve_server_alias(url: str) -> str:
+    """Resolve a coordinator URL to a human-friendly alias from remote profiles."""
+    try:
+        from minion.api.remotes import _read_remotes
+        data = _read_remotes()
+        for name, profile in data.get("remotes", {}).items():
+            if profile.get("url", "").rstrip("/") == url.rstrip("/"):
+                return name
+    except Exception:
+        pass
+    # Fallback: extract hostname from URL
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        return parsed.hostname or url
+    except Exception:
+        return url
+
+
+def _guess_channel(coordinator_url: str) -> str:
+    """Try to guess the channel from saved identities for a coordinator."""
+    try:
+        from minion.team_identity import list_identities
+        for identity in list_identities():
+            if identity.get("coordinator_url", "").rstrip("/") == coordinator_url.rstrip("/"):
+                return identity.get("channel", "")
+    except Exception:
+        pass
+    return ""
+
+
 def coordinators() -> dict:
     """List all coordinators this CLI has joined."""
     from minion.team_identity import list_coordinators, list_identities
