@@ -324,7 +324,7 @@ def inbox(
         from minion.defaults import resolve_network_insecure
 
         identities = list_identities()
-        # Deduplicate coordinator URLs
+        # Deduplicate coordinator URLs from identities AND remote profiles
         seen_urls = set()
         coordinator_urls = []
         for identity in identities:
@@ -332,6 +332,16 @@ def inbox(
             if url and url not in seen_urls:
                 seen_urls.add(url)
                 coordinator_urls.append(url)
+        # Also include remote profiles as coordinator sources
+        try:
+            from minion.api.remotes import _read_remotes
+            for _name, profile in _read_remotes().get("remotes", {}).items():
+                url = profile.get("url", "").rstrip("/")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    coordinator_urls.append(url)
+        except Exception:
+            pass
 
         if not coordinator_urls:
             # No saved identities — fall back to single-server path
@@ -344,8 +354,23 @@ def inbox(
         errors = []
         for url in coordinator_urls:
             try:
-                token = _read_token()
-                insecure = resolve_network_insecure() or url.startswith("https://0.0.0.0") or url.startswith("https://127.0.0.1")
+                # Try to get token/insecure from matching remote profile
+                token = ""
+                insecure = False
+                try:
+                    from minion.api.remotes import _read_remotes, _token_file as _remote_token_file
+                    for _pname, _profile in _read_remotes().get("remotes", {}).items():
+                        if _profile.get("url", "").rstrip("/") == url:
+                            insecure = _profile.get("insecure", False)
+                            tf = _remote_token_file(_pname)
+                            if tf.exists():
+                                token = tf.read_text().strip()
+                            break
+                except Exception:
+                    pass
+                if not token:
+                    token = _read_token()
+                insecure = insecure or resolve_network_insecure() or "://0.0.0.0" in url or "://127.0.0.1" in url
                 client = NetworkClient(base_url=url, token=token, insecure=insecure)
                 result = client.check_inbox(agent, channel=channel)
                 if "error" in result:
@@ -537,14 +562,32 @@ def clone(channel: str, target_dir: str = "", server_url: str = "") -> dict:
 
 
 def coordinators() -> dict:
-    """List all coordinators this CLI has joined."""
+    """List all coordinators this CLI knows about — from identities AND remote profiles."""
     from minion.team_identity import list_coordinators, list_identities
-    urls = list_coordinators()
+    from minion.api.remotes import _read_remotes
+
+    # Collect from identities
+    identity_urls = list_coordinators()
     identities = list_identities()
+
+    # Also collect from remote profiles
+    remotes_data = _read_remotes()
+    profile_urls = []
+    profiles = {}
+    for name, profile in remotes_data.get("remotes", {}).items():
+        url = profile.get("url", "").rstrip("/")
+        if url:
+            profile_urls.append(url)
+            profiles[url] = name
+
+    # Deduplicate URLs
+    all_urls = list(dict.fromkeys(identity_urls + profile_urls))
+
     return {
         "coordinators": [
             {
                 "url": url,
+                "alias": profiles.get(url, ""),
                 "identities": [
                     {
                         "channel": i.get("channel"),
@@ -555,7 +598,7 @@ def coordinators() -> dict:
                     for i in identities if i.get("coordinator_url", "").rstrip("/") == url.rstrip("/")
                 ],
             }
-            for url in urls
+            for url in all_urls
         ],
     }
 
