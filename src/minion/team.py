@@ -423,7 +423,8 @@ def channels(server_url: str = "") -> dict:
     return client.list_channels()
 
 
-def aggregate_inbox(agent: str, channel: str = "", server_url: str = "") -> dict:
+def aggregate_inbox(agent: str, channel: str = "", server_url: str = "",
+                    last_n: int | None = None, include_read: bool = False) -> dict:
     """Aggregate inbox across ALL sources: local project DB + all joined coordinators.
 
     Every message is tagged with source context:
@@ -477,7 +478,8 @@ def aggregate_inbox(agent: str, channel: str = "", server_url: str = "") -> dict
         errors.append({"source": "local", "error": str(e)})
 
     # 2. Coordinator inboxes (reuse the existing multi-coordinator logic)
-    coord_result = inbox(agent=agent, channel=channel, server_url=server_url)
+    coord_result = inbox(agent=agent, channel=channel, server_url=server_url,
+                         last_n=last_n, include_read=include_read)
     if "error" in coord_result:
         errors.append({"source": "coordinator", "error": coord_result["error"]})
     else:
@@ -492,8 +494,12 @@ def aggregate_inbox(agent: str, channel: str = "", server_url: str = "") -> dict
             msg["source_label"] = f"{server_alias}/{ch}" if ch else server_alias
             all_messages.append(msg)
 
-    # Sort all by timestamp
+    # Sort globally by timestamp (descending for --last, ascending otherwise)
     all_messages.sort(key=lambda m: m.get("timestamp", ""))
+
+    # Global truncation for --last N: take the most recent N across all sources
+    if last_n is not None and len(all_messages) > last_n:
+        all_messages = all_messages[-last_n:]
 
     result: dict = {"messages": all_messages, "agent": agent}
     if errors:

@@ -24,8 +24,11 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--agent", "-a", required=True, help="Agent name to check inbox for")
     @click.option("--channel", "-ch", default="", help="Filter by channel name")
     @click.option("--server", "-s", default="", help="Filter by server alias or URL")
+    @click.option("--last", "-n", "last_n", default=None, type=int, help="Show last N messages globally (includes read)")
+    @click.option("--include-read", is_flag=True, help="Include already-read messages")
     @click.pass_context
-    def aggregate_inbox(ctx: click.Context, agent: str, channel: str, server: str) -> None:
+    def aggregate_inbox(ctx: click.Context, agent: str, channel: str, server: str,
+                        last_n: int | None, include_read: bool) -> None:
         """Aggregate inbox — all sources, clearly tagged.
 
         \b
@@ -35,19 +38,16 @@ def register_commands(cli: click.Group) -> None:
           trashcan/llama-metal  — from the trashcan coordinator
 
         \b
-        Use --server or --channel to narrow results.
-
-        \b
-        Scoped alternatives:
-          minion team inbox -a NAME       — coordinator/team messages only
-          minion comms check-inbox -a NAME — local project messages only
+        --last N: show most recent N messages globally across all sources.
+        --include-read: include already-read messages.
 
         \b
         Examples:
           minion inbox --agent trashcan-lead
-          minion inbox -a codex-lead --channel llama-metal
-          minion inbox -a me --server trashcan
+          minion inbox -a codex-lead --last 5
+          minion inbox -a me --include-read --channel llama-metal
         """
         from minion.team import aggregate_inbox as _aggregate
-        result = _aggregate(agent=agent, channel=channel, server_url=server)
+        result = _aggregate(agent=agent, channel=channel, server_url=server,
+                            last_n=last_n, include_read=include_read)
         _output(result, ctx.obj["human"], ctx.obj["compact"])
