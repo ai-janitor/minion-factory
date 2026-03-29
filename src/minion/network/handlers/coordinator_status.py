@@ -66,8 +66,14 @@ def handle_coordinator_status(handler, db_path: str, **kwargs) -> None:
     """
     # --- Server info ---
     state = _read_server_state()
+
+    # Stable coordinator_id — derived from the DB path (consistent across restarts)
+    import hashlib
+    coordinator_id = hashlib.sha256(db_path.encode()).hexdigest()[:12]
+
     server_info = {
         "status": "running",
+        "coordinator_id": coordinator_id,
         "uptime_seconds": _compute_uptime_seconds(state.get("started_at", "")),
         "port": state.get("port", 8377),
         "tls": state.get("tls_enabled", False),

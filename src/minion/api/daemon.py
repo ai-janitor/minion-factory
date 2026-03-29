@@ -174,12 +174,21 @@ def start(port: int = 8377, token: str = "") -> dict:
     }
     _write_state(state)
 
+    # Report a usable URL — 0.0.0.0 is a bind address, not routable.
+    # Use the machine's hostname for a reachable URL.
+    import socket as _socket
+    host = _socket.gethostname()
+    try:
+        # Try to get an actual IP for the hostname
+        host = _socket.gethostbyname(host)
+    except _socket.gaierror:
+        host = "127.0.0.1"
     protocol = "https" if tls_enabled else "http"
     return {
         "status": "started",
         "pid": proc.pid,
         "port": port,
-        "url": f"{protocol}://0.0.0.0:{port}",
+        "url": f"{protocol}://{host}:{port}",
         "tls": tls_enabled,
         "log": str(log_path),
     }
@@ -267,7 +276,7 @@ def status() -> dict:
         "status": "running" if health_ok else "pid_alive",
         "pid": pid,
         "port": port,
-        "url": f"{'https' if tls_enabled else 'http'}://0.0.0.0:{port}",
+        "url": f"{'https' if tls_enabled else 'http'}://127.0.0.1:{port}",
         "tls": tls_enabled,
         "started_at": started_at,
         "health": "ok" if health_ok else "unreachable",

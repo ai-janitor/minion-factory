@@ -221,6 +221,99 @@ minion team who   # shows only project-a agents
 minion team who   # shows only project-b agents
 ```
 
+## Inbox Model
+
+Three tiers, each clearly scoped:
+
+| Command | Scope | Reads from |
+|---------|-------|------------|
+| `minion inbox -a NAME` | All sources | Local DB + all coordinators |
+| `minion team inbox -a NAME` | Coordinator only | Network API tier |
+| `minion comms check-inbox -a NAME` | Local only | Project `.work/minion.db` |
+
+### Non-destructive read
+
+`/inbox/{agent}?peek=true` fetches unread without marking them read. Use `POST /inbox/{agent}/mark-read` with `{"ids": [1,2,3]}` to confirm receipt. Default behavior (without `?peek`) marks read on fetch for backward compat.
+
+### Aggregate inbox tags
+
+Every message from `minion inbox` includes source context:
+- `source_kind`: `local` or `coordinator`
+- `source_name`: `local` or server alias (e.g., `trashcan`)
+- `source_label`: compact `source_name/channel` (e.g., `trashcan/llama-metal`)
+
+## Identity Lifecycle
+
+### Stable agent_uuid
+
+Every agent gets a UUID4 on first registration. This UUID:
+- Survives restarts, session resets, hours of absence
+- Is the real routing/history key (names are for UX)
+- Is reclaimed on rejoin when (coordinator, channel, agent_name) match
+- Is stored locally in `~/.minion/team/identities.json`
+
+### Rejoin after absence
+
+```bash
+# Agent was offline for 6 hours — just rejoin
+minion team join --agent my-name --class coder
+# Same UUID, inbox/history intact
+```
+
+### States
+
+| State | Meaning |
+|-------|---------|
+| `online` | Recent heartbeat (<5 min) |
+| `stale` | Missed heartbeat (5-30 min) |
+| `offline` | No heartbeat (>30 min) |
+| `retired` | Intentionally done |
+
+`stale`/`offline` does NOT mean "new identity on return."
+
+### Local state
+
+Saved under `~/.minion/team/identities.json`, keyed by (coordinator_url, channel, agent_name). Includes agent_uuid, last_contact.
+
+## Onboarding a New Machine
+
+```bash
+# 1. Install from coordinator (no GitHub needed)
+curl -sSL https://coordinator:8377/install.sh | bash
+
+# 2. Set coordinator + token
+minion api set-remote https://coordinator:8377 --name hub -p ~/token.txt
+
+# 3. List available channels
+minion team channels --server hub
+
+# 4. Clone the project workspace
+minion team clone llama-metal
+
+# 5. Join the team
+cd llama-metal
+minion team join --agent newbie --class coder
+
+# 6. Start working
+minion team who
+minion inbox --agent newbie
+```
+
+## Retention / Pruning
+
+```bash
+# View DB statistics
+minion coordinator stats
+
+# Prune old messages (default: 7d all, 3d read)
+minion coordinator prune
+
+# Custom retention
+minion coordinator prune --message-days 14 --read-days 7
+```
+
+Identity and channel membership are never pruned — only routine messages.
+
 ## Backward Compatibility
 
 `minion api start/stop/status/restart` still works — `minion coordinator` is the preferred alias but both call the same daemon functions.
