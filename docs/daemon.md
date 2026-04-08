@@ -9,7 +9,6 @@ When a daemon agent starts, it runs 3 commands (defined in `docs/contracts/boot-
 ```bash
 1. minion --compact register --name {agent} --class {role} --transport daemon
 2. minion set-context --agent {agent} --context "just started"
-3. minion set-status --agent {agent} --status "ready for orders"
 ```
 
 No `check-inbox` at boot — the daemon's watcher handles all inbox reads.

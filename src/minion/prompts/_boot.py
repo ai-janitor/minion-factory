@@ -57,10 +57,9 @@ def load_boot_section(docs_dir: Path, agent: str, role: str, model: str = "") ->
         "BOOT: You just started. Run these commands via the Bash tool:",
         f"  minion --compact register --name {agent} --class {role} --model {effective_model} --transport daemon",
         f"  minion set-context --agent {agent} --context 'just started'",
-        f"  minion set-status --agent {agent} --status 'ready for orders'",
         "",
         "IMPORTANT: You are a daemon agent managed by minion-swarm.",
         "Do NOT run poll.sh — minion-swarm handles polling for you.",
         "Do NOT use AskUserQuestion — it blocks in headless mode.",
-        "After running these 3 commands, STOP. Do not do anything else.",
+        "After running these 2 commands, STOP. Do not do anything else.",
     ])

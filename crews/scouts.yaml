@@ -112,8 +112,7 @@ lead:
     1. minion --compact register --name {agent_name} --class lead --transport terminal
     2. minion set-context --agent {agent_name} --context "just started"
     3. minion check-inbox --agent {agent_name}
-    4. minion set-status --agent {agent_name} --status "ready for orders"
-    5. minion who
+    4. minion who
     Then wait for the human to give orders.
 
 agents:
@@ -201,7 +200,6 @@ agents:
       1. minion --compact register --name {agent_name} --class recon --transport daemon
       2. minion set-context --agent {agent_name} --context "just started"
       3. minion check-inbox --agent {agent_name}
-      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   pixel:
@@ -258,7 +256,6 @@ agents:
       1. minion --compact register --name {agent_name} --class recon --transport daemon
       2. minion set-context --agent {agent_name} --context "just started"
       3. minion check-inbox --agent {agent_name}
-      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   blueprint:
@@ -318,7 +315,6 @@ agents:
       1. minion --compact register --name {agent_name} --class recon --transport daemon
       2. minion set-context --agent {agent_name} --context "just started"
       3. minion check-inbox --agent {agent_name}
-      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   torvalds:
@@ -392,7 +388,6 @@ agents:
       1. minion --compact register --name {agent_name} --class recon --transport daemon
       2. minion set-context --agent {agent_name} --context "just started"
       3. minion check-inbox --agent {agent_name}
-      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.
 
   watchtower:
@@ -451,5 +446,4 @@ agents:
       1. minion --compact register --name {agent_name} --class recon --transport daemon
       2. minion set-context --agent {agent_name} --context "just started"
       3. minion check-inbox --agent {agent_name}
-      4. minion set-status --agent {agent_name} --status "ready for orders"
       Then wait for messages. Check inbox regularly.

@@ -135,24 +135,55 @@ def test_extract_error_summary_json_error():
     assert "rate_limit" in result
 
 
-def test_extract_error_summary_http_status():
-    """Lines containing HTTP status codes like 429 are classified."""
+def test_extract_error_summary_plain_text_returns_none():
+    """Plain text lines (non-JSON) are NOT classified — return None.
+
+    Backlog #308: previously returned 'Large output (N chars)' for any
+    non-JSON long line, which then got rendered as `[agent] ERROR:` in the
+    pane for normal stderr/log output. Plain text is no longer classified.
+    """
     from minion.providers.cli_provider_protocol import BaseProvider
 
     line = "HTTP response: 429 " + "x" * 600
-    result = BaseProvider._extract_error_summary(line)
-    assert result is not None
-    assert "429" in result
+    assert BaseProvider._extract_error_summary(line) is None
+    assert BaseProvider._extract_error_summary("a" * 600) is None
 
 
-def test_extract_error_summary_generic_large():
-    """Lines that are just large with no pattern get generic classification."""
+def test_extract_error_summary_assistant_message_returns_none():
+    """Long claude assistant events (the false-positive source) are NOT classified.
+
+    Backlog #308: every long assistant message used to render as
+    `[agent] ERROR: {'role': 'assistant', ...}` because the JSON extractor
+    treated any top-level `message` field as an error signal.
+    """
+    import json as _json
     from minion.providers.cli_provider_protocol import BaseProvider
 
-    line = "a" * 600
-    result = BaseProvider._extract_error_summary(line)
+    payload = _json.dumps({
+        "type": "assistant",
+        "message": {
+            "id": "msg_xxx",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "x" * 800}],
+        },
+    })
+    assert BaseProvider._extract_error_summary(payload) is None
+
+
+def test_extract_error_summary_is_error_true():
+    """Events with is_error=true are classified."""
+    import json as _json
+    from minion.providers.cli_provider_protocol import BaseProvider
+
+    payload = _json.dumps({
+        "type": "result",
+        "is_error": True,
+        "message": "context window exceeded",
+        "padding": "x" * 600,
+    })
+    result = BaseProvider._extract_error_summary(payload)
     assert result is not None
-    assert "Large output" in result
+    assert "context window exceeded" in result
 
 
 # ---------------------------------------------------------------------------
@@ -169,18 +200,40 @@ def test_filter_log_line_passes_short_lines(tmp_path):
     assert result == "hello world\n"
 
 
-def test_filter_log_line_classifies_long_lines(tmp_path):
-    """Long lines are classified and logged."""
+def test_filter_log_line_classifies_real_error(tmp_path):
+    """Long lines that ARE real errors are classified and logged."""
+    import json as _json
     p = ProviderHarness()
     log_path = tmp_path / "errors.log"
 
-    long_line = "x" * 600 + "\n"
-    result = p.provider.filter_log_line(long_line, log_path)
+    payload = _json.dumps({
+        "error": {"code": 429, "message": "rate limited"},
+        "padding": "x" * 600,
+    }) + "\n"
+    result = p.provider.filter_log_line(payload, log_path)
 
-    # Should return a short summary, not the original long line
-    assert len(result) < len(long_line)
+    assert len(result) < len(payload)
     assert "test-agent" in result  # agent name in summary
     assert log_path.exists()  # error was logged
+
+
+def test_filter_log_line_passes_long_non_error(tmp_path):
+    """Long lines that are NOT errors pass through unchanged.
+
+    Backlog #308 regression — long assistant messages must not be relabeled.
+    """
+    import json as _json
+    p = ProviderHarness()
+    log_path = tmp_path / "errors.log"
+
+    payload = _json.dumps({
+        "type": "assistant",
+        "message": {"role": "assistant", "content": "x" * 800},
+    }) + "\n"
+    result = p.provider.filter_log_line(payload, log_path)
+
+    assert result == payload
+    assert not log_path.exists()
 
 
 def test_filter_log_line_empty_lines_pass(tmp_path):
@@ -199,15 +252,18 @@ def test_filter_log_line_empty_lines_pass(tmp_path):
 
 def test_classify_error_delegates_to_extract_summary():
     """Base _classify_error delegates to _extract_error_summary."""
+    import json as _json
     p = ProviderHarness()
 
     # Short line — should return None
-    result = p.provider._classify_error("short")
-    assert result is None
+    assert p.provider._classify_error("short") is None
 
-    # Long line — should return a summary
-    result = p.provider._classify_error("y" * 600)
-    assert result is not None
+    # Long non-error line — should return None (backlog #308)
+    assert p.provider._classify_error("y" * 600) is None
+
+    # Long real-error line — should return a summary
+    err = _json.dumps({"error": {"code": "boom", "message": "x" * 600}})
+    assert p.provider._classify_error(err) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -265,18 +321,19 @@ def test_classify_provider_error_regex_phase():
     assert result == "CAUGHT: CRASH"
 
 
-def test_classify_provider_error_fallback_phase():
-    """Phase 3: Falls back to extract_error_summary when no phases match."""
+def test_classify_provider_error_fallback_returns_none_for_non_error():
+    """Phase 3: Plain non-error long lines return None (backlog #308).
+
+    extract_error_summary no longer invents an error label for arbitrary
+    long output — only real error-shaped JSON gets classified.
+    """
     from minion.providers._shared_error_classifier import (
         ProviderErrorConfig,
         classify_provider_error,
     )
 
     config = ProviderErrorConfig(prefix="TEST")
-    line = "a" * 600
-    result = classify_provider_error(line, config)
-    assert result is not None
-    assert "Large output" in result
+    assert classify_provider_error("a" * 600, config) is None
 
 
 # ---------------------------------------------------------------------------

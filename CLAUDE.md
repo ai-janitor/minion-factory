@@ -28,6 +28,49 @@ The minion-factory system exists to impose discipline on agents that have none b
 
 9. **Low friction first, harden gradually.** The CLI is still maturing. Not every rule needs a mechanical gate on day one — that creates friction that slows development of the framework itself. Start with prompt-level guidance, observe where agents break the rules, then add enforcement at the pain points. The goal is a system that's easy to use correctly and hard to use incorrectly — but you get there iteratively, not by locking everything down before the tool works.
 
+## File-First Discovery Rule (non-negotiable)
+
+**When you find a bug, an error in a pane, a new failure mode, an unexpected behavior, a stale state file, a misnamed flag, ANY new defect — file the backlog item BEFORE you tell the operator about it. Filing is the first action, not a follow-up.**
+
+The wrong sequence (and the one that keeps happening):
+1. Find something
+2. Mention it in chat
+3. Move on to the next thing
+4. Operator asks "is that written down?"
+5. File it then
+
+The right sequence:
+1. Find something
+2. `minion -C ~/projects/minion-factory backlog add -t bug -T "..." -d "..." -p <pri> -f bugfix` — file it with full evidence (file paths, line numbers, stream-log excerpts, what you observed, what you tested, what's still unknown)
+3. THEN tell the operator, leading with the backlog ID
+
+Why this matters:
+- Chat scrolls away. The backlog persists across sessions.
+- Telling the operator "I found X" without filing X means X exists only in your context window. When this conversation ends, X is gone.
+- Forcing the operator to ask "is it filed?" turns them into your janitor. That's the wrong direction of work.
+- Filing first forces you to articulate the bug clearly enough to write a description — which often surfaces gaps in your evidence that chat narration would have papered over.
+
+This applies to:
+- New bugs you discover while fixing other bugs
+- New error patterns you see in tmux panes
+- Root causes you identify (file the cause + fix proposal, even if you're about to apply the fix)
+- Failure modes that are "obviously by design" — file them anyway as smells if the design is bad
+- Things you THINK might be bugs but aren't sure about — file them as `-t investigation` so they're tracked
+
+Filing IS NOT optional. It IS the work. If you have time to write a chat message about a bug, you have time to file it first.
+
+## Verification Discipline (sister rule to file-first)
+
+**Never claim "verified", "fixed", "live-tested", or any equivalent unless you have read the actual artifact with your own tool calls in the current conversation.** "It worked when I tested it earlier" is not verification — file state changes, the build can drift, the user can revert. If you want to claim verified, prove it by reading the file/log/output right now.
+
+For daemon work specifically:
+- "spawn returned status: spawned" is NOT verification that the daemon works. It's verification that the spawn function exited cleanly.
+- "ps shows the process" is NOT verification that it's doing useful work. Read the actual `.minion-swarm/logs/<agent>.stream.jsonl` and look at the message sequence.
+- "the panes look quiet" is NOT verification — look at the pane content, identify the actual events, and quote them.
+- For single-agent unit tests, prefer `minion daemon-run --config <yaml> --agent <name>` over a full `crew spawn` so you have ONE log file to read instead of six.
+
+If you can't be bothered to read the evidence, say "smoke test only, not verified" instead of "verified". Both are fine. Lying about which one you did is not.
+
 ## Install
 
 ```bash

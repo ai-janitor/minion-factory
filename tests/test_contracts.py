@@ -100,12 +100,16 @@ def test_compaction_markers_keys(contracts_dir: Path):
 # ── Value-level invariants ─────────────────────────────────────────────
 
 
-def test_boot_sequence_has_exactly_3_commands(contracts_dir: Path):
+def test_boot_sequence_has_exactly_2_commands(contracts_dir: Path):
+    # Backlog #326: dropped the third command (`set-status 'ready for orders'`)
+    # because that status value isn't in the agent state machine and the call
+    # was redundant — register already places agents in 'waiting for work'.
     data = json.loads((contracts_dir / "boot-sequence.json").read_text())
-    assert len(data["commands"]) == 3
+    assert len(data["commands"]) == 2
     for cmd in data["commands"]:
         assert isinstance(cmd, str)
         assert "check-inbox" not in cmd, "boot commands must not contain check-inbox"
+        assert "set-status" not in cmd, "boot commands must not call set-status (#326)"
 
 
 def test_state_schema_status_enum(contracts_dir: Path):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -37,6 +38,16 @@ if TYPE_CHECKING:
 # Time complexity: O(1) — single stat + rename, no file content scanning.
 
 MAX_STREAM_LOG_BYTES = 10 * 1024 * 1024  # 10 MB default
+
+# Backlog #329: detect provider-internal quota retry loops (currently observed
+# with gemini, which retries silently inside its own CLI). After this many
+# retry messages in a single invocation we treat the provider as quota-exhausted
+# and terminate the subprocess instead of letting it spin indefinitely.
+QUOTA_RETRY_LIMIT = 3
+_QUOTA_RETRY_RE = re.compile(
+    r"exhausted your capacity|RESOURCE_EXHAUSTED|quota will reset|Retrying after \d+ms",
+    re.IGNORECASE,
+)
 
 
 def _rotate_stream_log(stream_log: _PathType, max_bytes: int = MAX_STREAM_LOG_BYTES) -> bool:
@@ -149,12 +160,14 @@ class ExecutionMixin:
         timed_out = False
         interrupted = False
         compaction_detected = False
+        quota_exhausted = False
         last_output_at = time.monotonic()
         last_interrupt_check = time.monotonic()
         displayed_chars = 0
         hidden_chars = 0
         total_input_tokens = 0
         total_output_tokens = 0
+        quota_retry_hits = 0
 
         while True:
             try:
@@ -184,6 +197,20 @@ class ExecutionMixin:
             stream_fp.write(line)  # Full unfiltered line to stream log
             stream_fp.flush()
 
+            # Backlog #329: gemini retries quota errors silently inside its own
+            # process. Count retry messages and bail when the limit is hit so
+            # the daemon surfaces the failure instead of spinning forever.
+            if _QUOTA_RETRY_RE.search(line):
+                quota_retry_hits += 1
+                if quota_retry_hits >= QUOTA_RETRY_LIMIT:
+                    self._log(
+                        f"provider quota exhausted ({quota_retry_hits} retry "
+                        f"messages) — terminating {cmd[0]}"
+                    )
+                    quota_exhausted = True
+                    proc.terminate()
+                    break
+
             # Filter through provider before rendering (catches verbose errors)
             filtered_line = self._provider.filter_log_line(line, self._error_log)
             rendered, has_compaction = self._render_stream_line(filtered_line)
@@ -210,11 +237,23 @@ class ExecutionMixin:
 
         stream_fp.close()
 
-        if (timed_out or interrupted) and proc.poll() is None:
+        if (timed_out or interrupted or quota_exhausted) and proc.poll() is None:
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+        if quota_exhausted:
+            self.last_error = (
+                f"{self.agent_cfg.provider} quota exhausted "
+                f"(>= {QUOTA_RETRY_LIMIT} retry messages)"
+            )
+            try:
+                self._alert_lead_poll(
+                    f"{self.agent_name}: provider quota exhausted, daemon backing off"
+                )
+            except (AttributeError, TypeError, OSError):
+                pass
 
         try:
             exit_code = proc.wait(timeout=30)
@@ -253,13 +292,23 @@ class ExecutionMixin:
             turn_used = result.input_tokens
             if self._tool_overhead_tokens > 0:
                 turn_used = max(0, turn_used - self._tool_overhead_tokens)
-            hp_pct = max(0.0, 100 - (turn_used / ctx * 100)) if ctx > 0 else 0.0
-            if hp_pct <= 5:
-                handle_phoenix_down(
-                    self.agent_name, hp_pct,
-                    self._write_state, self._stop_event, self._alert_lead_poll,
+            # Sanity guard (backlog #330): if measured turn usage exceeds 2x the
+            # context window, the measurement is broken (cumulative cache reads,
+            # bad provider stream, etc). Don't kill the daemon on a bogus reading.
+            if turn_used > ctx * 2:
+                self._log(
+                    f"hp measurement implausible: turn_used={turn_used} > 2*ctx={ctx*2} "
+                    f"(input_tokens={result.input_tokens}, overhead={self._tool_overhead_tokens}); "
+                    f"skipping phoenix_down"
                 )
-                return True  # invocation itself succeeded, but agent is cooked
+            else:
+                hp_pct = max(0.0, 100 - (turn_used / ctx * 100)) if ctx > 0 else 0.0
+                if hp_pct <= 5:
+                    handle_phoenix_down(
+                        self.agent_name, hp_pct,
+                        self._write_state, self._stop_event, self._alert_lead_poll,
+                    )
+                    return True  # invocation itself succeeded, but agent is cooked
 
         if result.interrupted:
             self._log("invocation interrupted by lead — returning to poll loop")
@@ -279,7 +328,11 @@ class ExecutionMixin:
             return False
 
         if result.exit_code != 0:
-            self.last_error = f"{result.command_name} exited with code {result.exit_code}"
+            # Preserve more specific errors set by _run_command (e.g. quota
+            # exhaustion in backlog #329) instead of overwriting them with the
+            # generic "exited with code N" message.
+            if not (self.last_error and "quota" in self.last_error.lower()):
+                self.last_error = f"{result.command_name} exited with code {result.exit_code}"
             return False
 
         self.resume_ready = True

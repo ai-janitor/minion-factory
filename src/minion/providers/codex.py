@@ -58,6 +58,11 @@ class CodexProvider(BaseProvider):
         if use_resume:
             cmd.extend(["resume", "--last"])
         cmd.append("--json")
+        # Backlog #327: codex refuses to run when project_dir is not a git repo
+        # ("Not inside a trusted directory and --skip-git-repo-check was not
+        # specified."). Daemons often boot under /tmp/* test dirs that aren't
+        # repos. The flag is a no-op inside a real repo, so always pass it.
+        cmd.append("--skip-git-repo-check")
         if self.agent_cfg.permission_mode == "bypassPermissions":
             cmd.extend([
                 "--sandbox", "workspace-write",

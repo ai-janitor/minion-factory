@@ -42,10 +42,16 @@ class HPMixin:
         - input_tokens: non-cached prompt tokens (often tiny)
         - cache_creation_input_tokens: system prompt tokens being cached
         - cache_read_input_tokens: system prompt tokens read from cache
-        Total context consumed = input + cache_creation + cache_read.
 
-        The 'result' event also has modelUsage with contextWindow — we extract
-        that to set the HP limit accurately.
+        IMPORTANT — backlog #330: in the 'result' event, cacheReadInputTokens
+        is the SUM across every internal API turn in the invocation. For a
+        118-turn boot it can balloon to 6M+ tokens against a 200k context,
+        which falsely trips phoenix_down. We treat the result event as
+        "tokens added to context this invocation" using only
+        inputTokens + cacheCreationInputTokens, which are non-cumulative.
+        Per-turn 'assistant' events (handled below via _find_usage_dict)
+        report a single API call's totals and remain a valid measure of
+        true context fill.
         """
         raw = line.strip()
         if not raw or "tokens" not in raw:
@@ -68,9 +74,10 @@ class HPMixin:
             if isinstance(model_usage, dict):
                 for model_info in model_usage.values():
                     if isinstance(model_info, dict):
+                        # cacheReadInputTokens is cumulative across all internal turns —
+                        # see docstring above (backlog #330). Exclude it.
                         inp = (model_info.get("inputTokens", 0) or 0) + \
-                              (model_info.get("cacheCreationInputTokens", 0) or 0) + \
-                              (model_info.get("cacheReadInputTokens", 0) or 0)
+                              (model_info.get("cacheCreationInputTokens", 0) or 0)
                         out = model_info.get("outputTokens", 0) or 0
                         # Extract context window for accurate HP limit
                         ctx_window = model_info.get("contextWindow", 0)

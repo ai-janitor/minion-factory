@@ -212,6 +212,20 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
     so tmux panes show all INFO messages (boot, poll, heartbeat).
     """
     if runtime == "ts":
+        # Backlog #307: ts-daemon is an optional sibling package that isn't
+        # installed by default. If its directory is missing, fall back to the
+        # python runtime instead of crashing crew spawn with FileNotFoundError.
+        ts_dir = _find_ts_daemon_dir()
+        if not os.path.isdir(ts_dir):
+            log.warning(
+                "ts-daemon directory not found at %s — falling back to python "
+                "runtime for agent '%s'. Set MINION_TS_DAEMON_DIR or install "
+                "the ts-daemon package to use the TypeScript runtime.",
+                ts_dir, agent,
+            )
+            start_agent_daemon(crew_config, agent, db_path=db_path, instance_id=instance_id, verbose=verbose)
+            return
+
         from minion.instance import resolve_file_key
         file_key = resolve_file_key(agent, instance_id)
         log_file = os.path.join(project_dir, ".minion-swarm", "logs", f"{file_key}.log")
@@ -224,7 +238,7 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         env.pop("CLAUDECODE", None)
         subprocess.Popen(
             ["npx", "tsx", "src/main.ts", "--config", crew_config, "--agent", agent],
-            cwd=_find_ts_daemon_dir(),
+            cwd=ts_dir,
             stdin=subprocess.DEVNULL,
             stdout=log_fp,
             stderr=subprocess.STDOUT,

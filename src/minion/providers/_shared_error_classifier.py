@@ -44,41 +44,52 @@ def classify_error(status_code: int) -> str:
 
 
 def extract_error_summary(line: str, max_normal: int = 500) -> Optional[str]:
-    """If line exceeds max_normal chars, try to extract a short error summary.
+    """If line exceeds max_normal chars AND is actually error-shaped, summarize.
+
+    Backlog #308-related: previously returned a non-None summary for ANY long
+    line, including normal claude assistant messages, which then got rendered
+    to tmux panes as `[agent] ERROR: {'role': ..., 'content': ...}`. The fix
+    is to require a real error signal — `is_error: true`, `type: "error"`,
+    or a structured `error` field — before classifying as an error. Long
+    non-error lines return None and pass through to the normal stream
+    renderer.
 
     Pseudo-logic:
-      1. If line <= max_normal chars, return None (not an error worth summarizing)
-      2. Try JSON parse: extract error.code, error.message, or top-level code/message
-      3. Try regex for HTTP status codes (4xx, 5xx) in first 200 chars
-      4. Fallback: "Large output (N chars)"
+      1. If line <= max_normal chars, return None.
+      2. Try JSON parse: only return a summary when there's an explicit error
+         marker (`is_error`, `type=="error"`, or `error` field with content).
+      3. Otherwise return None — let the caller render the line normally.
 
-    Returns: Short summary string, or None if line is short enough.
+    Returns: Short summary string, or None if line is not an error.
     """
     if len(line) <= max_normal:
         return None
 
-    # Try JSON error extraction
+    # Only classify as error when the JSON has an explicit error signal.
     try:
         data = json.loads(line)
-        if isinstance(data, dict):
-            code = data.get("error", {}).get("code") or data.get("code") or data.get("status")
-            msg = data.get("error", {}).get("message") or data.get("message") or ""
-            if code or msg:
-                return f"{code or 'ERROR'}: {str(msg)[:120]}"
-    except json.JSONDecodeError:
-        # Non-JSON lines are the normal case in provider output (log lines, stack
-        # traces, plain text) — DEBUG only, not an error.
-        logger.debug("extract_error_summary: line is not JSON, trying regex fallback")
-    except (TypeError, AttributeError) as e:
-        # These indicate a bug in the extractor logic, not normal input.
-        logger.error("JSON error extraction failed: %s", e)
+    except (json.JSONDecodeError, ValueError):
+        return None
 
-    # Try HTTP status code pattern
-    m = re.search(r'\b([45]\d{2})\b', line[:200])
-    if m:
-        return f"HTTP {m.group(1)} (response truncated, {len(line)} chars)"
+    if not isinstance(data, dict):
+        return None
 
-    return f"Large output ({len(line)} chars)"
+    # Explicit boolean / type marker
+    if data.get("is_error") is True or data.get("type") == "error":
+        msg = data.get("message") or data.get("error") or ""
+        return f"ERROR: {str(msg)[:120]}"
+
+    # Structured error field (dict with code/message)
+    err = data.get("error")
+    if isinstance(err, dict):
+        code = err.get("code") or err.get("status")
+        msg = err.get("message") or ""
+        if code or msg:
+            return f"{code or 'ERROR'}: {str(msg)[:120]}"
+    elif isinstance(err, str) and err:
+        return f"ERROR: {err[:120]}"
+
+    return None
 
 
 # ---------------------------------------------------------------------------

@@ -17,8 +17,7 @@ lead:
     1. minion register --name cloud --class lead --transport terminal
     2. minion set-context --agent cloud --context "just started"
     3. minion check-inbox --agent cloud
-    4. minion set-status --agent cloud --status "ready for orders"
-    5. minion who
+    4. minion who
 
 agents:
   tifa:
