@@ -45,8 +45,8 @@ _REGISTRY: dict[str, type[BaseProvider]] = {
 }
 
 
-def get_provider(name: str, agent_name: str, agent_cfg, use_poll: bool) -> BaseProvider:
+def get_provider(name: str, agent_name: str, agent_cfg, use_poll: bool, project_dir: str = "") -> BaseProvider:
     cls = _REGISTRY.get(name)
     if cls is None:
         raise ValueError(f"Unknown provider '{name}'. Available: {sorted(_REGISTRY)}")
-    return cls(agent_name=agent_name, agent_cfg=agent_cfg, use_poll=use_poll)
+    return cls(agent_name=agent_name, agent_cfg=agent_cfg, use_poll=use_poll, project_dir=project_dir)

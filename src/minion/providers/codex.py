@@ -69,6 +69,12 @@ class CodexProvider(BaseProvider):
                 "--add-dir", os.path.expanduser("~/.minion_work"),
                 "-c", "shell_environment_policy.inherit=all",
             ])
+            # Backlog #333: codex's workspace-write sandbox blocks the daemon's
+            # `minion register` from opening <project>/.work/minion.db
+            # ("sqlite3.OperationalError: unable to open database file").
+            # Explicitly grant the project_dir so .work/minion.db is reachable.
+            if self.project_dir:
+                cmd.extend(["--add-dir", self.project_dir])
         if self.agent_cfg.model:
             cmd.extend(["--model", self.agent_cfg.model])
         cmd.append(prompt)

@@ -38,10 +38,15 @@ from ._shared_error_log import append_error_log
 class BaseProvider(ABC):
     """Common interface for all agent CLI providers (claude, gemini, codex, opencode)."""
 
-    def __init__(self, agent_name: str, agent_cfg, use_poll: bool) -> None:
+    def __init__(self, agent_name: str, agent_cfg, use_poll: bool, project_dir: str = "") -> None:
         self.agent_name = agent_name
         self.agent_cfg = agent_cfg
         self.use_poll = use_poll
+        # Backlog #333: providers that run inside a sandbox (codex) need to
+        # know the project root so they can grant access to <project>/.work
+        # — otherwise the daemon's `minion register` call inside the sandbox
+        # gets sqlite3.OperationalError trying to open .work/minion.db.
+        self.project_dir = project_dir
         self.session_id: str | None = None
 
     @abstractmethod

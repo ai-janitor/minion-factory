@@ -95,6 +95,7 @@ class AgentDaemon(
 
         self._provider = get_provider(
             self.agent_cfg.provider, self.agent_name, self.agent_cfg, self._use_poll,
+            project_dir=str(self.config.project_dir),
         )
         self._error_log = self.config.logs_dir / f"{file_key}.error.log"
         # Verbose log: always captures INFO+ for post-mortem debugging.

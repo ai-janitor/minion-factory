@@ -62,21 +62,39 @@ class DBMixin:
                 conn.close()
 
     def _write_agent_runtime(self, crew: str | None = None) -> None:
-        """Write PID, crew to the agents table. Child PID + RSS written per-invocation."""
+        """Write the long-lived daemon-run wrapper PID + crew to agents.
+
+        Backlog #336: previously wrote self._child_pid, which is None at boot
+        and the per-invocation claude subprocess PID later. That made
+        sitrep's liveness probe fail because the recorded PID either was
+        NULL or pointed at a dead claude process. The agents.pid column
+        is the operator-facing "is this daemon running" PID, so it must
+        be the wrapper process (us, os.getpid()), not transient children.
+        Per-invocation child PIDs still get tracked in invocation_log via
+        _insert_invocation_start().
+        """
+        import os as _os
+        wrapper_pid = _os.getpid()
         def _do(conn):
             conn.execute(
                 "UPDATE agents SET pid = ?, crew = ? WHERE name = ?",
-                (self._child_pid, crew, self.agent_name),
+                (wrapper_pid, crew, self.agent_name),
             )
         self._db_execute(_do, caller="_write_agent_runtime")
 
     def _update_child_pid_in_db(self) -> None:
-        """Write the current child PID + its RSS to agents (current state)."""
+        """Update RSS for the current child invocation.
+
+        Backlog #336: this used to also overwrite agents.pid with the child
+        PID, which clobbered the long-lived wrapper PID written by
+        _write_agent_runtime() and broke sitrep liveness. Now it only
+        refreshes rss_bytes — child PIDs live exclusively in invocation_log.
+        """
         rss = _get_rss_bytes(self._child_pid)
         def _do(conn):
             conn.execute(
-                "UPDATE agents SET pid = ?, rss_bytes = ? WHERE name = ?",
-                (self._child_pid, rss, self.agent_name),
+                "UPDATE agents SET rss_bytes = ? WHERE name = ?",
+                (rss, self.agent_name),
             )
         self._db_execute(_do, caller="_update_child_pid_in_db")
 

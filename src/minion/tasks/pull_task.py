@@ -68,27 +68,35 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             if cursor.fetchone()[0] > 0:
                 return {"error": f"BLOCKED: Task #{task_id} has unresolved blockers."}
 
-        # Atomic claim
+        # Atomic claim — advance the DAG when applicable.
+        # Backlog #335: pull_task used to leave the task pegged at 'assigned'
+        # forever. Agents would do all the work but the task never moved off
+        # assigned, so submit_result/complete_phase had nothing to advance.
+        # Now: open/assigned both transition to 'in_progress' on claim,
+        # consistent with the bugfix/chore/feature DAGs in task-flows/_base.yaml.
+        # Review-loop stages (fixed/verified/findings_ready/assessed) still
+        # only re-bind the assignee without changing status.
         if task_status in ("fixed", "verified", "findings_ready", "assessed"):
             cursor.execute(
                 """UPDATE tasks SET assigned_to = ?, updated_at = ?
                    WHERE id = ? AND status = ? AND (assigned_to IS NULL OR assigned_to = ?)""",
                 (agent_name, now, task_id, task_status, agent_name),
             )
+            new_status = task_status
         else:
             cursor.execute(
-                """UPDATE tasks SET assigned_to = ?, status = 'assigned', updated_at = ?
+                """UPDATE tasks SET assigned_to = ?, status = 'in_progress', updated_at = ?
                    WHERE id = ? AND (
-                       (status = 'assigned' AND assigned_to = ?) OR
+                       (status = 'assigned' AND (assigned_to IS NULL OR assigned_to = ?)) OR
                        (status = 'open' AND assigned_to IS NULL)
                    )""",
                 (agent_name, now, task_id, agent_name),
             )
+            new_status = "in_progress"
 
         if cursor.rowcount == 0:
             return {"error": f"Race lost — task #{task_id} was claimed by another agent."}
 
-        new_status = "assigned" if task_status not in ("fixed", "verified", "findings_ready", "assessed") else task_status
         _log_transition(cursor, task_id, task_status, new_status, agent_name, now)
 
         cursor.execute(
@@ -108,7 +116,7 @@ def pull_task(agent_name: str, task_id: int) -> dict[str, object]:
             "task_id": task_id,
             "title": task_row["title"],
             "task_file": full_task.get("task_file"),
-            "task_status": task_status,
+            "task_status": new_status,
         }
 
         # Inline file contents

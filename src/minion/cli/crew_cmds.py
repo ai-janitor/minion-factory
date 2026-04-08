@@ -124,6 +124,26 @@ def register_commands(cli: click.Group) -> None:
             verbose=verbose,
         ), ctx.obj["human"], ctx.obj["compact"])
 
+    @crew_group.command("install")
+    @click.option("--source", "-s", default="",
+                  help="Source crews/ directory. Defaults to the minion-factory checkout this CLI was installed from.")
+    @click.option("--dest", "-d", default="",
+                  help="Destination directory. Defaults to ~/.minion-swarm/.")
+    @click.option("--force", "-f", is_flag=True, default=False,
+                  help="Overwrite without prompting (default: refuse if dest is newer).")
+    @click.option("--dry-run", is_flag=True, default=False,
+                  help="Show what would be copied without writing.")
+    @click.pass_context
+    def install_crews(ctx: click.Context, source: str, dest: str, force: bool, dry_run: bool) -> None:
+        """Refresh installed crew yamls from source. Backlog #337.
+
+        Without this, ~/.minion-swarm/<crew>.yaml drifts from
+        crews/<crew>.yaml in the source repo and operators have to manually
+        cp files when source changes (e.g. after a fix like #326).
+        """
+        from minion.crew.install import install_crews as _install
+        _output(_install(source=source, dest=dest, force=force, dry_run=dry_run), ctx.obj["human"])
+
     @crew_group.command("hand-off-zone")
     @click.option("--from", "-f", "from_agent", required=True)
     @click.option("--to", "-t", "to_agents", required=True, help="Comma-separated agent names")
