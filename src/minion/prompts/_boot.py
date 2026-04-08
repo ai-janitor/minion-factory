@@ -13,25 +13,49 @@ from typing import Dict
 from minion.daemon.contracts import load_contract
 
 
-def load_boot_section(docs_dir: Path, agent: str, role: str) -> str:
-    """Build the ON STARTUP boot section."""
+def load_boot_section(docs_dir: Path, agent: str, role: str, model: str = "") -> str:
+    """Build the ON STARTUP boot section.
+
+    Backlog #310-followup: `model` was added because `minion register` now
+    requires `--model`. Without it the boot register call exits 2 and the
+    daemon spins forever in a register loop. Defaults to a sensible model
+    when caller doesn't pass one (older callers).
+    """
+    effective_model = model or "claude-sonnet-4-6"
     contract = load_contract(docs_dir, "boot-sequence")
     if contract:
-        subs: Dict[str, str] = {"{agent}": agent, "{role}": role}
+        subs: Dict[str, str] = {
+            "{agent}": agent,
+            "{role}": role,
+            "{model}": effective_model,
+        }
 
         def _sub(s: str) -> str:
             for k, v in subs.items():
                 s = s.replace(k, v)
             return s
 
-        cmds = [f"  {_sub(c)}" for c in contract["commands"]]
+        # Backlog: legacy contract templates may not include {model}. If the
+        # register command in the contract doesn't already mention --model,
+        # inject it inline so old contracts on disk keep working.
+        rendered_cmds = []
+        for c in contract["commands"]:
+            rendered = _sub(c)
+            if (
+                "register" in rendered
+                and "--model" not in rendered
+                and "set-context" not in rendered
+                and "set-status" not in rendered
+            ):
+                rendered = f"{rendered} --model {effective_model}"
+            rendered_cmds.append(f"  {rendered}")
         return "\n".join(
-            [_sub(contract["preamble"])] + cmds + ["", _sub(contract["postamble"])]
+            [_sub(contract["preamble"])] + rendered_cmds + ["", _sub(contract["postamble"])]
         )
 
     return "\n".join([
         "BOOT: You just started. Run these commands via the Bash tool:",
-        f"  minion --compact register --name {agent} --class {role} --transport daemon",
+        f"  minion --compact register --name {agent} --class {role} --model {effective_model} --transport daemon",
         f"  minion set-context --agent {agent} --context 'just started'",
         f"  minion set-status --agent {agent} --status 'ready for orders'",
         "",

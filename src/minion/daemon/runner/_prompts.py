@@ -32,12 +32,17 @@ class PromptMixin:
         provider, so we exclude it here to avoid duplication.
         """
         from minion.prompts import build_boot_prompt as _build_boot
+        # Backlog: pass model so the boot register command includes --model.
+        # Without this, daemons spin in a register loop because `minion register`
+        # exits 2 (missing required option). Pull from agent_cfg if set.
+        model = getattr(self.agent_cfg, "model", "") or ""
         return _build_boot(
             docs_dir=self.config.docs_dir,
             agent=self.agent_name,
             role=self.agent_cfg.role or "coder",
             guardrails=self._build_provider_section(),
             capabilities=self.agent_cfg.capabilities,
+            model=model,
         )
 
     def _build_inbox_prompt(self, poll_data: Dict[str, Any]) -> str:

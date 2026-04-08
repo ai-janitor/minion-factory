@@ -40,13 +40,16 @@ def init_swarm(config_path: str, project_dir: str) -> None:
     cfg.ensure_runtime_dirs()
 
 
-def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "", instance_id: str | None = None) -> None:
+def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "", instance_id: str | None = None, verbose: bool = False) -> None:
     """Fork a daemon process for one agent (replaces minion-swarm start).
 
     instance_id: Optional instance suffix for multi-instance spawns. When set,
     log files use the instance-qualified name (e.g., redmage-jr-2.log) and
     MINION_INSTANCE_ID is set in the environment. When None, uses bare agent
     name (backward compatible).
+
+    verbose: When True, sets MINION_LOG_LEVEL=INFO so the tmux pane shows
+    all INFO messages (boot, poll, heartbeat). Default False → WARN+ only.
     """
     from minion.crew.config import load_config
     from minion.instance import resolve_file_key, is_instance_alive
@@ -75,6 +78,10 @@ def start_agent_daemon(config_path: str, agent_name: str, db_path: str = "", ins
         env["MINION_INSTANCE_ID"] = instance_id
     if cfg.docs_dir:
         env["MINION_DOCS_DIR"] = str(cfg.docs_dir)
+    # Verbose mode: raise tmux pane log level from WARN to INFO.
+    # Only set when caller requests it (--verbose on crew spawn/recruit).
+    if verbose:
+        env["MINION_LOG_LEVEL"] = "INFO"
 
     # Resolve absolute path to minion binary so detached process finds it
     minion_bin = shutil.which("minion")
@@ -192,7 +199,7 @@ def _find_ts_daemon_dir() -> str:
     return os.path.expanduser("~/.minion-swarm/ts-daemon")
 
 
-def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python", db_path: str = "", instance_id: str | None = None) -> None:
+def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "python", db_path: str = "", instance_id: str | None = None, verbose: bool = False) -> None:
     """Start daemon watcher for an agent.
 
     runtime='python' uses in-process AgentDaemon.
@@ -200,6 +207,9 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
 
     instance_id: Optional instance suffix for multi-instance spawns. Passed
     through to start_agent_daemon() for file isolation.
+
+    verbose: When True, sets MINION_LOG_LEVEL=INFO in the daemon environment
+    so tmux panes show all INFO messages (boot, poll, heartbeat).
     """
     if runtime == "ts":
         from minion.instance import resolve_file_key
@@ -223,4 +233,4 @@ def start_swarm(agent: str, crew_config: str, project_dir: str, runtime: str = "
         )
         log_fp.close()
     else:
-        start_agent_daemon(crew_config, agent, db_path=db_path, instance_id=instance_id)
+        start_agent_daemon(crew_config, agent, db_path=db_path, instance_id=instance_id, verbose=verbose)

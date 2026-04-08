@@ -16,25 +16,44 @@ import re
 import tempfile
 from datetime import datetime
 
-from minion.db import RUNTIME_DIR
 from minion.defaults import MAX_DOC_SIZE  # noqa: F401 — re-exported for callers
 
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Base directories
+# Base directories — LAZY (backlog #311)
+#
+# These were previously computed at import time as `os.path.join(RUNTIME_DIR, ...)`
+# which froze the value to whatever the runtime dir was when fs.py was first
+# imported. The CLI's -C flag changes the runtime dir AFTER imports complete,
+# so cached constants caused war/inbox/raid-log writes to land in the wrong
+# project. Resolve on every access via module-level __getattr__ instead.
 # ---------------------------------------------------------------------------
 
-INBOX_DIR = os.path.join(RUNTIME_DIR, "inbox")
-BATTLE_PLAN_DIR = os.path.join(RUNTIME_DIR, "battle-plans")
-RAID_LOG_DIR = os.path.join(RUNTIME_DIR, "raid-log")
-AGENT_ACTIVITY_DIR = os.path.join(RUNTIME_DIR, "agent-activity")
+_LAZY_DIRS = {
+    "INBOX_DIR": "inbox",
+    "BATTLE_PLAN_DIR": "battle-plans",
+    "RAID_LOG_DIR": "raid-log",
+    "AGENT_ACTIVITY_DIR": "agent-activity",
+}
+
+
+def _runtime_subdir(name: str) -> str:
+    """Resolve a runtime subdirectory at call time, honoring -C / MINION_DB_PATH."""
+    from minion.db import get_runtime_dir
+    return os.path.join(get_runtime_dir(), name)
+
+
+def __getattr__(name: str):
+    if name in _LAZY_DIRS:
+        return _runtime_subdir(_LAZY_DIRS[name])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def ensure_dirs() -> None:
-    """Create all required filesystem directories."""
-    for d in (INBOX_DIR, BATTLE_PLAN_DIR, RAID_LOG_DIR, AGENT_ACTIVITY_DIR):
-        os.makedirs(d, exist_ok=True)
+    """Create all required filesystem directories (resolved lazily)."""
+    for sub in _LAZY_DIRS.values():
+        os.makedirs(_runtime_subdir(sub), exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +83,7 @@ def inbox_path(agent_name: str) -> str:
         f"agent_name must not contain path separators: '{agent_name}'"
     )
 
-    p = os.path.join(INBOX_DIR, agent_name)
+    p = os.path.join(_runtime_subdir("inbox"), agent_name)
     os.makedirs(p, exist_ok=True)
     return p
 
@@ -85,9 +104,10 @@ def battle_plan_file_path(agent_name: str) -> str:
     # Precondition assertions — backlog #63
     assert agent_name, "agent_name must not be empty"
 
-    os.makedirs(BATTLE_PLAN_DIR, exist_ok=True)
+    plan_dir = _runtime_subdir("battle-plans")
+    os.makedirs(plan_dir, exist_ok=True)
     fname = f"{_timestamp()}-{_slugify(agent_name, 20)}-plan.md"
-    return os.path.join(BATTLE_PLAN_DIR, fname)
+    return os.path.join(plan_dir, fname)
 
 
 def raid_log_file_path(agent_name: str, priority: str) -> str:
@@ -99,9 +119,10 @@ def raid_log_file_path(agent_name: str, priority: str) -> str:
         f"Invalid priority '{priority}'. Must be low/normal/high/critical."
     )
 
-    os.makedirs(RAID_LOG_DIR, exist_ok=True)
+    log_dir = _runtime_subdir("raid-log")
+    os.makedirs(log_dir, exist_ok=True)
     fname = f"{_timestamp()}-{_slugify(agent_name, 20)}-{priority}.md"
-    return os.path.join(RAID_LOG_DIR, fname)
+    return os.path.join(log_dir, fname)
 
 
 # ---------------------------------------------------------------------------

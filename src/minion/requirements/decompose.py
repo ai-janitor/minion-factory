@@ -102,6 +102,16 @@ def decompose(parent_path: str, spec: dict, agent_name: str = "lead") -> dict[st
     created_children: list[dict[str, Any]] = []
     task_ids: list[int] = []
 
+    # Phase 0: If parent is at 'seed', auto-advance to 'decomposing' before creating children.
+    # Rationale: 'seed' -> 'decomposing' is a valid alt_next transition, but 'seed' -> 'tasked'
+    # is not. Without this step, Phase 3's update_stage(parent, 'tasked') fails with
+    # "Transition blocked: tasked is not a valid transition from seed", leaving the parent in
+    # inconsistent state with children created but parent still at seed.
+    if parent_stage == "seed":
+        advance_result = update_stage(parent_path, "decomposing")
+        if "error" in advance_result:
+            return {"error": f"Failed to advance parent from 'seed' to 'decomposing': {advance_result['error']}"}
+
     # Phase 1: Create all children (folders, READMEs, register, create tasks)
     for i, child in enumerate(children_spec):
         num = f"{i + 1:03d}"

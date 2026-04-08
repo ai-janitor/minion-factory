@@ -1,6 +1,6 @@
 {
   "commands": [
-    "minion --compact register --name {agent} --class {role} --transport daemon",
+    "minion --compact register --name {agent} --class {role} --model {model} --transport daemon",
     "minion set-context --agent {agent} --context 'just started'",
     "minion set-status --agent {agent} --status 'ready for orders'"
   ],

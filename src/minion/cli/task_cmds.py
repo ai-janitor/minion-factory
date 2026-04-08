@@ -44,11 +44,21 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("assign")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--assigned-to", "-A", required=True)
     @click.pass_context
     def assign_task(ctx: click.Context, agent: str, task_id: int, assigned_to: str) -> None:
-        """Assign a task to an agent. Lead only."""
+        """Assign a task to an agent. Lead only.
+
+        \b
+        NOTE on poll latency (backlog #319):
+            Daemons see new assignments on their next poll cycle (~10–30s),
+            not instantly. The dashboard reflects the change as soon as the
+            DB row is updated, but the assigned daemon won't actually start
+            working until it polls. If you assign a task and "nothing
+            happens" for 30 seconds, that's expected — do NOT re-assign in
+            a panic. Use `minion sitrep` to see whether the daemon claimed it.
+        """
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
         from minion.tasks import assign_task as _assign_task
@@ -56,7 +66,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("update")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--status", "-s", default="")
     @click.option("--progress", "-P", default="")
     @click.option("--files", "-f", default="")
@@ -81,7 +91,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_tasks(status, project, zone, assigned_to, class_required, count), ctx.obj["human"])
 
     @task_group.command("show")
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def show_task(ctx: click.Context, task_id: int) -> None:
         """Show full detail for a single task."""
@@ -89,7 +99,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_task(task_id), ctx.obj["human"])
 
     @task_group.command("get", hidden=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def get_task(ctx: click.Context, task_id: int) -> None:
         """Show full detail for a single task (hidden alias for 'task show')."""
@@ -97,7 +107,7 @@ def register_commands(cli: click.Group) -> None:
         _output(_get_task(task_id), ctx.obj["human"])
 
     @task_group.command("spec")
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def task_spec_cmd(ctx: click.Context, task_id: int) -> None:
         """Read the spec file contents for a task by ID."""
@@ -109,7 +119,7 @@ def register_commands(cli: click.Group) -> None:
             _output(result, ctx.obj["human"])
 
     @task_group.command("lineage")
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def task_lineage(ctx: click.Context, task_id: int) -> None:
         """Show task lineage — DAG history and who worked each stage."""
@@ -118,7 +128,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("submit-result", hidden=True)
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--result-file", "-r", required=True)
     @click.pass_context
     def submit_result(ctx: click.Context, agent: str, task_id: int, result_file: str) -> None:
@@ -128,7 +138,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("close")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def close_task(ctx: click.Context, agent: str, task_id: int) -> None:
         """Close a task. Lead only."""
@@ -139,7 +149,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("done")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--summary", "-s", default="", help="Optional summary of externally completed work")
     @click.pass_context
     def done_task_cmd(ctx: click.Context, agent: str, task_id: int, summary: str) -> None:
@@ -151,7 +161,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("reopen")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--to-status", "-s", default="assigned", help="Target status (default: assigned)")
     @click.pass_context
     def reopen_task_cmd(ctx: click.Context, agent: str, task_id: int, to_status: str) -> None:
@@ -161,7 +171,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("pull")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def pull_task_cmd(ctx: click.Context, agent: str, task_id: int) -> None:
         """Claim a specific task by ID."""
@@ -170,7 +180,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("complete-phase")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--failed", "-F", is_flag=True, help="Mark as failed (routes to fail branch in DAG)")
     @click.option("--reason", "-r", default=None, help="Required when blocking — why you're stuck")
     @click.pass_context
@@ -191,7 +201,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("comment")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--message", "-m", required=True)
     @click.option("--files", "-f", default="", help="Comma-separated file paths read for context")
     @click.pass_context
@@ -202,7 +212,7 @@ def register_commands(cli: click.Group) -> None:
         _output(add_comment(agent, task_id, message, files_read=files_list), ctx.obj["human"])
 
     @task_group.command("comments")
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.pass_context
     def task_comments_cmd(ctx: click.Context, task_id: int) -> None:
         """List all comments for a task."""
@@ -222,22 +232,24 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--intel", "-i", default="", help="Comma-separated intel slugs to link")
     @click.option("--requirement", "-r", "requirement_id", default=None, type=int, help="Link to requirement ID for lineage tracking (alias: --requirement-id)")
     @click.option("--requirement-id", "requirement_id_alias", default=None, type=int, help="Link to requirement ID for lineage tracking (alias: --requirement)")
+    @click.option("--assigned-to", "-A", "assigned_to", default="", help="Optionally assign the new task in one shot (lead-only, backlog #299)")
     @click.pass_context
     def task_define_cmd(ctx: click.Context, agent: str, title: str, description: str,
-                        task_type: str | None, flow: str | None, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None, requirement_id_alias: int | None) -> None:
+                        task_type: str | None, flow: str | None, project: str, zone: str, blocked_by: str, class_required: str, intel: str, requirement_id: int | None, requirement_id_alias: int | None, assigned_to: str) -> None:
         """Create a task spec file and task record in one command.
 
         Accepts --task-type or --flow (synonyms). Accepts --requirement or --requirement-id (synonyms).
+        Pass --assigned-to to assign the new task in the same call (backlog #299).
         """
         # Merge alias pairs — --flow is an alias for --task-type; --requirement-id is an alias for --requirement
         resolved_type = task_type or flow or "feature"
         resolved_req_id = requirement_id if requirement_id is not None else requirement_id_alias
         from minion.tasks.define import define_task
-        _output(define_task(agent, title, description, resolved_type, project, zone, blocked_by, class_required, intel, requirement_id=resolved_req_id), ctx.obj["human"])
+        _output(define_task(agent, title, description, resolved_type, project, zone, blocked_by, class_required, intel, requirement_id=resolved_req_id, assigned_to=assigned_to), ctx.obj["human"])
 
     @task_group.command("result")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--summary", "-s", required=True)
     @click.option("--files-changed", "-f", default="", help="Comma-separated list of changed files")
     @click.option("--notes", "-n", default="")
@@ -250,7 +262,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("review")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--verdict", "-v", required=True, type=click.Choice(["pass", "fail"]))
     @click.option("--notes", "-n", default="")
     @click.pass_context
@@ -261,7 +273,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("test")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--passed/--failed", required=True, help="Test outcome")
     @click.option("--output", "-o", "test_output", default="", help="Test output text")
     @click.option("--notes", "-n", default="")
@@ -274,7 +286,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("block")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--reason", "-r", required=True)
     @click.pass_context
     def task_block_cmd(ctx: click.Context, agent: str, task_id: int, reason: str) -> None:
@@ -284,7 +296,7 @@ def register_commands(cli: click.Group) -> None:
 
     @task_group.command("order")
     @_agent_option(required=True)
-    @click.option("--task-id", "-t", required=True, type=int)
+    @click.option("--task-id", "--id", "-t", "task_id", required=True, type=int, help="Task ID (--id is an alias, backlog #300)")
     @click.option("--worker", "-w", required=True, help="Worker agent name")
     @click.option("--files", "-f", default="", help="Comma-separated files to modify")
     @click.option("--fix", "-d", default="", help="Exact fix description")

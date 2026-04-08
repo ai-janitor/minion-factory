@@ -23,36 +23,132 @@ from minion.defaults import resolve_swarm_runtime_dir
 
 
 def _kill_all_daemons(project_dir: str = "") -> None:
-    """SIGTERM every daemon with a state file — no YAML needed."""
+    """SIGTERM every daemon with a state file. Backlog #310: also fall back to
+    matching daemon-run processes by command line in case state files are stale
+    or missing (e.g. crash that left orphan daemons), and escalate to SIGKILL
+    after a short grace period for any survivors.
+
+    project_dir, if provided, anchors the swarm runtime dir lookup so that
+    callers running from another cwd (or via `-C`) hit the right state dir.
+    """
     state_dir = resolve_swarm_runtime_dir(project_dir or None) / "state"
-    if not state_dir.is_dir():
-        return
-    for state_file in state_dir.glob("*.json"):
-        # Scope 1: file parsing — OSError (can't read) or bad JSON
-        try:
-            state = json.loads(state_file.read_text())
-        except (OSError, json.JSONDecodeError) as e:
-            log.error("Failed to read/parse daemon state %s: %s", state_file, e)
-            continue
+    pids_killed: set[int] = set()
+    agent_names: set[str] = set()
 
-        pid = state.get("pid")
-        if not (pid and isinstance(pid, int)):
-            continue
+    if state_dir.is_dir():
+        for state_file in state_dir.glob("*.json"):
+            # Collect every agent name we know about in this project — used as
+            # a fallback matcher for live daemons whose stored pid is stale.
+            agent_names.add(state_file.stem)
 
-        # Scope 2: kill — separate from file-parsing so PermissionError is visible
+            # Scope 1: file parsing — OSError (can't read) or bad JSON
+            try:
+                state = json.loads(state_file.read_text())
+            except (OSError, json.JSONDecodeError) as e:
+                log.error("Failed to read/parse daemon state %s: %s", state_file, e)
+                continue
+
+            pid = state.get("pid")
+            if not (pid and isinstance(pid, int)):
+                continue
+
+            # Scope 2: kill — separate from file-parsing so PermissionError is visible
+            try:
+                os.kill(pid, signal.SIGTERM)
+                pids_killed.add(pid)
+            except ProcessLookupError:
+                log.debug("Daemon PID %d in %s already gone", pid, state_file)
+            except PermissionError:
+                log.warning(
+                    "PermissionError killing PID %d (from %s) — daemon may still be running",
+                    pid,
+                    state_file,
+                )
+
+    # Backlog #310 fallback: scan process table for daemon-run processes whose
+    # --agent argv matches any agent we found state files for. This catches
+    # orphans whose stored pid is stale (the common case — state files are
+    # written once and not updated when daemons restart).
+    extra_pids = _find_daemon_pids(project_dir, agent_names=agent_names)
+    for pid in extra_pids:
+        if pid in pids_killed:
+            continue
         try:
             os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            log.error("Daemon PID %d in %s already gone", pid, state_file)
-        except PermissionError:
-            log.warning(
-                "PermissionError killing PID %d (from %s) — daemon may still be running",
-                pid,
-                state_file,
-            )
+            pids_killed.add(pid)
+        except (ProcessLookupError, PermissionError) as e:
+            log.debug("Could not SIGTERM extra daemon PID %d: %s", pid, e)
+
+    if not pids_killed:
+        return
+
+    # Escalation: give daemons up to 2s to exit, then SIGKILL survivors.
+    deadline = time.time() + 2.0
+    while time.time() < deadline and pids_killed:
+        survivors = set()
+        for pid in pids_killed:
+            try:
+                os.kill(pid, 0)  # signal 0 = liveness probe
+                survivors.add(pid)
+            except OSError:
+                pass  # exited
+        pids_killed = survivors
+        if pids_killed:
+            time.sleep(0.1)
+    for pid in pids_killed:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            log.warning("Backlog #310: SIGKILL daemon PID %d (ignored SIGTERM)", pid)
+        except OSError:
+            pass
 
 
-def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
+def _find_daemon_pids(project_dir: str = "", agent_names: set[str] | None = None) -> list[int]:
+    """Return PIDs of `minion daemon-run` processes, filtered by agent name.
+
+    Uses ps + cmdline parsing rather than psutil to avoid a hard dep. The
+    daemon-run argv always includes `--agent <name>`, but the config path it
+    references is the GLOBAL crew yaml under ~/.minion-swarm — it does NOT
+    include the project path, so project-path filtering misses everything.
+
+    Strategy:
+      - If agent_names is provided (the common case from _kill_all_daemons):
+        match daemon-run processes whose argv mentions any of those names.
+        This is project-scoped because the caller derived agent_names from
+        the project's state dir.
+      - If agent_names is empty/None: fall back to project-path matching
+        (legacy behavior — finds nothing in practice but doesn't kill
+        unrelated daemons either).
+    """
+    try:
+        out = subprocess.run(
+            ["ps", "-Ao", "pid=,command="],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return []
+    pids: list[int] = []
+    needle = "minion daemon-run"
+    proj_filter = os.path.abspath(project_dir) if project_dir else ""
+    name_filters = {f"--agent {n}" for n in (agent_names or set())}
+    for line in out.stdout.splitlines():
+        line = line.strip()
+        if not line or needle not in line:
+            continue
+        if name_filters:
+            if not any(nf in line for nf in name_filters):
+                continue
+        elif proj_filter and proj_filter not in line:
+            continue
+        try:
+            pid_str, _ = line.split(None, 1)
+            pids.append(int(pid_str))
+        except (ValueError, IndexError):
+            continue
+    return pids
+
+
+def stand_down(agent_name: str, crew: str = "", project_dir: str = "") -> dict[str, object]:
     # SU-09: Precondition assertion
     assert agent_name, "agent_name must not be empty"
     conn = get_db()
@@ -98,15 +194,31 @@ def stand_down(agent_name: str, crew: str = "") -> dict[str, object]:
         deregister(a)
         kill_tmux_pane_by_title(a)
 
-    # Kill all daemon processes from state dir — no YAML references needed
-    _kill_all_daemons()
+    # Kill all daemon processes from state dir — no YAML references needed.
+    # Backlog #310: forward project_dir so the lookup honors `-C`.
+    _kill_all_daemons(project_dir)
 
     if crew:
-        close_terminal_by_title(f"workers:crew-{crew}")
+        # Backlog #305: tmux session name now includes a project hash so two
+        # projects can run the same crew in parallel without colliding. Try
+        # the project-scoped name first, then fall back to the legacy bare
+        # name for sessions spawned before this fix landed.
+        import hashlib
+        cwd_for_hash = project_dir or os.getcwd()
+        proj_hash = hashlib.sha1(os.path.abspath(cwd_for_hash).encode()).hexdigest()[:6]
+        scoped_name = f"crew-{crew}-{proj_hash}"
+        legacy_name = f"crew-{crew}"
+        close_terminal_by_title(f"workers:{scoped_name}")
         close_terminal_by_title(f"lead:")
-        r = subprocess.run(["tmux", "kill-session", "-t", f"crew-{crew}"], capture_output=True, text=True)
-        if r.returncode != 0:
-            log.warning("tmux kill-session crew-%s failed: %s", crew, r.stderr.strip())
+        killed_any = False
+        for sess in (scoped_name, legacy_name):
+            r = subprocess.run(["tmux", "kill-session", "-t", sess], capture_output=True, text=True)
+            if r.returncode == 0:
+                killed_any = True
+            else:
+                log.debug("tmux kill-session %s: %s", sess, r.stderr.strip())
+        if not killed_any:
+            log.warning("tmux kill-session for crew %s found no matching session", crew)
         return {"status": "dismissed", "crew": crew}
     else:
         kill_all_crews()

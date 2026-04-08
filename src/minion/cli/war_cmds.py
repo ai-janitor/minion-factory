@@ -24,14 +24,25 @@ def register_commands(cli: click.Group) -> None:
 
     @war_group.command("set-plan")
     @_agent_option(required=True)
-    @click.option("--plan", "-p", required=True)
+    @click.option("--plan", "-p", default=None, help="Plan body (preferred name)")
+    @click.option("--text", "-t", "text", default=None, help="Plan body (alias for --plan, backlog #313)")
     @click.pass_context
-    def set_battle_plan(ctx: click.Context, agent: str, plan: str) -> None:
-        """Set the session's current objective. Lead only."""
+    def set_battle_plan(ctx: click.Context, agent: str, plan: str | None, text: str | None) -> None:
+        """Set the session's current objective. Lead only.
+
+        Either --plan or --text accepts the plan body. --text was added because
+        operators kept reaching for it (consistent with `comms send --message`
+        / `set-context --context` style elsewhere). Backlog #313.
+        """
+        body = plan if plan is not None else text
+        if not body:
+            _output({"error": "Missing plan body. Pass --plan '<text>' or --text '<text>'."}, ctx.obj["human"])
+            ctx.exit(1)
+            return
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
         from minion.warroom import set_battle_plan as _set_battle_plan
-        _output(_set_battle_plan(agent, plan), ctx.obj["human"])
+        _output(_set_battle_plan(agent, body), ctx.obj["human"])
 
     @war_group.command("show-plan")
     @click.option("--status", "-s", default="active", type=click.Choice(["active", "superseded", "completed", "abandoned", "obsolete"]))

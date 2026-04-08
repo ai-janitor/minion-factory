@@ -35,6 +35,7 @@ def recruit_agent(
     zone: str = "",
     runtime: str = "python",
     project_dir: str = ".",
+    verbose: bool = False,
 ) -> dict[str, Any]:
     """Add a single ad-hoc agent into an already-running crew tmux session.
 
@@ -199,7 +200,7 @@ def recruit_agent(
 
     # --- Start daemon ---
     db_path = os.path.join(project_dir, ".work", "minion.db")
-    start_swarm(name, crew_config, project_dir, runtime=runtime, db_path=db_path, instance_id=instance_id)
+    start_swarm(name, crew_config, project_dir, runtime=runtime, db_path=db_path, instance_id=instance_id, verbose=verbose)
 
     result_dict: dict[str, Any] = {
         "status": "recruited",

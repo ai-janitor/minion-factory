@@ -210,8 +210,19 @@ def output(data: dict[str, object], human: bool = True, compact: bool = False) -
       - MINION_CLASS env var set: human=False (daemon agents)
       - --human flag (legacy, hidden): human=True (overrides daemon auto-JSON)
 
+    Backlog #306: when stdout is being piped (not a tty), automatically emit
+    valid JSON regardless of `human`. The yaml-ish "key: json" form is
+    convenient for terminals but breaks `| jq` and `| python -m json.tool`.
+
     Exit codes: 0=success, 1=error. Usage errors (exit 2) are handled by Click.
     """
+    # Backlog #306: piped stdout => emit clean JSON so consumers can parse it.
+    if human and not compact:
+        try:
+            if not sys.stdout.isatty():
+                human = False
+        except (AttributeError, ValueError):
+            pass
     if "error" in data:
         data = _add_remediation_hint(data)
         click.echo(json.dumps(data, indent=2, default=str), err=True)

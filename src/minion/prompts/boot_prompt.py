@@ -20,6 +20,7 @@ def build_boot_prompt(
     role: str,
     guardrails: str = "",
     capabilities: tuple[str, ...] = (),
+    model: str = "",
 ) -> str:
     """Assemble the first-invocation boot prompt.
 
@@ -29,10 +30,13 @@ def build_boot_prompt(
         role: Agent role (lead, coder, scout, etc.).
         guardrails: Provider-specific prompt guardrails (may be empty).
         capabilities: Agent's capabilities from crew YAML or class defaults.
+        model: Model ID for the boot register command (required by --model
+            on `minion register`). Empty string falls back to a default in
+            load_boot_section.
     """
     protocol_section = load_protocol(docs_dir, role, agent)
     rules_section = load_rules(docs_dir, agent, role, capabilities)
-    boot_section = load_boot_section(docs_dir, agent, role)
+    boot_section = load_boot_section(docs_dir, agent, role, model=model)
 
     sections = [protocol_section, rules_section, boot_section]
     if guardrails:

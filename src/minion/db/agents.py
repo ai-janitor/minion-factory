@@ -102,6 +102,25 @@ def enrich_agent_row(row: sqlite3.Row, now: datetime.datetime) -> dict[str, Any]
             import sys
             print(f"WARNING: corrupt last_seen for {a.get('name')}: {a['last_seen']!r}", file=sys.stderr)
 
+    # Backlog #323: liveness check on the recorded pid. Daemon state files
+    # often go stale (status='working' but the actual process died), and
+    # 'who'/'sitrep' end up displaying ghost agents as alive. Probe the pid
+    # cheaply with kill(pid, 0); if it's gone, mark the row so the operator
+    # can see at a glance that this isn't a real running daemon.
+    pid = a.get("pid")
+    if pid and isinstance(pid, int):
+        import os as _os
+        try:
+            _os.kill(pid, 0)
+            a["pid_alive"] = True
+        except (OSError, ProcessLookupError):
+            a["pid_alive"] = False
+            # Don't lie about the status — agents.status is the daemon's
+            # self-reported state, but if the pid is dead the daemon can't
+            # update it any more. Override with a clear marker.
+            if a.get("status") in ("working", "waiting for work", "idle"):
+                a["status"] = "dead (pid gone)"
+
     return a
 
 

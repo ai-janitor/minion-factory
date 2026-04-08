@@ -65,13 +65,22 @@ def register_commands(cli: click.Group) -> None:
         Overwrites local copies with the package defaults. Use after upgrading
         the CLI to pick up new protocol versions. Project-specific customizations
         will be lost — commit or back up first.
+
+        Targets cwd by default. To refresh a different project, pass
+        `-C <project-dir>` as a global flag. refresh NEVER walks up the
+        directory tree — a fresh project dir always gets its own .work/
+        (backlog #302).
         """
         import shutil
-        from minion.defaults import resolve_db_path
         from minion.tasks.loader import _bundled_protocols_dir, _find_flows_dir
 
-        db_path = resolve_db_path()
-        work_dir = os.path.dirname(db_path)
+        # Backlog #302: always operate on cwd (or explicit -C), never walk up.
+        # resolve_db_path() walks up to find ancestor .work/ which is the
+        # wrong behavior here — a fresh project under ~/projects must not
+        # silently refresh ~/projects/.work/.
+        project_dir = ctx.obj.get("project_dir") or os.getcwd()
+        work_dir = os.path.join(project_dir, ".work")
+        os.makedirs(work_dir, exist_ok=True)
 
         refreshed = []
 
@@ -99,8 +108,8 @@ def register_commands(cli: click.Group) -> None:
     @cli.command("dashboard")
     @click.option("--web", is_flag=True, default=False,
                   help="Launch web dashboard (browser) instead of terminal TUI")
-    @click.option("--port", default=8765, type=int,
-                  help="Port for web dashboard (default: 8765)")
+    @click.option("--port", default=8770, type=int,
+                  help="Port for web dashboard (default: 8770; backlog #312 — was 8765 which collides with common dev tools)")
     @click.option("--host", default="0.0.0.0",
                   help="Host to bind web dashboard (default: 0.0.0.0)")
     @click.option("--db", "db_path", default="",
@@ -110,12 +119,12 @@ def register_commands(cli: click.Group) -> None:
         """Live task board — terminal TUI or browser web dashboard.
 
         Default: terminal TUI (ANSI). Use --web for browser-based dashboard
-        served via WebSocket on the specified port.
+        served via WebSocket on the specified port (default 8770).
 
         \b
         Examples:
           minion dashboard              # Terminal TUI
-          minion dashboard --web        # Web dashboard on http://0.0.0.0:8765
+          minion dashboard --web        # Web dashboard on http://0.0.0.0:8770
           minion dashboard --web --port 9000
           minion dashboard --web --db /path/to/minion.db
         """
@@ -128,6 +137,24 @@ def register_commands(cli: click.Group) -> None:
             if not db_path:
                 from minion.db.connection import _get_db_path
                 db_path = _get_db_path()
+            # Backlog #312: fail loudly if the port is already bound, instead
+            # of silently failing in the background. Operators historically
+            # opened the URL onto a colliding service and assumed dashboard
+            # had crashed.
+            import socket as _socket
+            sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host if host != "0.0.0.0" else "127.0.0.1", port))
+            except OSError as exc:
+                _output(
+                    {"error": f"Port {port} is already in use ({exc}). Pick a different --port."},
+                    ctx.obj["human"],
+                )
+                ctx.exit(1)
+                return
+            finally:
+                sock.close()
             serve(host=host, port=port, db_path=db_path)
         else:
             from minion.dashboard import run

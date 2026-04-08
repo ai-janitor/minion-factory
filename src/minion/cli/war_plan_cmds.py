@@ -29,6 +29,13 @@ def register_commands(cli: click.Group) -> None:
         from minion.intel import show_war_plan as _show_war_plan
         _output(_show_war_plan(), ctx.obj["human"], ctx.obj["compact"])
 
+    @war_plan_group.command("read", hidden=True)
+    @click.pass_context
+    def war_plan_read(ctx: click.Context) -> None:
+        """Print the current war plan (alias for 'show', backlog #301)."""
+        from minion.intel import show_war_plan as _show_war_plan
+        _output(_show_war_plan(), ctx.obj["human"], ctx.obj["compact"])
+
     @war_plan_group.command("set")
     @_agent_option(required=True, help="Lead agent setting the war plan")
     @click.option("--text", "-t", required=True, help="War plan content to write")

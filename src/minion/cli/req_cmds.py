@@ -122,7 +122,15 @@ def register_commands(cli: click.Group) -> None:
     @req_group.command("decompose")
     @click.option("--path", "-p", required=True, help="Parent requirement path")
     @click.option("--spec", "-s", default=None, help="YAML spec file for children. Use '-' to read from stdin.")
-    @click.option("--inline", "-i", default=None, help="Inline YAML string (alternative to --spec file).")
+    @click.option(
+        "--inline", "-i", default=None,
+        help=(
+            "Inline YAML string (alternative to --spec file). "
+            "Required shape: 'children:' with a list of {slug, title, description, task_type}. "
+            "Example: 'children:\\n  - slug: add-logout\\n    title: \"Add logout button\"\\n"
+            "    description: \"Header logout that clears session\"\\n    task_type: feature'"
+        ),
+    )
     @click.option("--by", "-b", "agent_name", default="lead")
     @click.pass_context
     def req_decompose(ctx: click.Context, path: str, spec: str | None, inline: str | None, agent_name: str) -> None:
@@ -132,6 +140,17 @@ def register_commands(cli: click.Group) -> None:
           --spec <file>       YAML file on disk
           --spec -            Read YAML from stdin
           --inline '<yaml>'   Pass YAML directly as a string argument
+
+        Spec shape (YAML):
+
+            children:
+              - slug: add-logout-button
+                title: "Add Logout button to header"
+                description: "Header logout that clears session and redirects."
+                task_type: feature           # one of: feature, bugfix, chore, build
+              - slug: ...
+
+        Each child requires slug, title, description, and task_type. Backlog #317.
         """
         import sys
         import yaml as _yaml
@@ -145,9 +164,27 @@ def register_commands(cli: click.Group) -> None:
                 ctx.exit(1)
                 return
             if not isinstance(spec_data, dict) or "children" not in spec_data:
-                _output({"error": "Inline YAML must contain a 'children' key."}, ctx.obj["human"], ctx.obj["compact"])
+                _output({"error": "Inline YAML must contain a 'children' key. See `req decompose --help` for the expected shape."}, ctx.obj["human"], ctx.obj["compact"])
                 ctx.exit(1)
                 return
+            # Backlog #317: validate per-child shape loudly so silent zero-children
+            # results stop happening. Required keys per child: slug, title, description.
+            children = spec_data.get("children")
+            if not isinstance(children, list) or not children:
+                _output({"error": "Inline YAML 'children' must be a non-empty list. See `req decompose --help`."}, ctx.obj["human"], ctx.obj["compact"])
+                ctx.exit(1)
+                return
+            required_keys = ("slug", "title", "description")
+            for i, child in enumerate(children, start=1):
+                if not isinstance(child, dict):
+                    _output({"error": f"Child #{i} is not a dict. See `req decompose --help` for the expected shape."}, ctx.obj["human"], ctx.obj["compact"])
+                    ctx.exit(1)
+                    return
+                missing = [k for k in required_keys if not child.get(k)]
+                if missing:
+                    _output({"error": f"Child #{i} missing required keys: {', '.join(missing)}. See `req decompose --help`."}, ctx.obj["human"], ctx.obj["compact"])
+                    ctx.exit(1)
+                    return
         elif spec == "-":
             try:
                 spec_data = _yaml.safe_load(sys.stdin.read())

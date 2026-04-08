@@ -16,7 +16,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 from minion.auth import VALID_CLASSES
-from minion.db import get_db, reset_db_path
+from minion.db import get_db, init_db, reset_db_path
 from minion.defaults import ENV_DB_PATH
 from ._tmux import (
     finalize_layout,
@@ -110,6 +110,7 @@ def spawn_party(
     project_dir: str = ".",
     agents: str = "",
     runtime: str = "python",
+    verbose: bool = False,
 ) -> dict[str, object]:
     if not shutil.which("tmux"):
         return {"error": "BLOCKED: tmux required. brew install tmux"}
@@ -210,6 +211,10 @@ def spawn_party(
     # Use explicit db_path — get_db() resolves by cwd which may be wrong project
     os.environ[ENV_DB_PATH] = db_path
     reset_db_path()
+    # Backlog #296, #303: ensure schema exists. On a fresh project the DB may be
+    # absent or empty. Without this, the DELETE FROM flags below crashes with
+    # "no such table: flags" and crew spawn fails on the first invocation.
+    init_db()
     conn = get_db()
     try:
         conn.execute("DELETE FROM flags WHERE key = 'stand_down'")
@@ -293,7 +298,13 @@ def spawn_party(
         resolved_cfgs[name] = cfg
 
     # --- Spawn panes by transport type ---
-    tmux_session = f"crew-{crew}"
+    # Backlog #305: include a project hash in the session name so spawning the
+    # same crew in two different projects produces two distinct tmux sessions
+    # instead of silently stealing each other's panes. Hash is short and
+    # deterministic — same project always maps to the same session.
+    import hashlib
+    proj_hash = hashlib.sha1(os.path.abspath(project_dir).encode()).hexdigest()[:6]
+    tmux_session = f"crew-{crew}-{proj_hash}"
     session_exists = subprocess.run(
         ["tmux", "has-session", "-t", tmux_session],
         capture_output=True,
@@ -390,36 +401,127 @@ def spawn_party(
         if resolved_cfgs.get(a, {}).get("transport", "daemon") != "terminal"
     ]
     instance_ids: dict[str, str | None] = {}  # agent -> instance_id (None = bare name)
-    for i, agent in enumerate(daemon_list):
-        if i > 0:
-            time.sleep(0.25)
+    # Track daemons started in this run for partial-failure rollback messaging.
+    # If start_swarm raises, we emit a clear message listing booted vs failed agents
+    # plus the cleanup command, so operators know what to clean up.
+    daemons_started: list[str] = []
+    try:
+        for i, agent in enumerate(daemon_list):
+            if i > 0:
+                time.sleep(0.25)
 
-        # Detect if this agent already has a running instance
-        instance_id: str | None = None
-        if is_instance_alive(agent, None, project_dir):
-            instance_id = next_instance_id(agent, project_dir)
-            # Register the instance-qualified name so comms routing works
-            instance_name = f"{agent}-{instance_id}"
-            cfg = all_agents_cfg.get(agent, {})
-            _register(
-                agent_name=instance_name,
-                agent_class=_role_to_class(cfg.get("role", "coder")),
-                model=cfg.get("model", ""),
-                transport=cfg.get("transport", "daemon"),
-                crew=crew,
-                scope=cfg.get("scope", "project"),
-            )
-            log.info("multi-instance: %s already alive, spawning as %s", agent, instance_name)
-        instance_ids[agent] = instance_id
+            # Detect if this agent already has a running instance
+            instance_id: str | None = None
+            if is_instance_alive(agent, None, project_dir):
+                instance_id = next_instance_id(agent, project_dir)
+                # Register the instance-qualified name so comms routing works
+                instance_name = f"{agent}-{instance_id}"
+                cfg = all_agents_cfg.get(agent, {})
+                _register(
+                    agent_name=instance_name,
+                    agent_class=_role_to_class(cfg.get("role", "coder")),
+                    model=cfg.get("model", ""),
+                    transport=cfg.get("transport", "daemon"),
+                    crew=crew,
+                    scope=cfg.get("scope", "project"),
+                )
+                log.info("multi-instance: %s already alive, spawning as %s", agent, instance_name)
+            instance_ids[agent] = instance_id
 
-        transport = resolved_cfgs.get(agent, {}).get("transport", "daemon")
-        if transport == "daemon-ts":
-            agent_runtime = "ts"
-        elif transport == "daemon":
-            agent_runtime = runtime  # global --runtime flag as fallback
-        else:
-            agent_runtime = "python"
-        start_swarm(agent, crew_config, project_dir, runtime=agent_runtime, db_path=db_path, instance_id=instance_id)
+            transport = resolved_cfgs.get(agent, {}).get("transport", "daemon")
+            if transport == "daemon-ts":
+                agent_runtime = "ts"
+            elif transport == "daemon":
+                agent_runtime = runtime  # global --runtime flag as fallback
+            else:
+                agent_runtime = "python"
+            start_swarm(agent, crew_config, project_dir, runtime=agent_runtime, db_path=db_path, instance_id=instance_id, verbose=verbose)
+            daemons_started.append(agent)
+
+    except Exception as exc:
+        # Partial failure: some daemons started, one or more failed.
+        # Identify the failed agent (first in daemon_list not yet in daemons_started).
+        not_started = [a for a in daemon_list if a not in daemons_started]
+        failed_agent_name = not_started[0] if not_started else "unknown"
+        log.error("crew spawn partial failure at agent '%s': %s", failed_agent_name, exc)
+
+        # Backlog #309: actually KILL the half-booted daemons instead of just
+        # telling the operator to clean up. Read each started agent's state
+        # file to get its PID, SIGTERM, escalate to SIGKILL after 1.5s grace.
+        rolled_back: list[str] = []
+        rollback_failed: list[str] = []
+        if daemons_started:
+            import json as _json
+            import signal as _signal
+            import time as _time
+            from minion.defaults import resolve_swarm_runtime_dir
+            state_dir = resolve_swarm_runtime_dir(project_dir or None) / "state"
+            killed_pids: set[int] = set()
+            for started_agent in daemons_started:
+                state_file = state_dir / f"{started_agent}.json"
+                pid: int | None = None
+                if state_file.exists():
+                    try:
+                        pid = _json.loads(state_file.read_text()).get("pid")
+                    except (OSError, _json.JSONDecodeError):
+                        pid = None
+                if not (pid and isinstance(pid, int)):
+                    rollback_failed.append(started_agent)
+                    continue
+                try:
+                    os.kill(pid, _signal.SIGTERM)
+                    killed_pids.add(pid)
+                    rolled_back.append(started_agent)
+                except ProcessLookupError:
+                    rolled_back.append(started_agent)  # already gone
+                except PermissionError:
+                    rollback_failed.append(started_agent)
+            # Escalate any survivors after a short grace period
+            deadline = _time.time() + 1.5
+            while _time.time() < deadline and killed_pids:
+                survivors = set()
+                for pid in killed_pids:
+                    try:
+                        os.kill(pid, 0)
+                        survivors.add(pid)
+                    except OSError:
+                        pass
+                killed_pids = survivors
+                if killed_pids:
+                    _time.sleep(0.1)
+            for pid in killed_pids:
+                try:
+                    os.kill(pid, _signal.SIGKILL)
+                except OSError:
+                    pass
+
+        partial: dict[str, object] = {
+            "status": "partial_failure",
+            "error": f"Daemon start failed at agent '{failed_agent_name}': {exc}",
+            "partially_spawned": daemons_started,
+            "not_started": not_started,
+            "rolled_back": rolled_back,
+            "cleanup": f"minion crew stand-down -c {crew}",
+            "message": (
+                f"Partially spawned crew '{crew}': "
+                f"{len(daemons_started)} daemon(s) started ({', '.join(daemons_started) or 'none'}), "
+                f"{len(not_started)} not started ({', '.join(not_started) or 'none'}). "
+                f"Auto-rolled back {len(rolled_back)} of {len(daemons_started)} (backlog #309). "
+                + (
+                    f"Manual cleanup needed for: {', '.join(rollback_failed)}. "
+                    f"Run: minion crew stand-down -c {crew}"
+                    if rollback_failed
+                    else "No manual cleanup required."
+                )
+            ),
+        }
+        if rollback_failed:
+            partial["rollback_failed"] = rollback_failed
+        if renames:
+            partial["renames"] = renames
+        if failed_agents:
+            partial["failed"] = failed_agents
+        return partial
 
     result_dict: dict[str, object] = {
         "status": "spawned",
@@ -435,4 +537,21 @@ def spawn_party(
     assigned_instances = {a: iid for a, iid in instance_ids.items() if iid}
     if assigned_instances:
         result_dict["instances"] = assigned_instances
+
+    # Backlog #297: warn when the spawned crew has no lead-class member.
+    # Promoted requirements need a lead to advance them — without one, they
+    # rot at seed forever. The operator can drive a manual lead from their
+    # terminal, but they need to know that's the situation.
+    spawned_classes = {
+        _role_to_class(resolved_cfgs.get(a, {}).get("role", "coder"))
+        for a in spawned_agents
+    }
+    if "lead" not in spawned_classes:
+        result_dict.setdefault("warnings", []).append(  # type: ignore[union-attr]
+            f"Crew '{crew}' has no lead-class daemon. Promoted requirements "
+            f"will sit at stage:seed unless someone drives them manually. "
+            f"For an autonomous lead, spawn the tmnt crew (splinter is the lead) "
+            f"or register a manual lead with: "
+            f"minion agent register --name <unique-name> --class lead --model claude-sonnet-4-5"
+        )
     return result_dict

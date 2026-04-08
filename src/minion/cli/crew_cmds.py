@@ -37,25 +37,31 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--agents", "-A", default="")
     @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
                   help="Daemon runtime: python (minion-swarm) or ts (SDK daemon).")
+    @click.option("--verbose", "-v", is_flag=True, default=False,
+                  help="Show INFO-level daemon logs in tmux panes (default: WARN+ only).")
     @click.pass_context
-    def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, runtime: str) -> None:
+    def spawn_party(ctx: click.Context, crew: str, project_dir: str, agents: str, runtime: str, verbose: bool) -> None:
         """Launch agents from a crew YAML into tmux panes."""
         from minion.crew import spawn_party as _spawn_party
         # Global -C flag overrides default project-dir
         if project_dir == "." and ctx.obj.get("project_dir"):
             project_dir = ctx.obj["project_dir"]
-        _output(_spawn_party(crew, project_dir, agents, runtime=runtime), ctx.obj["human"])
+        _output(_spawn_party(crew, project_dir, agents, runtime=runtime, verbose=verbose), ctx.obj["human"])
 
     @crew_group.command("stand-down")
     @_agent_option(required=True)
     @click.option("--crew", "-c", default="")
     @click.pass_context
     def stand_down(ctx: click.Context, agent: str, crew: str) -> None:
-        """Shut down all agents in a crew. Lead only."""
+        """Shut down all agents in a crew. Lead only.
+
+        Backlog #310: stand-down now actually kills daemon processes (was a
+        flag-only operation that left orphans). The `-C` flag is honored.
+        """
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
         from minion.crew import stand_down as _stand_down
-        _output(_stand_down(agent, crew), ctx.obj["human"])
+        _output(_stand_down(agent, crew, project_dir=ctx.obj.get("project_dir") or ""), ctx.obj["human"])
 
     @crew_group.command("halt")
     @_agent_option(required=True, help="Lead agent issuing the halt")
@@ -81,11 +87,13 @@ def register_commands(cli: click.Group) -> None:
     @click.option("--zone", "-z", default="", help="Zone assignment")
     @click.option("--runtime", type=click.Choice(["python", "ts"]), default="python",
                   help="Daemon runtime: python or ts.")
+    @click.option("--verbose", "-v", is_flag=True, default=False,
+                  help="Show INFO-level daemon logs in tmux panes (default: WARN+ only).")
     @click.pass_context
     def recruit(ctx: click.Context, name: str, agent_class: str, crew: str,
                 from_crew: str, capabilities: str, system: str, provider: str,
                 model: str, transport: str, permission_mode: str, zone: str,
-                runtime: str) -> None:
+                runtime: str, verbose: bool) -> None:
         """Add an ad-hoc agent into a running crew. Lead only."""
         from minion.auth import require_class
         require_class("lead")(lambda: None)()
@@ -113,6 +121,7 @@ def register_commands(cli: click.Group) -> None:
             zone=zone,
             runtime=runtime,
             project_dir=project_dir,
+            verbose=verbose,
         ), ctx.obj["human"], ctx.obj["compact"])
 
     @crew_group.command("hand-off-zone")

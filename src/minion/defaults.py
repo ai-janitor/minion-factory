@@ -141,6 +141,11 @@ def resolve_db_path() -> str:
                 # Crossed a git repo boundary — do NOT use this DB.
                 # Stop walking; anything higher is even further away.
                 break
+            if cwd_git_root is None and current != cwd:
+                # Backlog #302: cwd is not in a git repo. Without a repo
+                # boundary to enforce scope, walking up can silently adopt
+                # an unrelated parent project's .work/. Refuse to ascend.
+                break
             return str(candidate)
         parent = current.parent
         if parent == current:

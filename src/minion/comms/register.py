@@ -125,20 +125,63 @@ def register(
             init_coordinator_db()
             coord = get_coordinator_db()
             try:
+                # Backlog #322: prefer the explicit project dir over cwd. The
+                # daemon's cwd is unreliable (often inherited from the spawning
+                # shell), but MINION_DB_PATH points at <project>/.work/minion.db
+                # which we can resolve back to the project root.
                 project_path = os.getcwd()
+                env_db = os.environ.get("MINION_DB_PATH", "")
+                if env_db:
+                    db_dir = os.path.dirname(env_db)  # .../.work
+                    inferred = os.path.dirname(db_dir)  # project root
+                    if inferred:
+                        project_path = inferred
+                project_real = os.path.realpath(project_path)
                 # Check if name is already taken by a different active project
                 existing = coord.execute(
-                    "SELECT project_path FROM agents WHERE name = ?", (agent_name,)
+                    "SELECT project_path, last_seen FROM agents WHERE name = ?", (agent_name,)
                 ).fetchone()
-                if existing and os.path.realpath(existing["project_path"]) != os.path.realpath(project_path):
-                    old_db = os.path.join(existing["project_path"], ".work", "minion.db")
-                    if os.path.exists(old_db):
+                if existing and os.path.realpath(existing["project_path"]) != project_real:
+                    old_path = existing["project_path"]
+                    old_db = os.path.join(old_path, ".work", "minion.db")
+                    # Backlog #322: only block when the previous project is still
+                    # alive. Three liveness gates — ANY of them failing means we
+                    # take over the name silently:
+                    #   1. Project directory still exists
+                    #   2. Old DB file still exists
+                    #   3. Old daemon's last_seen is recent (< 10 min)
+                    project_alive = os.path.isdir(old_path)
+                    db_alive = os.path.exists(old_db)
+                    last_seen = (existing["last_seen"] or "")
+                    fresh = False
+                    if last_seen:
+                        try:
+                            last_dt = datetime.datetime.fromisoformat(last_seen)
+                            fresh = (datetime.datetime.now() - last_dt).total_seconds() < 600
+                        except ValueError:
+                            fresh = False
+                    if project_alive and db_alive and fresh:
+                        # Backlog #298, #304: clearer error explaining WHY this
+                        # is global, what to do about it, and what we checked.
                         return {
                             "error": (
-                                f"Agent name '{agent_name}' already registered in project "
-                                f"{existing['project_path']}. Use a unique name."
+                                f"Agent name '{agent_name}' is already in use by another "
+                                f"active project at:\n"
+                                f"  {old_path}\n"
+                                f"  last_seen: {last_seen}\n\n"
+                                f"Agent names are GLOBALLY unique across all minion projects "
+                                f"(stored in ~/.minion/coordinator.db) so messages route to "
+                                f"exactly one agent. Options:\n"
+                                f"  1. Pick a unique name (e.g. '{agent_name}-{os.path.basename(project_real)}')\n"
+                                f"  2. Stop the other project's daemon: cd {old_path} && minion crew stand-down\n"
+                                f"  3. Wait for the other agent to go stale (>10 min idle) — register will then take over automatically"
                             )
                         }
+                    log.info(
+                        "Backlog #322: taking over stale agent name '%s' from %s "
+                        "(project_alive=%s db_alive=%s fresh=%s last_seen=%s)",
+                        agent_name, old_path, project_alive, db_alive, fresh, last_seen,
+                    )
                 coord.execute(
                     """INSERT INTO agents
                         (name, agent_class, model, project_path, registered_at, last_seen, last_active, description, status, transport, scope_mode)
@@ -180,6 +223,30 @@ def register(
             result["model"] = model
         if description:
             result["description"] = description
+
+        # NOTE: lead-class agents registered via CLI are DB identities, NOT running daemons.
+        # They can drive tasks manually from a terminal, but they do NOT auto-poll or
+        # auto-advance requirements. This means promoted requirements that need an autonomous
+        # lead to advance them (seed → decomposing → tasked) will stall indefinitely.
+        #
+        # If you need an AUTONOMOUS lead daemon that runs without human input, use the
+        # tmnt crew (which includes splinter as a real daemon lead):
+        #   minion crew spawn -c tmnt -d <project_dir>
+        #
+        # For ff7 and other crews that ship without a lead daemon, you must drive the lead
+        # manually from your terminal: poll, check inbox, assign tasks, advance requirements.
+        if agent_class == "lead":
+            result["lead_daemon_note"] = (
+                "IMPORTANT: lead-class agents registered via `minion agent register` are "
+                "CLI identities only — they are NOT running daemon processes. "
+                "The lead exists in the DB and can send/receive messages when driven manually "
+                "from a terminal, but it does NOT auto-poll or auto-advance requirements. "
+                "Consequence: promoted requirements will sit at stage:seed forever unless you "
+                "manually advance them each step. "
+                "To get an autonomous lead daemon, spawn the tmnt crew instead "
+                "(splinter is a real daemon lead): `minion crew spawn -c tmnt -d <project_dir>`. "
+                "For ff7/ff1 crews, you are the lead — you must drive it from your terminal."
+            )
 
         onboarding = load_onboarding(agent_class)
         if onboarding:

@@ -97,6 +97,12 @@ class AgentDaemon(
             self.agent_cfg.provider, self.agent_name, self.agent_cfg, self._use_poll,
         )
         self._error_log = self.config.logs_dir / f"{file_key}.error.log"
+        # Verbose log: always captures INFO+ for post-mortem debugging.
+        # Stdout (tmux pane) only shows WARN+ by default; set MINION_LOG_LEVEL=INFO
+        # (or pass --verbose to crew spawn) to raise it back to INFO.
+        self._verbose_log = self.config.logs_dir / f"{file_key}.verbose.log"
+        import os as _os
+        self._log_level = _os.environ.get("MINION_LOG_LEVEL", "WARN").upper()
 
     def run(self) -> None:
         self.config.ensure_runtime_dirs()
@@ -263,12 +269,28 @@ class AgentDaemon(
     def _handle_signal(self, signum: int, _frame: Any) -> None:
         handle_signal(signum, self._log, self._stop_event)
 
-    def _log(self, message: str) -> None:
+    def _log(self, message: str, level: str = "INFO") -> None:
         import json as _json
-        print(_json.dumps({
+        entry = _json.dumps({
             "ts": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "agent": self.agent_name,
-            "level": "INFO",
+            "level": level,
             "source": "daemon.runner",
             "message": message,
-        }), flush=True)
+        })
+        # Always write to verbose log so INFO is available for post-mortem debugging
+        # (minion daemon logs --agent X --follow reads the .log file on stdout;
+        # .verbose.log captures the full INFO stream regardless of tmux level).
+        try:
+            with open(self._verbose_log, "a") as _vf:
+                _vf.write(entry + "\n")
+        except OSError:
+            pass  # Don't crash the daemon on a log write failure
+        # Stdout goes to the .log file watched by the tmux pane (tail -f).
+        # Only emit to stdout if the message level meets the configured minimum.
+        # Default is WARN so tmux panes stay quiet during demos.
+        _level_rank = {"DEBUG": 0, "INFO": 1, "WARN": 2, "WARNING": 2, "ERROR": 3, "FATAL": 4}
+        msg_rank = _level_rank.get(level.upper(), 1)
+        min_rank = _level_rank.get(self._log_level, 2)
+        if msg_rank >= min_rank:
+            print(entry, flush=True)

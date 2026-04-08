@@ -39,9 +39,36 @@ def register_commands(cli: click.Group) -> None:
         minion poll --agent <name>
 
         An agent that registers but doesn't poll is deaf — it cannot receive
-        messages or task assignments. Names must be unique across all projects."""
+        messages or task assignments. Names must be unique across all projects.
+
+        \b
+        NOTE on lead-class agents (backlog #314):
+            `--class lead` only inserts a CLI identity row in minion.db. It
+            does NOT spawn a polling daemon process. Promoted requirements
+            will sit at stage:seed forever unless someone (you, or a real
+            lead daemon) drives them through the pipeline manually.
+
+            For an autonomous lead daemon, spawn the **tmnt** crew, which
+            ships with `splinter` as a real lead-class polling daemon that
+            auto-decomposes promoted requirements:
+
+                minion crew spawn -c tmnt -d $PWD
+
+            For ff7 / other named crews, the lead identity registered here
+            is operator-driven: you run `minion req update`, `req decompose`,
+            and `task assign` yourself, passing this name as `--agent` / `--by`.
+        """
         from minion.comms import register as _register
-        _output(_register(name, agent_class, model, description, transport, crew, scope, spawned_from=spawned_from), ctx.obj["human"], ctx.obj["compact"])
+        result = _register(name, agent_class, model, description, transport, crew, scope, spawned_from=spawned_from)
+        # Backlog #314: when registering a lead, surface the daemon caveat in
+        # the result so operators don't quietly assume a daemon was spawned.
+        if isinstance(result, dict) and agent_class == "lead" and "error" not in result:
+            result.setdefault("note", (
+                "lead-class agents are CLI identities, not running daemons. "
+                "For an autonomous lead daemon spawn the tmnt crew (splinter is the lead). "
+                "For ff7 you must drive req/task transitions manually using --agent " + name + "."
+            ))
+        _output(result, ctx.obj["human"], ctx.obj["compact"])
 
     @agent_group.command("set-status")
     @_agent_option(required=True)

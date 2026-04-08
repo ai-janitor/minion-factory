@@ -34,6 +34,7 @@ def define_task(
     class_required: str = "",
     intel: str = "",
     requirement_id: int | None = None,
+    assigned_to: str = "",
 ) -> dict[str, object]:
     """Create a task spec file and a task record in one shot."""
     work_dir = get_runtime_dir()
@@ -58,6 +59,18 @@ def define_task(
         task_type=task_type,
         requirement_id=requirement_id,
     )
+
+    # Backlog #299: auto-assign in the same shot. Without this, `task define
+    # --agent X` only stores X as created_by; the task sits unassigned and no
+    # agent ever picks it up.
+    if assigned_to and "task_id" in result:
+        from .create_task import assign_task
+        assign_result = assign_task(agent_name, int(result["task_id"]), assigned_to)
+        if "error" in assign_result:
+            result["assign_error"] = assign_result["error"]
+        else:
+            result["assigned_to"] = assigned_to
+            result["status"] = "assigned"
 
     # Auto-link intel docs to the new task
     if intel and "task_id" in result:

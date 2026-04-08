@@ -314,6 +314,25 @@ def promote(
             (backlog_id, from_status, agent_name, now),
         )
 
+        # Backlog #315: auto-advance new requirements from seed -> decomposing.
+        # Without this, every promoted req sits at seed forever — req decompose
+        # then partially fails (#316) because it can't transition seed -> tasked.
+        # We bypass the gate machinery here because the req was just created,
+        # there's nothing to gate, and we already hold the cursor in this tx.
+        for req_info in created_requirements:
+            rid = req_info.get("requirement_id")
+            if rid:
+                cursor.execute(
+                    "UPDATE requirements SET stage = 'decomposing', updated_at = ? "
+                    "WHERE id = ? AND stage = 'seed'",
+                    (now, rid),
+                )
+                cursor.execute(
+                    "INSERT INTO transition_log (entity_id, entity_type, from_status, to_status, triggered_by, created_at) "
+                    "VALUES (?, 'requirement', 'seed', 'decomposing', ?, ?)",
+                    (rid, agent_name, now),
+                )
+
         conn.commit()
 
         # --- Append to backlog README Outcome section ---
