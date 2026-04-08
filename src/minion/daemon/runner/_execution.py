@@ -175,6 +175,15 @@ class ExecutionMixin:
             except queue.Empty:
                 if proc.poll() is not None and q.empty():
                     break
+                # Backlog #338: SIGTERM during a child invocation has to
+                # short-circuit promptly, otherwise stand-down hits #310's
+                # SIGKILL fallback every time. Check stop_event on every
+                # queue.get timeout (~1s reaction window).
+                if self._stop_event.is_set():
+                    self._log("stop_event set during invocation — terminating child process")
+                    interrupted = True
+                    proc.terminate()
+                    break
                 if time.monotonic() - last_output_at > self.agent_cfg.no_output_timeout_sec:
                     timed_out = True
                     proc.terminate()

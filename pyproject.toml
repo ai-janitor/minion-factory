@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "minion-factory"
-version = "0.8.5"
+version = "0.8.6"
 description = "Unified multi-agent coordination framework — CLI, daemon, task DAG"
 requires-python = ">=3.10"
 dependencies = [

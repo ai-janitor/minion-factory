@@ -72,44 +72,86 @@ class _StubPollingHost(PollingMixin):
 # ---------------------------------------------------------------------------
 
 
+def _make_fake_popen_child(returncode: int = 1, stdout: str = "", stderr: str = "") -> MagicMock:
+    """Build a fake subprocess.Popen return value that exits immediately.
+
+    Backlog #338: _poll_inbox now uses Popen + a poll loop, so tests have to
+    fake a child that .poll() reports done after the first tick.
+    """
+    fake = MagicMock()
+    fake.pid = 9999
+    fake.returncode = returncode
+    fake.poll.return_value = returncode  # already exited
+    fake.communicate.return_value = (stdout, stderr)
+    fake.wait.return_value = returncode
+    return fake
+
+
 class TestPollInboxEnvClass:
     """_poll_inbox must pass MINION_CLASS in the subprocess environment."""
 
-    @patch("minion.daemon.runner._polling.subprocess.run")
-    def test_poll_inbox_sets_env_class(self, mock_run: MagicMock) -> None:
-        """MINION_CLASS env var is present when _poll_inbox calls subprocess.run."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+    @patch("minion.daemon.runner._polling.subprocess.Popen")
+    def test_poll_inbox_sets_env_class(self, mock_popen: MagicMock) -> None:
+        """MINION_CLASS env var is present when _poll_inbox spawns the poll subprocess."""
+        mock_popen.return_value = _make_fake_popen_child(returncode=1)
         host = _StubPollingHost(role="coder")
 
         host._poll_inbox()
 
-        mock_run.assert_called_once()
-        env_passed = mock_run.call_args.kwargs.get("env") or mock_run.call_args[1].get("env")
-        assert env_passed is not None, "subprocess.run was not called with env kwarg"
+        mock_popen.assert_called_once()
+        env_passed = mock_popen.call_args.kwargs.get("env")
+        assert env_passed is not None, "subprocess.Popen was not called with env kwarg"
         assert ENV_CLASS in env_passed, f"ENV_CLASS ({ENV_CLASS}) missing from subprocess env"
         assert env_passed[ENV_CLASS] == "coder"
 
-    @patch("minion.daemon.runner._polling.subprocess.run")
-    def test_poll_inbox_uses_agent_role(self, mock_run: MagicMock) -> None:
+    @patch("minion.daemon.runner._polling.subprocess.Popen")
+    def test_poll_inbox_uses_agent_role(self, mock_popen: MagicMock) -> None:
         """MINION_CLASS should reflect agent_cfg.role, not be hardcoded."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_popen.return_value = _make_fake_popen_child(returncode=1)
         host = _StubPollingHost(role="builder")
 
         host._poll_inbox()
 
-        env_passed = mock_run.call_args.kwargs.get("env") or mock_run.call_args[1].get("env")
+        env_passed = mock_popen.call_args.kwargs.get("env")
         assert env_passed[ENV_CLASS] == "builder"
 
-    @patch("minion.daemon.runner._polling.subprocess.run")
-    def test_poll_inbox_defaults_to_coder_when_role_empty(self, mock_run: MagicMock) -> None:
+    @patch("minion.daemon.runner._polling.subprocess.Popen")
+    def test_poll_inbox_defaults_to_coder_when_role_empty(self, mock_popen: MagicMock) -> None:
         """When agent_cfg.role is empty/None, MINION_CLASS defaults to 'coder'."""
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
+        mock_popen.return_value = _make_fake_popen_child(returncode=1)
         host = _StubPollingHost(role="")
 
         host._poll_inbox()
 
-        env_passed = mock_run.call_args.kwargs.get("env") or mock_run.call_args[1].get("env")
+        env_passed = mock_popen.call_args.kwargs.get("env")
         assert env_passed[ENV_CLASS] == "coder"
+
+    @patch("minion.daemon.runner._polling.os.getpgid", side_effect=ProcessLookupError())
+    @patch("minion.daemon.runner._polling.subprocess.Popen")
+    def test_poll_inbox_aborts_promptly_when_stop_event_is_set(
+        self, mock_popen: MagicMock, _mock_getpgid: MagicMock
+    ) -> None:
+        """Backlog #338 regression: SIGTERM mid-poll must terminate the child.
+
+        When _stop_event is set before the child exits, _poll_inbox must
+        terminate the subprocess and return None — not block waiting for
+        the inner 30-60s timeout. We patch os.getpgid to bypass the killpg
+        path so the test deterministically lands on proc.terminate().
+        """
+        running_child = MagicMock()
+        running_child.pid = 9999
+        running_child.poll.return_value = None  # still running
+        running_child.communicate.return_value = ("", "")
+        running_child.wait.return_value = -15
+        mock_popen.return_value = running_child
+
+        host = _StubPollingHost(role="coder")
+        host._stop_event.set()  # simulate SIGTERM having already arrived
+
+        result = host._poll_inbox()
+
+        assert result is None
+        running_child.terminate.assert_called()
 
 
 class TestCheckAvailableWorkEnvClass:
