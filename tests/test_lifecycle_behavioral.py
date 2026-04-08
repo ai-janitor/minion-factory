@@ -195,8 +195,14 @@ def test_kill_all_daemons_permission_error_logs_warning(tmp_path):
     assert pid in warning_args.args, f"PID {pid} not found in warning args: {warning_args.args}"
 
 
-def test_kill_all_daemons_process_lookup_error_logs_error(tmp_path):
-    """ProcessLookupError from os.kill logs an ERROR (PID already gone)."""
+def test_kill_all_daemons_process_lookup_error_logged_at_debug(tmp_path):
+    """ProcessLookupError from os.kill is benign — daemon already crashed.
+
+    Backlog #332: this used to assert log.error, but the production code
+    correctly logs at DEBUG level since 'PID already gone' is the normal
+    cleanup path when a daemon previously crashed. ERROR for that would
+    be noise. The test now matches the intended (and correct) behavior.
+    """
     state_dir = tmp_path / "state"
     state_dir.mkdir()
     pid = 99998
@@ -212,9 +218,12 @@ def test_kill_all_daemons_process_lookup_error_logs_error(tmp_path):
     ):
         _kill_all_daemons()
 
-    mock_log.error.assert_called_once()
-    error_args = mock_log.error.call_args
-    assert pid in error_args.args, f"PID {pid} not found in error args: {error_args.args}"
+    # Must NOT log at error level — this is benign cleanup, not a failure.
+    mock_log.error.assert_not_called()
+    # Must log at debug level so a developer can trace it if needed.
+    mock_log.debug.assert_called()
+    debug_args = mock_log.debug.call_args
+    assert pid in debug_args.args, f"PID {pid} not found in debug args: {debug_args.args}"
 
 
 def test_kill_all_daemons_json_parse_error_logs_error(tmp_path):
