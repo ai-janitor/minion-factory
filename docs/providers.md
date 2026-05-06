@@ -54,6 +54,14 @@ OpenAI's Codex CLI. Runs in a sandboxed shell.
 - `-c shell_environment_policy.inherit=all` — passes env vars (MINION_DB_PATH, etc.)
 - No resume support
 
+**Operational notes:** Codex has provider-specific behavioral quirks when
+driven through `minion poll` / `minion comms` — it needs an installed skill
+file at `~/.codex/skills/minion-foreground-poll/SKILL.md`, the explicit
+"bounded active task" rule, and `!!trigger!!` wrapping on orders or it
+acknowledges-and-drops them. See `docs/codex-agent-operational-notes.md` for
+the full pre-flight checklist and skill file template before registering
+codex as a minion agent on a new machine.
+
 ### Gemini
 
 Google's Gemini CLI. Tool-level path restrictions only (shell/CLI unaffected).
