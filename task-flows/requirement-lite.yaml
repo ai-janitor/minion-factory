@@ -31,7 +31,7 @@ stages:
   tasked:
     description: All implementation tasks created and linked
     next: completed
-    requires: [impl_task_readmes, all_leaves_have_tasks]
+    requires: [all_leaves_have_tasks]
     protocol: protocols/requirement/tasked.md
     workers: null
 
